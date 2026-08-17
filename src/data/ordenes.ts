@@ -11,9 +11,10 @@ import {
 } from '../schemas/orden'
 import { registrarAsignacion } from './lavadores'
 import { fetchConfiguracion } from './configuracion'
+import { fetchTurnoAbierto } from './turnos'
 
 const ORDEN_SELECT =
-  'id, consecutivo, placa, clienteNombre:cliente_nombre, clienteTelefono:cliente_telefono, tipoVehiculoId:tipo_vehiculo_id, comboId:combo_id, lavadorId:lavador_id, precio, comisionLavador:comision_lavador, comisionNegocio:comision_negocio, metodoPago:metodo_pago, referenciaPago:referencia_pago, observaciones, estado, creadoEn:creado_en, listaEn:lista_en, entregadaEn:entregada_en, liquidacionId:liquidacion_id, motivoAnulacion:motivo_anulacion, anuladaEn:anulada_en, anuladaPor:anulada_por'
+  'id, consecutivo, placa, clienteNombre:cliente_nombre, clienteTelefono:cliente_telefono, clienteCorreo:cliente_correo, tipoVehiculoId:tipo_vehiculo_id, comboId:combo_id, lavadorId:lavador_id, precio, comisionLavador:comision_lavador, comisionNegocio:comision_negocio, metodoPago:metodo_pago, referenciaPago:referencia_pago, observaciones, estado, creadoEn:creado_en, listaEn:lista_en, entregadaEn:entregada_en, liquidacionId:liquidacion_id, motivoAnulacion:motivo_anulacion, anuladaEn:anulada_en, anuladaPor:anulada_por'
 
 function inicioDeHoyISO(): string {
   const ahora = new Date()
@@ -60,6 +61,7 @@ export async function fetchOrdenesEnRango(desdeISO: string, hastaISO: string): P
 export interface HistorialPlaca {
   clienteNombre: string
   clienteTelefono?: string
+  clienteCorreo?: string
   tipoVehiculoId: string
   comboId: string
 }
@@ -70,7 +72,9 @@ export async function buscarPorPlaca(placa: string): Promise<HistorialPlaca | un
 
   const { data, error } = await db
     .from('ordenes')
-    .select('clienteNombre:cliente_nombre, clienteTelefono:cliente_telefono, tipoVehiculoId:tipo_vehiculo_id, comboId:combo_id')
+    .select(
+      'clienteNombre:cliente_nombre, clienteTelefono:cliente_telefono, clienteCorreo:cliente_correo, tipoVehiculoId:tipo_vehiculo_id, comboId:combo_id',
+    )
     .eq('placa', normalizada)
     .order('consecutivo', { ascending: false })
     .limit(1)
@@ -81,6 +85,7 @@ export async function buscarPorPlaca(placa: string): Promise<HistorialPlaca | un
   return {
     clienteNombre: data.clienteNombre as string,
     clienteTelefono: (data.clienteTelefono as string | null) ?? undefined,
+    clienteCorreo: (data.clienteCorreo as string | null) ?? undefined,
     tipoVehiculoId: data.tipoVehiculoId as string,
     comboId: data.comboId as string,
   }
@@ -101,10 +106,14 @@ async function precioVigente(comboId: string, tipoVehiculoId: string): Promise<n
 // ya (regla de negocio 1), pero el método de pago se captura en `cobrarYEntregarOrden`.
 export async function createOrden(input: OrdenInput): Promise<Orden> {
   const parsed = ordenInputSchema.parse(input)
-  const [precio, configuracion] = await Promise.all([
+  const [precio, configuracion, turno] = await Promise.all([
     precioVigente(parsed.comboId, parsed.tipoVehiculoId),
     fetchConfiguracion(),
+    fetchTurnoAbierto('jefe_zona'),
   ])
+  if (!turno) {
+    throw new Error('No hay turno de caja abierto — ábrelo antes de registrar vehículos.')
+  }
   if (precio === undefined) {
     throw new Error('No existe un precio configurado para ese combo y tipo de vehículo')
   }
@@ -118,6 +127,7 @@ export async function createOrden(input: OrdenInput): Promise<Orden> {
       placa: parsed.placa,
       cliente_nombre: parsed.clienteNombre,
       cliente_telefono: parsed.clienteTelefono,
+      cliente_correo: parsed.clienteCorreo,
       tipo_vehiculo_id: parsed.tipoVehiculoId,
       combo_id: parsed.comboId,
       lavador_id: parsed.lavadorId,
@@ -146,10 +156,29 @@ export async function marcarListo(id: string): Promise<Orden> {
   return ordenSchema.parse(data)
 }
 
+// M3: reasignar lavador si el asignado se ausenta o queda ocupado a mitad de un lavado. No
+// recalcula precio/comisión (dependen del combo, no de quién lo hace) — solo cambia quién lo hace
+// y actualiza la cola de rotación a favor del nuevo lavador (regla de negocio 3: un vehículo, un lavador).
+export async function reasignarLavador(id: string, nuevoLavadorId: string): Promise<Orden> {
+  const { data, error } = await db
+    .from('ordenes')
+    .update({ lavador_id: nuevoLavadorId })
+    .eq('id', id)
+    .select(ORDEN_SELECT)
+    .single()
+  if (error) throw new Error(error.message)
+  await registrarAsignacion(nuevoLavadorId)
+  return ordenSchema.parse(data)
+}
+
 // Cobro + entrega en un solo paso (M3: nunca se entrega sin cobrar). Aquí es donde el dinero
 // entra a caja de verdad — `entregada_en` es lo que cuentan los dashboards, no `creado_en`.
+// Se etiqueta con el turno de jefe de zona abierto en ESE momento (regla de negocio 11: el
+// movimiento pertenece al turno en que se registró, y el cobro es el movimiento de dinero real
+// — no el registro del vehículo, que puede haber pasado en un turno anterior).
 export async function cobrarYEntregarOrden(id: string, input: CobroInput): Promise<Orden> {
   const parsed = cobroInputSchema.parse(input)
+  const turno = await fetchTurnoAbierto('jefe_zona')
   const { data, error } = await db
     .from('ordenes')
     .update({
@@ -157,6 +186,7 @@ export async function cobrarYEntregarOrden(id: string, input: CobroInput): Promi
       metodo_pago: parsed.metodoPago,
       referencia_pago: parsed.referenciaPago,
       entregada_en: new Date().toISOString(),
+      turno_id: turno?.id,
     })
     .eq('id', id)
     .select(ORDEN_SELECT)

@@ -9,6 +9,8 @@ import {
   Wallet,
   Receipt,
   ClipboardList,
+  ClipboardCheck,
+  Boxes,
 } from 'lucide-react'
 import { Sidebar, type NavItem } from '../../components/layout/Sidebar'
 import { Topbar } from '../../components/layout/Topbar'
@@ -26,7 +28,9 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/admin/lavadores', label: 'Lavadores', icon: Users },
   { to: '/admin/liquidaciones', label: 'Liquidaciones', icon: Wallet },
   { to: '/admin/gastos', label: 'Gastos', icon: Receipt },
+  { to: '/admin/inventario', label: 'Inventario', icon: Boxes },
   { to: '/admin/ordenes', label: 'Órdenes', icon: ClipboardList },
+  { to: '/admin/turnos', label: 'Turnos', icon: ClipboardCheck },
   { to: '/admin/configuracion', label: 'Configuración', icon: Settings },
 ]
 

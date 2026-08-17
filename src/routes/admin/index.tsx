@@ -7,6 +7,7 @@ import { fetchGastos, fetchTotalGastosPorCategoria } from '../../data/gastos'
 import { fetchComisionesPendientes } from '../../data/liquidaciones'
 import { StatCard } from '../../components/layout/StatCard'
 import { Card } from '../../components/layout/Card'
+import { BarChart } from '../../components/layout/BarChart'
 
 function hoyISO(): string {
   return new Date().toISOString().slice(0, 10)
@@ -127,14 +128,23 @@ function AdminDashboard() {
       {totalesPorCategoria.length > 0 ? (
         <Card className="text-left">
           <h2 className="mb-3 text-sm font-semibold text-neutral-900">Gastos de hoy por categoría</h2>
-          <ul className="flex flex-col gap-2 text-sm">
-            {totalesPorCategoria.map((t) => (
-              <li key={t.categoriaId} className="flex items-center justify-between">
-                <span className="text-neutral-500">{t.categoriaNombre}</span>
-                <span className="font-medium text-neutral-900">{COP.format(t.total)}</span>
-              </li>
-            ))}
-          </ul>
+          {totalesPorCategoria.length > 2 ? (
+            <BarChart
+              labels={totalesPorCategoria.map((t) => t.categoriaNombre)}
+              data={totalesPorCategoria.map((t) => t.total)}
+              valueFormatter={COP.format}
+              height={Math.max(120, totalesPorCategoria.length * 40)}
+            />
+          ) : (
+            <ul className="flex flex-col gap-2 text-sm">
+              {totalesPorCategoria.map((t) => (
+                <li key={t.categoriaId} className="flex items-center justify-between">
+                  <span className="text-neutral-500">{t.categoriaNombre}</span>
+                  <span className="font-medium text-neutral-900">{COP.format(t.total)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
       ) : null}
 

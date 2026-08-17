@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { Sparkles, Car } from 'lucide-react'
+import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
+import { Sparkles, Car, Lock } from 'lucide-react'
 import { fetchTiposVehiculo } from '../../data/tiposVehiculo'
 import { fetchCombos } from '../../data/combos'
 import { fetchPrecios, findPrecio } from '../../data/precios'
 import { fetchLavadores, suggestNextLavador } from '../../data/lavadores'
 import { fetchOrdenesHoy, buscarPorPlaca, createOrden } from '../../data/ordenes'
+import { fetchTurnoAbierto } from '../../data/turnos'
 import { ordenInputSchema, type EstadoOrden, type Orden } from '../../schemas/orden'
 import type { TipoVehiculo } from '../../schemas/tipoVehiculo'
 import type { Combo } from '../../schemas/combo'
@@ -14,16 +15,18 @@ import type { Precio } from '../../schemas/precio'
 import { Card } from '../../components/layout/Card'
 import { AccordionSection } from '../../components/layout/Accordion'
 import { CustomSelect } from '../../components/layout/CustomSelect'
+import { ReciboModal, type ReciboData } from '../../components/layout/ReciboModal'
 
 async function loadRecepcion() {
-  const [tipos, combos, precios, lavadores, ordenesHoy] = await Promise.all([
+  const [tipos, combos, precios, lavadores, ordenesHoy, turno] = await Promise.all([
     fetchTiposVehiculo(),
     fetchCombos(),
     fetchPrecios(),
     fetchLavadores(),
     fetchOrdenesHoy(),
+    fetchTurnoAbierto('jefe_zona'),
   ])
-  return { tipos, combos, precios, lavadores, ordenesHoy }
+  return { tipos, combos, precios, lavadores, ordenesHoy, turno }
 }
 
 export const Route = createFileRoute('/recepcion/')({
@@ -67,7 +70,28 @@ function RecepcionPage() {
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6 pb-6">
-      <ReceptionForm tipos={tipos} combos={combos} precios={precios} lavadores={lavadores} onCreated={refresh} />
+      {data.turno ? (
+        <ReceptionForm tipos={tipos} combos={combos} precios={precios} lavadores={lavadores} onCreated={refresh} />
+      ) : (
+        <Card className="flex flex-col items-center gap-3 py-10 text-center">
+          <span className="flex size-12 items-center justify-center rounded-xl bg-warning-50 text-warning-700">
+            <Lock size={22} strokeWidth={2} />
+          </span>
+          <div>
+            <h2 className="text-base font-semibold text-neutral-900">No hay turno de caja abierto</h2>
+            <p className="mt-1 max-w-sm text-sm text-neutral-500">
+              Hay que abrir la caja del día antes de registrar vehículos — así todo lo que se cobre después
+              queda contado en el arqueo del turno correcto.
+            </p>
+          </div>
+          <Link
+            to="/jefe-zona/caja"
+            className="mt-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700"
+          >
+            Abrir turno
+          </Link>
+        </Card>
+      )}
 
       <div>
         <h2 className="mb-2 px-1 text-sm font-semibold text-neutral-900">
@@ -109,6 +133,7 @@ const emptyForm = {
   placa: '',
   clienteNombre: '',
   clienteTelefono: '',
+  clienteCorreo: '',
   tipoVehiculoId: '',
   comboId: '',
   lavadorId: '',
@@ -132,7 +157,7 @@ function ReceptionForm({
   const [openStep, setOpenStep] = useState(1)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const [lastTicket, setLastTicket] = useState<number | null>(null)
+  const [recibo, setRecibo] = useState<ReciboData | null>(null)
 
   useEffect(() => {
     suggestNextLavador().then((id) => {
@@ -168,6 +193,7 @@ function ReceptionForm({
       ...prev,
       clienteNombre: prev.clienteNombre || historial.clienteNombre,
       clienteTelefono: prev.clienteTelefono || historial.clienteTelefono || '',
+      clienteCorreo: prev.clienteCorreo || historial.clienteCorreo || '',
       tipoVehiculoId: prev.tipoVehiculoId || historial.tipoVehiculoId,
       comboId: prev.comboId || historial.comboId,
     }))
@@ -182,6 +208,7 @@ function ReceptionForm({
     const parsed = ordenInputSchema.safeParse({
       ...form,
       clienteTelefono: form.clienteTelefono || undefined,
+      clienteCorreo: form.clienteCorreo || undefined,
       observaciones: form.observaciones || undefined,
     })
     if (!parsed.success) {
@@ -192,7 +219,16 @@ function ReceptionForm({
     setSaving(true)
     try {
       const orden = await createOrden(parsed.data)
-      setLastTicket(orden.consecutivo)
+      setRecibo({
+        consecutivo: orden.consecutivo,
+        placa: orden.placa,
+        clienteNombre: orden.clienteNombre,
+        comboNombre: combos.find((c) => c.id === orden.comboId)?.nombre ?? '—',
+        tipoNombre: tipos.find((t) => t.id === orden.tipoVehiculoId)?.nombre ?? '—',
+        lavadorNombre: lavadores.find((l) => l.id === orden.lavadorId)?.nombre ?? '—',
+        precio: orden.precio,
+        fecha: orden.creadoEn,
+      })
       const siguienteLavador = await suggestNextLavador()
       setForm({ ...emptyForm, lavadorId: siguienteLavador ?? '' })
       setOpenStep(1)
@@ -236,21 +272,32 @@ function ReceptionForm({
           />
         </label>
 
+        <label className="flex flex-col gap-1.5 text-sm">
+          <span className="font-medium text-neutral-700">Cliente</span>
+          <input
+            value={form.clienteNombre}
+            onChange={(e) => update('clienteNombre', e.target.value)}
+            placeholder="Nombre"
+            className="rounded-lg border border-neutral-300 px-3 py-3 text-base outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+          />
+        </label>
+
         <div className="grid grid-cols-2 gap-3">
-          <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium text-neutral-700">Cliente</span>
-            <input
-              value={form.clienteNombre}
-              onChange={(e) => update('clienteNombre', e.target.value)}
-              placeholder="Nombre"
-              className="rounded-lg border border-neutral-300 px-3 py-3 text-base outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-            />
-          </label>
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-medium text-neutral-700">Teléfono</span>
             <input
               value={form.clienteTelefono}
               onChange={(e) => update('clienteTelefono', e.target.value)}
+              placeholder="Opcional"
+              className="rounded-lg border border-neutral-300 px-3 py-3 text-base outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="font-medium text-neutral-700">Correo</span>
+            <input
+              type="email"
+              value={form.clienteCorreo}
+              onChange={(e) => update('clienteCorreo', e.target.value)}
               placeholder="Opcional"
               className="rounded-lg border border-neutral-300 px-3 py-3 text-base outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
             />
@@ -327,7 +374,6 @@ function ReceptionForm({
       </AccordionSection>
 
       {error ? <p className="px-1 text-xs text-danger-600">{error}</p> : null}
-      {lastTicket !== null ? <p className="px-1 text-xs text-success-700">Tiquete #{lastTicket} registrado.</p> : null}
 
       <button
         type="submit"
@@ -336,6 +382,8 @@ function ReceptionForm({
       >
         {saving ? 'Registrando…' : 'Registrar ingreso'}
       </button>
+
+      {recibo ? <ReciboModal recibo={recibo} variant="ingreso" onClose={() => setRecibo(null)} /> : null}
     </form>
   )
 }

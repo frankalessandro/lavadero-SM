@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet } from '@tanstack/react-router'
-import { LayoutDashboard, ClipboardList, ListChecks, Wallet, Boxes } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, Wallet, Boxes } from 'lucide-react'
 import { Sidebar, type NavItem } from '../../components/layout/Sidebar'
 import { Topbar } from '../../components/layout/Topbar'
 import { MobileTabBar } from '../../components/layout/MobileTabBar'
@@ -11,7 +11,6 @@ export const Route = createFileRoute('/jefe-zona')({
 const NAV_ITEMS: NavItem[] = [
   { to: '/jefe-zona', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/recepcion', label: 'Recepción', icon: ClipboardList },
-  { to: '/jefe-zona/seguimiento', label: 'Seguimiento', icon: ListChecks },
   { to: '/jefe-zona/caja', label: 'Caja', icon: Wallet },
   { to: '/jefe-zona/inventario', label: 'Inventario', icon: Boxes },
 ]

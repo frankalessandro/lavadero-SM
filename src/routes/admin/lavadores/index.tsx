@@ -9,6 +9,7 @@ import {
 } from '../../../data/lavadores'
 import { lavadorInputSchema, type Lavador } from '../../../schemas/lavador'
 import { Card } from '../../../components/layout/Card'
+import { ConfirmModal } from '../../../components/layout/ConfirmModal'
 
 export const Route = createFileRoute('/admin/lavadores/')({
   loader: fetchLavadores,
@@ -21,6 +22,7 @@ function LavadoresPage() {
   const [lavadores, setLavadores] = useState(initial)
   const [editing, setEditing] = useState<Lavador | null>(null)
   const [formOpen, setFormOpen] = useState(false)
+  const [confirmando, setConfirmando] = useState<Lavador | null>(null)
 
   async function refresh() {
     setLavadores(await fetchLavadores())
@@ -115,7 +117,7 @@ function LavadoresPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleToggleActivo(lavador)}
+                      onClick={() => setConfirmando(lavador)}
                       className="rounded-lg px-3 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-primary-100 hover:text-primary-700"
                     >
                       {lavador.activo ? 'Inactivar' : 'Activar'}
@@ -143,6 +145,24 @@ function LavadoresPage() {
             setFormOpen(false)
             await refresh()
           }}
+        />
+      ) : null}
+
+      {confirmando ? (
+        <ConfirmModal
+          title={confirmando.activo ? `¿Inactivar ${confirmando.nombre}?` : `¿Activar ${confirmando.nombre}?`}
+          message={
+            confirmando.activo
+              ? `Ya no aparecerá disponible en recepción ni en la cola de rotación.`
+              : `Volverá a estar disponible en recepción y en la cola de rotación.`
+          }
+          confirmLabel={confirmando.activo ? 'Inactivar' : 'Activar'}
+          variant={confirmando.activo ? 'danger' : 'primary'}
+          onConfirm={async () => {
+            await handleToggleActivo(confirmando)
+            setConfirmando(null)
+          }}
+          onCancel={() => setConfirmando(null)}
         />
       ) : null}
     </div>

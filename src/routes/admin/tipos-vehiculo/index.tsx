@@ -14,6 +14,7 @@ import {
 } from '../../../schemas/tipoVehiculo'
 import { Card } from '../../../components/layout/Card'
 import { CustomSelect } from '../../../components/layout/CustomSelect'
+import { ConfirmModal } from '../../../components/layout/ConfirmModal'
 
 const CATEGORIA_LABEL: Record<CategoriaVehiculo, string> = {
   auto: 'Automóviles y camionetas',
@@ -31,6 +32,7 @@ function TiposVehiculoPage() {
   const [tipos, setTipos] = useState(initial)
   const [editing, setEditing] = useState<TipoVehiculo | null>(null)
   const [formOpen, setFormOpen] = useState(false)
+  const [confirmando, setConfirmando] = useState<TipoVehiculo | null>(null)
 
   async function refresh() {
     setTipos(await fetchTiposVehiculo())
@@ -111,7 +113,7 @@ function TiposVehiculoPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleToggleActivo(tipo)}
+                      onClick={() => setConfirmando(tipo)}
                       className="rounded-lg px-3 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-primary-100 hover:text-primary-700"
                     >
                       {tipo.activo ? 'Inactivar' : 'Activar'}
@@ -139,6 +141,24 @@ function TiposVehiculoPage() {
             setFormOpen(false)
             await refresh()
           }}
+        />
+      ) : null}
+
+      {confirmando ? (
+        <ConfirmModal
+          title={confirmando.activo ? `¿Inactivar ${confirmando.nombre}?` : `¿Activar ${confirmando.nombre}?`}
+          message={
+            confirmando.activo
+              ? `Ya no aparecerá disponible en recepción.`
+              : `Volverá a estar disponible en recepción.`
+          }
+          confirmLabel={confirmando.activo ? 'Inactivar' : 'Activar'}
+          variant={confirmando.activo ? 'danger' : 'primary'}
+          onConfirm={async () => {
+            await handleToggleActivo(confirmando)
+            setConfirmando(null)
+          }}
+          onCancel={() => setConfirmando(null)}
         />
       ) : null}
     </div>

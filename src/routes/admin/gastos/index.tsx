@@ -13,6 +13,8 @@ import { categoriaGastoInputSchema, gastoInputSchema, type CategoriaGasto } from
 import { Card } from '../../../components/layout/Card'
 import { StatCard } from '../../../components/layout/StatCard'
 import { CustomSelect } from '../../../components/layout/CustomSelect'
+import { ConfirmModal } from '../../../components/layout/ConfirmModal'
+import { CurrencyInput } from '../../../components/layout/CurrencyInput'
 
 function inicioDelMesISO(): string {
   const now = new Date()
@@ -230,14 +232,7 @@ function GastoForm({ categorias, onSaved }: { categorias: CategoriaGasto[]; onSa
 
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-medium text-neutral-700">Monto</span>
-            <input
-              type="number"
-              min={1}
-              value={monto}
-              onChange={(event) => setMonto(event.target.value)}
-              placeholder="0"
-              className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-            />
+            <CurrencyInput size="sm" prefix="$" value={monto} onChange={setMonto} />
           </label>
         </div>
 
@@ -312,6 +307,7 @@ function CategoriasModal({
   const [nombre, setNombre] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [confirmando, setConfirmando] = useState<CategoriaGasto | null>(null)
 
   async function handleCrear(event: FormEvent) {
     event.preventDefault()
@@ -368,7 +364,7 @@ function CategoriasModal({
               </div>
               <button
                 type="button"
-                onClick={() => handleToggle(categoria)}
+                onClick={() => setConfirmando(categoria)}
                 className="rounded-lg px-3 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-primary-100 hover:text-primary-700"
               >
                 {categoria.activo ? 'Inactivar' : 'Activar'}
@@ -399,6 +395,24 @@ function CategoriasModal({
           </div>
         </form>
       </div>
+
+      {confirmando ? (
+        <ConfirmModal
+          title={confirmando.activo ? 'Inactivar categoría' : 'Activar categoría'}
+          message={
+            confirmando.activo
+              ? `¿Inactivar "${confirmando.nombre}"? Ya no aparecerá disponible para nuevos gastos.`
+              : `¿Activar "${confirmando.nombre}"? Volverá a estar disponible para nuevos gastos.`
+          }
+          confirmLabel={confirmando.activo ? 'Inactivar' : 'Activar'}
+          variant={confirmando.activo ? 'danger' : 'primary'}
+          onConfirm={async () => {
+            await handleToggle(confirmando)
+            setConfirmando(null)
+          }}
+          onCancel={() => setConfirmando(null)}
+        />
+      ) : null}
     </div>
   )
 }

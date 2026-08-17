@@ -12,6 +12,8 @@ import type { ComisionPendiente } from '../../../data/liquidaciones'
 import type { Liquidacion } from '../../../schemas/liquidacion'
 import type { Lavador } from '../../../schemas/lavador'
 import { Card } from '../../../components/layout/Card'
+import { ConfirmModal } from '../../../components/layout/ConfirmModal'
+import { BarChart } from '../../../components/layout/BarChart'
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 
@@ -44,6 +46,8 @@ function LiquidacionesPage() {
   const [generando, setGenerando] = useState<string | null>(null)
   const [pagando, setPagando] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [confirmandoGenerar, setConfirmandoGenerar] = useState<ComisionPendiente | null>(null)
+  const [confirmandoPago, setConfirmandoPago] = useState<Liquidacion | null>(null)
 
   const lavadoresPorId = new Map(lavadores.map((l) => [l.id, l] as const))
   const lavadoresPagoDiario = lavadores.filter((l) => l.activo && l.pagoDiario)
@@ -99,6 +103,18 @@ function LiquidacionesPage() {
             No hay lavadores activos con comisiones pendientes por liquidar.
           </Card>
         ) : (
+          <>
+            {pendientes.length > 2 ? (
+              <Card className="text-left">
+                <h4 className="mb-3 text-sm font-semibold text-neutral-900">Comparativo por lavador</h4>
+                <BarChart
+                  labels={pendientes.map((c) => c.lavadorNombre)}
+                  data={pendientes.map((c) => c.montoPendiente)}
+                  valueFormatter={COP.format}
+                  height={Math.max(120, pendientes.length * 40)}
+                />
+              </Card>
+            ) : null}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {pendientes.map((comision) => (
               <Card key={comision.lavadorId} className="flex flex-col gap-3">
@@ -119,7 +135,7 @@ function LiquidacionesPage() {
                 <button
                   type="button"
                   disabled={comision.montoPendiente === 0 || generando === comision.lavadorId}
-                  onClick={() => handleGenerar(comision)}
+                  onClick={() => setConfirmandoGenerar(comision)}
                   className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {generando === comision.lavadorId ? 'Generando…' : 'Generar liquidación semanal'}
@@ -127,6 +143,7 @@ function LiquidacionesPage() {
               </Card>
             ))}
           </div>
+          </>
         )}
 
         {lavadoresPagoDiario.length > 0 ? (
@@ -159,7 +176,7 @@ function LiquidacionesPage() {
                   liquidacion={liquidacion}
                   lavador={lavadoresPorId.get(liquidacion.lavadorId)}
                   pagando={pagando === liquidacion.id}
-                  onMarcarPagada={() => handleMarcarPagada(liquidacion)}
+                  onMarcarPagada={() => setConfirmandoPago(liquidacion)}
                 />
               ))}
               {historico.length === 0 ? (
@@ -173,6 +190,34 @@ function LiquidacionesPage() {
           </table>
         </Card>
       </section>
+
+      {confirmandoGenerar ? (
+        <ConfirmModal
+          title="Generar liquidación semanal"
+          message={`¿Generar la liquidación de los últimos 7 días para ${confirmandoGenerar.lavadorNombre} por ${COP.format(confirmandoGenerar.montoPendiente)}?`}
+          confirmLabel="Generar liquidación"
+          variant="primary"
+          onConfirm={async () => {
+            await handleGenerar(confirmandoGenerar)
+            setConfirmandoGenerar(null)
+          }}
+          onCancel={() => setConfirmandoGenerar(null)}
+        />
+      ) : null}
+
+      {confirmandoPago ? (
+        <ConfirmModal
+          title="Marcar liquidación como pagada"
+          message={`¿Marcar como pagada la liquidación de ${lavadoresPorId.get(confirmandoPago.lavadorId)?.nombre ?? '—'} por ${COP.format(confirmandoPago.monto)}?`}
+          confirmLabel="Marcar pagada"
+          variant="primary"
+          onConfirm={async () => {
+            await handleMarcarPagada(confirmandoPago)
+            setConfirmandoPago(null)
+          }}
+          onCancel={() => setConfirmandoPago(null)}
+        />
+      ) : null}
     </div>
   )
 }

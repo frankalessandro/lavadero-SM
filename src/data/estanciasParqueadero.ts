@@ -6,6 +6,7 @@ import {
   type EstanciaParqueadero,
   type ModalidadParqueadero,
 } from '../schemas/estanciaParqueadero'
+import { fetchTurnoAbierto } from './turnos'
 
 const ESTANCIA_SELECT =
   'id, placa, modalidad, horaIngreso:hora_ingreso, horaSalida:hora_salida, cobro, metodoPago:metodo_pago, estado'
@@ -48,6 +49,10 @@ export async function cobroPorModalidad(modalidad: ModalidadParqueadero): Promis
 
 export async function registrarEntrada(input: EntradaInput): Promise<EstanciaParqueadero> {
   const parsed = entradaInputSchema.parse(input)
+  const turno = await fetchTurnoAbierto('vigilante')
+  if (!turno) {
+    throw new Error('No hay turno de caja abierto — ábrelo antes de registrar una entrada.')
+  }
   const { data, error } = await db
     .from('estancias_parqueadero')
     .insert({ placa: parsed.placa, modalidad: parsed.modalidad })
@@ -69,6 +74,7 @@ export async function registrarSalida(
   if (fetchError) throw new Error(fetchError.message)
 
   const cobro = await cobroPorModalidad(actual.modalidad as ModalidadParqueadero)
+  const turno = await fetchTurnoAbierto('vigilante')
 
   const { data, error } = await db
     .from('estancias_parqueadero')
@@ -77,6 +83,7 @@ export async function registrarSalida(
       hora_salida: new Date().toISOString(),
       cobro,
       metodo_pago: cobro > 0 ? metodoPago : undefined,
+      turno_id: turno?.id,
     })
     .eq('id', id)
     .select(ESTANCIA_SELECT)

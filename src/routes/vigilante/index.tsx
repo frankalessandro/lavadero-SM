@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { LogIn, LogOut, Car, Banknote, AlertTriangle, X, Clock } from 'lucide-react'
+import { LogIn, LogOut, Car, Banknote, AlertTriangle, X, Clock, Lock, Unlock } from 'lucide-react'
 import {
   fetchEstanciasAdentro,
   fetchResumenHoy,
@@ -10,13 +10,22 @@ import {
   fueraDeVentanaSalida,
 } from '../../data/estanciasParqueadero'
 import { entradaInputSchema, type EstanciaParqueadero, type ModalidadParqueadero } from '../../schemas/estanciaParqueadero'
+import { fetchTurnoAbierto, abrirTurno, calcularValorEsperado, cerrarTurno } from '../../data/turnos'
+import type { TurnoCaja } from '../../schemas/turnoCaja'
 import { Card } from '../../components/layout/Card'
 import { CustomSelect } from '../../components/layout/CustomSelect'
+import { CurrencyInput } from '../../components/layout/CurrencyInput'
 
 async function loadParqueadero() {
-  const [estancias, resumen] = await Promise.all([fetchEstanciasAdentro(), fetchResumenHoy()])
-  return { estancias, resumen }
+  const [estancias, resumen, turno] = await Promise.all([
+    fetchEstanciasAdentro(),
+    fetchResumenHoy(),
+    fetchTurnoAbierto('vigilante'),
+  ])
+  return { estancias, resumen, turno }
 }
+
+const HORA_FORMAT = new Intl.DateTimeFormat('es-CO', { hour: 'numeric', minute: '2-digit', hour12: true })
 
 export const Route = createFileRoute('/vigilante/')({
   loader: loadParqueadero,
@@ -42,13 +51,19 @@ function VigilanteHome() {
   const data = Route.useLoaderData()
   const [estancias, setEstancias] = useState<EstanciaParqueadero[]>(data.estancias)
   const [resumen, setResumen] = useState(data.resumen)
-  const [modal, setModal] = useState<'entrada' | 'salida' | null>(null)
+  const [turno, setTurno] = useState<TurnoCaja | undefined>(data.turno)
+  const [modal, setModal] = useState<'entrada' | 'salida' | 'abrirTurno' | 'cerrarTurno' | null>(null)
   const [salidaSeleccionada, setSalidaSeleccionada] = useState<EstanciaParqueadero | null>(null)
 
   async function refresh() {
     const [nuevasEstancias, nuevoResumen] = await Promise.all([fetchEstanciasAdentro(), fetchResumenHoy()])
     setEstancias(nuevasEstancias)
     setResumen(nuevoResumen)
+  }
+
+  async function refreshTurno() {
+    const nuevoTurno = await fetchTurnoAbierto('vigilante')
+    setTurno(nuevoTurno)
   }
 
   function abrirSalida(estancia: EstanciaParqueadero) {
@@ -58,6 +73,44 @@ function VigilanteHome() {
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4 pb-6">
+      {/* Turno de caja — arqueo ciego (regla 15), visible siempre arriba de todo lo demás */}
+      {turno ? (
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-success-100 bg-success-50 p-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-success-100 text-success-700">
+              <Unlock size={16} strokeWidth={2.25} />
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-neutral-900">Turno abierto — {turno.responsable}</p>
+              <p className="text-xs text-neutral-500">Desde las {HORA_FORMAT.format(new Date(turno.abiertoEn))}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setModal('cerrarTurno')}
+            className="shrink-0 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs font-semibold text-neutral-700 transition-colors hover:bg-neutral-50"
+          >
+            Cerrar turno
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-warning-100 bg-warning-50 p-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-warning-100 text-warning-700">
+              <Lock size={16} strokeWidth={2.25} />
+            </span>
+            <p className="min-w-0 text-sm font-medium text-warning-700">Abre tu turno para empezar a registrar movimientos.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setModal('abrirTurno')}
+            className="shrink-0 rounded-lg bg-primary-600 px-3 py-2 text-xs font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700"
+          >
+            Abrir turno
+          </button>
+        </div>
+      )}
+
       {/* Stats — 2 columnas incluso en móvil, son las dos cifras que el vigilante necesita de un vistazo */}
       <div className="grid grid-cols-2 gap-3">
         <div className="flex items-center gap-3 rounded-2xl border border-neutral-200 bg-white p-4 shadow-card">
@@ -85,7 +138,9 @@ function VigilanteHome() {
         <button
           type="button"
           onClick={() => setModal('entrada')}
-          className="flex flex-col items-center gap-1.5 rounded-2xl bg-primary-600 py-5 text-white shadow-nav-active transition-colors hover:bg-primary-700 active:bg-primary-800"
+          disabled={!turno}
+          title={turno ? undefined : 'Abre tu turno antes de registrar una entrada'}
+          className="flex flex-col items-center gap-1.5 rounded-2xl bg-primary-600 py-5 text-white shadow-nav-active transition-colors hover:bg-primary-700 active:bg-primary-800 disabled:cursor-not-allowed disabled:bg-neutral-300 disabled:text-neutral-500 disabled:shadow-none"
         >
           <LogIn size={22} strokeWidth={2.25} />
           <span className="text-sm font-semibold">Entrada</span>
@@ -166,7 +221,243 @@ function VigilanteHome() {
           }}
         />
       ) : null}
+
+      {modal === 'abrirTurno' ? (
+        <AbrirTurnoModal
+          onClose={() => setModal(null)}
+          onSaved={async () => {
+            setModal(null)
+            await refreshTurno()
+          }}
+        />
+      ) : null}
+
+      {modal === 'cerrarTurno' && turno ? (
+        <CerrarTurnoModal
+          turno={turno}
+          onClose={() => setModal(null)}
+          onSaved={async () => {
+            setModal(null)
+            await refreshTurno()
+          }}
+        />
+      ) : null}
     </div>
+  )
+}
+
+function AbrirTurnoModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const [responsable, setResponsable] = useState('')
+  const [baseInicial, setBaseInicial] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  async function handleSubmit() {
+    setError(null)
+    const base = Number(baseInicial)
+    if (!responsable.trim()) {
+      setError('El responsable es obligatorio')
+      return
+    }
+    if (!Number.isFinite(base) || base < 0) {
+      setError('La base inicial no puede ser negativa')
+      return
+    }
+    setSaving(true)
+    try {
+      await abrirTurno({ rol: 'vigilante', responsable, baseInicial: Math.round(base) })
+      onSaved()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo abrir el turno')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <ModalSheet title="Abrir turno" onClose={onClose}>
+      <div className="flex flex-col gap-4">
+        <label className="flex flex-col gap-1.5 text-sm">
+          <span className="font-medium text-neutral-700">Responsable</span>
+          <input
+            autoFocus
+            value={responsable}
+            onChange={(e) => setResponsable(e.target.value)}
+            placeholder="Nombre del vigilante"
+            className="rounded-lg border border-neutral-300 px-3 py-3 text-base outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1.5 text-sm">
+          <span className="font-medium text-neutral-700">Base inicial</span>
+          <CurrencyInput size="md" prefix="$" value={baseInicial} onChange={setBaseInicial} />
+        </label>
+
+        {error ? <p className="text-xs text-danger-600">{error}</p> : null}
+
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={saving}
+          className="rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
+        >
+          {saving ? 'Abriendo…' : 'Abrir turno'}
+        </button>
+      </div>
+    </ModalSheet>
+  )
+}
+
+function CerrarTurnoModal({ turno, onClose, onSaved }: { turno: TurnoCaja; onClose: () => void; onSaved: () => void }) {
+  const [paso, setPaso] = useState<'conteo' | 'revelado'>('conteo')
+  const [conteoFisico, setConteoFisico] = useState('')
+  const [valorEsperado, setValorEsperado] = useState<number | null>(null)
+  const [cerradoPor, setCerradoPor] = useState('')
+  const [justificacion, setJustificacion] = useState('')
+  const [recibidoPor, setRecibidoPor] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  const conteo = Number(conteoFisico)
+  const diferencia = valorEsperado !== null && Number.isFinite(conteo) ? conteo - valorEsperado : 0
+
+  async function handleRevelar() {
+    setError(null)
+    if (!Number.isFinite(conteo) || conteo < 0) {
+      setError('Ingresa un conteo físico válido')
+      return
+    }
+    setSaving(true)
+    try {
+      const esperado = await calcularValorEsperado(turno)
+      setValorEsperado(esperado)
+      setPaso('revelado')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo calcular el valor esperado')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleCerrar() {
+    setError(null)
+    if (!cerradoPor.trim()) {
+      setError('Indica quién cierra el turno')
+      return
+    }
+    if (diferencia !== 0 && !justificacion.trim()) {
+      setError('Hay una diferencia en el arqueo — la justificación es obligatoria para cerrar el turno')
+      return
+    }
+    setSaving(true)
+    try {
+      await cerrarTurno(
+        turno,
+        Math.round(conteo),
+        cerradoPor,
+        justificacion.trim() || undefined,
+        recibidoPor.trim() || undefined,
+      )
+      onSaved()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo cerrar el turno')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <ModalSheet title="Cerrar turno" onClose={onClose}>
+      {paso === 'conteo' ? (
+        <div className="flex flex-col gap-4">
+          <p className="text-xs text-neutral-500">
+            Cuenta el efectivo físico de la caja e ingresa el total. El valor esperado del sistema se muestra
+            después, para un arqueo ciego.
+          </p>
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="font-medium text-neutral-700">Conteo físico</span>
+            <CurrencyInput autoFocus size="md" prefix="$" value={conteoFisico} onChange={setConteoFisico} />
+          </label>
+
+          {error ? <p className="text-xs text-danger-600">{error}</p> : null}
+
+          <button
+            type="button"
+            onClick={handleRevelar}
+            disabled={saving}
+            className="rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
+          >
+            {saving ? 'Calculando…' : 'Confirmar conteo'}
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-lg bg-neutral-50 px-3 py-2.5">
+              <p className="text-xs text-neutral-500">Conteo físico</p>
+              <p className="text-sm font-semibold text-neutral-900">{COP.format(conteo)}</p>
+            </div>
+            <div className="rounded-lg bg-neutral-50 px-3 py-2.5">
+              <p className="text-xs text-neutral-500">Esperado (sistema)</p>
+              <p className="text-sm font-semibold text-neutral-900">{COP.format(valorEsperado ?? 0)}</p>
+            </div>
+          </div>
+
+          <div
+            className={`rounded-lg px-3 py-2.5 text-sm font-medium ${
+              diferencia === 0 ? 'bg-success-50 text-success-700' : 'bg-warning-50 text-warning-700'
+            }`}
+          >
+            {diferencia === 0 ? 'Sin diferencia' : `Diferencia: ${COP.format(diferencia)}`}
+          </div>
+
+          {diferencia !== 0 ? (
+            <label className="flex flex-col gap-1.5 text-sm">
+              <span className="font-medium text-neutral-700">Justificación de la diferencia</span>
+              <textarea
+                autoFocus
+                value={justificacion}
+                onChange={(e) => setJustificacion(e.target.value)}
+                rows={2}
+                placeholder="Explica la diferencia…"
+                className="rounded-lg border border-neutral-300 px-3 py-3 text-base outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+              />
+            </label>
+          ) : null}
+
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="font-medium text-neutral-700">Cierra el turno</span>
+            <input
+              value={cerradoPor}
+              onChange={(e) => setCerradoPor(e.target.value)}
+              placeholder="Nombre de quien cierra"
+              className="rounded-lg border border-neutral-300 px-3 py-3 text-base outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+            />
+          </label>
+
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="font-medium text-neutral-700">Recibido por (opcional)</span>
+            <input
+              value={recibidoPor}
+              onChange={(e) => setRecibidoPor(e.target.value)}
+              placeholder="Quién recibe la caja"
+              className="rounded-lg border border-neutral-300 px-3 py-3 text-base outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+            />
+          </label>
+
+          {error ? <p className="text-xs text-danger-600">{error}</p> : null}
+
+          <button
+            type="button"
+            onClick={handleCerrar}
+            disabled={saving}
+            className="rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
+          >
+            {saving ? 'Cerrando…' : 'Confirmar cierre'}
+          </button>
+        </div>
+      )}
+    </ModalSheet>
   )
 }
 
@@ -192,6 +483,8 @@ function EntradaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
     try {
       await registrarEntrada(parsed.data)
       onSaved()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo registrar la entrada')
     } finally {
       setSaving(false)
     }

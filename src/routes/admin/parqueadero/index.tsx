@@ -4,6 +4,7 @@ import { CircleParking } from 'lucide-react'
 import { fetchTarifasParqueadero, updateTarifaParqueadero } from '../../../data/tarifasParqueadero'
 import type { TarifaParqueadero } from '../../../schemas/tarifaParqueadero'
 import { Card } from '../../../components/layout/Card'
+import { CurrencyInput } from '../../../components/layout/CurrencyInput'
 
 export const Route = createFileRoute('/admin/parqueadero/')({
   loader: fetchTarifasParqueadero,
@@ -98,14 +99,7 @@ function TarifaCard({ tarifa, onSaved }: { tarifa: TarifaParqueadero; onSaved: (
       <div className="mt-4 border-t border-neutral-100 pt-4">
         {editing ? (
           <div className="flex flex-col gap-2">
-            <input
-              autoFocus
-              inputMode="numeric"
-              value={valor}
-              onChange={(event) => setValor(event.target.value)}
-              placeholder="p. ej. 8000"
-              className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-            />
+            <CurrencyInput autoFocus size="sm" prefix="$" value={valor} onChange={setValor} placeholder="p. ej. 8000" />
             {error ? <p className="text-xs text-danger-600">{error}</p> : null}
             <div className="flex justify-end gap-2">
               <button

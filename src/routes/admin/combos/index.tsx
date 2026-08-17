@@ -9,6 +9,8 @@ import type { CategoriaVehiculo, TipoVehiculo } from '../../../schemas/tipoVehic
 import type { Precio } from '../../../schemas/precio'
 import { Card } from '../../../components/layout/Card'
 import { CustomSelect } from '../../../components/layout/CustomSelect'
+import { ConfirmModal } from '../../../components/layout/ConfirmModal'
+import { CurrencyInput } from '../../../components/layout/CurrencyInput'
 
 const CATEGORIA_LABEL: Record<CategoriaVehiculo, string> = {
   auto: 'Automóviles y camionetas',
@@ -35,6 +37,7 @@ function CombosPage() {
   const [precios, setPrecios] = useState(initial.precios)
   const [editing, setEditing] = useState<Combo | null>(null)
   const [formOpen, setFormOpen] = useState(false)
+  const [confirmando, setConfirmando] = useState<Combo | null>(null)
 
   async function refresh() {
     const [nuevosCombos, nuevosPrecios] = await Promise.all([fetchCombos(), fetchPrecios()])
@@ -149,7 +152,7 @@ function CombosPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleToggleActivo(combo)}
+                      onClick={() => setConfirmando(combo)}
                       className="rounded-lg px-3 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-primary-100 hover:text-primary-700"
                     >
                       {combo.activo ? 'Inactivar' : 'Activar'}
@@ -179,6 +182,24 @@ function CombosPage() {
             setFormOpen(false)
             await refresh()
           }}
+        />
+      ) : null}
+
+      {confirmando ? (
+        <ConfirmModal
+          title={confirmando.activo ? `¿Inactivar ${confirmando.nombre}?` : `¿Activar ${confirmando.nombre}?`}
+          message={
+            confirmando.activo
+              ? `Ya no aparecerá disponible en recepción.`
+              : `Volverá a estar disponible en recepción.`
+          }
+          confirmLabel={confirmando.activo ? 'Inactivar' : 'Activar'}
+          variant={confirmando.activo ? 'danger' : 'primary'}
+          onConfirm={async () => {
+            await handleToggleActivo(confirmando)
+            setConfirmando(null)
+          }}
+          onCancel={() => setConfirmando(null)}
         />
       ) : null}
     </div>
@@ -331,19 +352,11 @@ function ComboForm({
               {tiposDeCategoria.map((tipo) => (
                 <label key={tipo.id} className="flex flex-col gap-1.5 text-sm">
                   <span className="font-medium text-neutral-700">{tipo.nombre}</span>
-                  <div className="flex items-center gap-2 rounded-lg border border-neutral-300 px-3 py-2.5 transition-colors focus-within:border-primary-500 focus-within:ring-1 focus-within:ring-primary-500">
-                    <span className="text-neutral-400">$</span>
-                    <input
-                      type="number"
-                      min={0}
-                      step={500}
-                      inputMode="numeric"
-                      value={preciosPorTipo[tipo.id] ?? ''}
-                      onChange={(event) => updatePrecio(tipo.id, event.target.value)}
-                      placeholder="0"
-                      className="w-full bg-transparent text-sm outline-none"
-                    />
-                  </div>
+                  <CurrencyInput
+                    size="sm"
+                    value={preciosPorTipo[tipo.id] ?? ''}
+                    onChange={(value) => updatePrecio(tipo.id, value)}
+                  />
                 </label>
               ))}
               {tiposDeCategoria.length === 0 ? (
