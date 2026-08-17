@@ -1,0 +1,44 @@
+import { createFileRoute, Outlet } from '@tanstack/react-router'
+import {
+  LayoutDashboard,
+  Car,
+  Sparkles,
+  Tag,
+  CircleParking,
+  Users,
+  Settings,
+} from 'lucide-react'
+import { Sidebar, type NavItem } from '../../components/layout/Sidebar'
+import { Topbar } from '../../components/layout/Topbar'
+import { MobileTabBar } from '../../components/layout/MobileTabBar'
+
+export const Route = createFileRoute('/admin')({
+  component: AdminLayout,
+})
+
+const NAV_ITEMS: NavItem[] = [
+  { to: '/admin', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/admin/tipos-vehiculo', label: 'Tipos de vehículo', icon: Car },
+  { to: '/admin/combos', label: 'Combos', icon: Sparkles },
+  { to: '/admin/lista-precios', label: 'Lista de precios', icon: Tag },
+  { to: '/admin/parqueadero', label: 'Parqueadero', icon: CircleParking },
+  { to: '/admin/lavadores', label: 'Lavadores', icon: Users },
+  { to: '/admin/configuracion', label: 'Configuración', icon: Settings },
+]
+
+// `fixed inset-0` saca el panel del contenedor angosto (#root) del sitio público —
+// cada área por rol es su propia superficie, no hereda el layout de marketing.
+function AdminLayout() {
+  return (
+    <div className="fixed inset-0 z-10 flex bg-neutral-50 text-left">
+      <Sidebar navItems={NAV_ITEMS} roleLabel="Administrador" />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <Topbar title="Panel de administración" searchPlaceholder="Buscar por placa…" avatarInitial="A" />
+        <main className="flex-1 overflow-y-auto p-4 pb-24 sm:p-6 md:pb-6">
+          <Outlet />
+        </main>
+      </div>
+      <MobileTabBar navItems={NAV_ITEMS} />
+    </div>
+  )
+}

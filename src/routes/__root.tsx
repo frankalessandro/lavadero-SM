@@ -28,6 +28,18 @@ function RootLayout() {
         <Link to="/services" activeProps={{ className: 'active' }}>
           Servicios
         </Link>
+        <Link to="/admin" activeProps={{ className: 'active' }}>
+          Admin
+        </Link>
+        <Link to="/jefe-zona" activeProps={{ className: 'active' }}>
+          Jefe de zona
+        </Link>
+        <Link to="/recepcion" activeProps={{ className: 'active' }}>
+          Recepción
+        </Link>
+        <Link to="/vigilante" activeProps={{ className: 'active' }}>
+          Vigilante
+        </Link>
       </nav>
       <Outlet />
       {import.meta.env.DEV ? <TanStackRouterDevtools position="bottom-right" /> : null}
