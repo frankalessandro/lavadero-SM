@@ -3,10 +3,12 @@ import {
   LayoutDashboard,
   Car,
   Sparkles,
-  Tag,
   CircleParking,
   Users,
   Settings,
+  Wallet,
+  Receipt,
+  ClipboardList,
 } from 'lucide-react'
 import { Sidebar, type NavItem } from '../../components/layout/Sidebar'
 import { Topbar } from '../../components/layout/Topbar'
@@ -20,9 +22,11 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/admin/tipos-vehiculo', label: 'Tipos de vehículo', icon: Car },
   { to: '/admin/combos', label: 'Combos', icon: Sparkles },
-  { to: '/admin/lista-precios', label: 'Lista de precios', icon: Tag },
   { to: '/admin/parqueadero', label: 'Parqueadero', icon: CircleParking },
   { to: '/admin/lavadores', label: 'Lavadores', icon: Users },
+  { to: '/admin/liquidaciones', label: 'Liquidaciones', icon: Wallet },
+  { to: '/admin/gastos', label: 'Gastos', icon: Receipt },
+  { to: '/admin/ordenes', label: 'Órdenes', icon: ClipboardList },
   { to: '/admin/configuracion', label: 'Configuración', icon: Settings },
 ]
 

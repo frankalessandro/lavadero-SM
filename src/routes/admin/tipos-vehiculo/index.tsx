@@ -7,8 +7,18 @@ import {
   updateTipoVehiculo,
   setTipoVehiculoActivo,
 } from '../../../data/tiposVehiculo'
-import { tipoVehiculoInputSchema, type TipoVehiculo } from '../../../schemas/tipoVehiculo'
+import {
+  tipoVehiculoInputSchema,
+  type CategoriaVehiculo,
+  type TipoVehiculo,
+} from '../../../schemas/tipoVehiculo'
 import { Card } from '../../../components/layout/Card'
+import { CustomSelect } from '../../../components/layout/CustomSelect'
+
+const CATEGORIA_LABEL: Record<CategoriaVehiculo, string> = {
+  auto: 'Automóviles y camionetas',
+  moto: 'Motocicletas',
+}
 
 export const Route = createFileRoute('/admin/tipos-vehiculo/')({
   loader: fetchTiposVehiculo,
@@ -66,6 +76,7 @@ function TiposVehiculoPage() {
           <thead>
             <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
               <th className="px-5 py-3">Nombre</th>
+              <th className="px-5 py-3">Categoría</th>
               <th className="px-5 py-3">Estado</th>
               <th className="px-5 py-3 text-right">Acciones</th>
             </tr>
@@ -74,6 +85,11 @@ function TiposVehiculoPage() {
             {tipos.map((tipo) => (
               <tr key={tipo.id} className="border-b border-neutral-100 transition-colors last:border-0 hover:bg-primary-50/40">
                 <td className="px-5 py-3 font-medium text-neutral-900">{tipo.nombre}</td>
+                <td className="px-5 py-3">
+                  <span className="inline-flex rounded-full bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary-700">
+                    {CATEGORIA_LABEL[tipo.categoria]}
+                  </span>
+                </td>
                 <td className="px-5 py-3">
                   <span
                     className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
@@ -106,7 +122,7 @@ function TiposVehiculoPage() {
             ))}
             {tipos.length === 0 ? (
               <tr>
-                <td className="px-5 py-6 text-center text-neutral-400" colSpan={3}>
+                <td className="px-5 py-6 text-center text-neutral-400" colSpan={4}>
                   No hay tipos de vehículo registrados.
                 </td>
               </tr>
@@ -139,12 +155,13 @@ function TipoVehiculoForm({
   onSaved: () => void
 }) {
   const [nombre, setNombre] = useState(tipo?.nombre ?? '')
+  const [categoria, setCategoria] = useState<CategoriaVehiculo>(tipo?.categoria ?? 'auto')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    const parsed = tipoVehiculoInputSchema.safeParse({ nombre })
+    const parsed = tipoVehiculoInputSchema.safeParse({ nombre, categoria })
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Datos inválidos')
       return
@@ -165,34 +182,56 @@ function TipoVehiculoForm({
 
   return (
     <div className="fixed inset-0 z-20 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-[2px]">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-card-hover">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-neutral-900">
-            {tipo ? 'Editar tipo de vehículo' : 'Nuevo tipo de vehículo'}
-          </h3>
+      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-card-hover sm:p-7">
+        <div className="mb-5 flex items-center justify-between">
+          <div>
+            <h3 className="text-base font-semibold text-neutral-900">
+              {tipo ? 'Editar tipo de vehículo' : 'Nuevo tipo de vehículo'}
+            </h3>
+            <p className="text-xs text-neutral-500">Base para la matriz de precios de combos.</p>
+          </div>
           <button
             type="button"
             onClick={onClose}
-            className="flex size-7 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
+            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
           >
-            <X size={16} />
+            <X size={18} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-          <label className="flex flex-col gap-1 text-left text-sm">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+          <label className="flex flex-col gap-1.5 text-left text-sm">
             <span className="font-medium text-neutral-700">Nombre</span>
             <input
               autoFocus
               value={nombre}
               onChange={(event) => setNombre(event.target.value)}
               placeholder="p. ej. Camioneta"
-              className="rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+              className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
             />
           </label>
+
+          <label className="flex flex-col gap-1.5 text-left text-sm">
+            <span className="font-medium text-neutral-700">Categoría de combos</span>
+            <CustomSelect
+              size="sm"
+              value={categoria}
+              onChange={(value) => setCategoria(value as CategoriaVehiculo)}
+              placeholder="Selecciona…"
+              options={[
+                { value: 'auto', label: CATEGORIA_LABEL.auto },
+                { value: 'moto', label: CATEGORIA_LABEL.moto },
+              ]}
+            />
+            <span className="text-xs text-neutral-400">
+              Determina qué catálogo de combos aplica a este tipo en recepción — el catálogo de
+              autos/camionetas es distinto al de motos (Plan de Alcance §5).
+            </span>
+          </label>
+
           {error ? <p className="text-xs text-danger-600">{error}</p> : null}
 
-          <div className="mt-2 flex justify-end gap-2">
+          <div className="mt-1 flex justify-end gap-2 border-t border-neutral-100 pt-4">
             <button
               type="button"
               onClick={onClose}

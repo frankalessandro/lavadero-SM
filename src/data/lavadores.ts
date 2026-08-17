@@ -1,34 +1,83 @@
-import type { Lavador } from '../schemas/lavador'
+import { db } from '../lib/db'
+import { lavadorInputSchema, lavadorSchema, type Lavador, type LavadorInput } from '../schemas/lavador'
 
-// 4 lavadores por prestación de servicios (Plan §3) — uno con pago diario por estar en periodo de inicio.
-const LAVADORES: Lavador[] = [
-  { id: 'l1', nombre: 'Carlos Pérez', activo: true, pagoDiario: false },
-  { id: 'l2', nombre: 'Luis Gómez', activo: true, pagoDiario: false },
-  { id: 'l3', nombre: 'Andrés Ruiz', activo: true, pagoDiario: false },
-  { id: 'l4', nombre: 'Miguel Torres', activo: true, pagoDiario: true },
-]
-
-// Cola de rotación por orden de llegada (M9, simplificada — sin registro de asistencia todavía).
-// El primero de la cola es la sugerencia automática; al asignar (sugerido o elegido manualmente),
-// ese lavador pasa al final y conserva su posición para la siguiente ronda (regla de negocio 9/10).
-let COLA: string[] = LAVADORES.filter((l) => l.activo).map((l) => l.id)
-
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+const LAVADOR_SELECT =
+  'id, nombre, telefono, fechaIngreso:fecha_ingreso, fechaCumpleanos:fecha_cumpleanos, activo, pagoDiario:pago_diario'
 
 export async function fetchLavadores(): Promise<Lavador[]> {
-  await delay(200)
-  return [...LAVADORES]
+  const { data, error } = await db
+    .from('lavadores')
+    .select(LAVADOR_SELECT)
+    .order('nombre')
+  if (error) throw new Error(error.message)
+  return lavadorSchema.array().parse(data)
 }
 
-export function suggestNextLavador(): string | undefined {
-  return COLA[0]
+// Regla de negocio 5: los lavadores nunca se eliminan, solo se crean/editan/inactivan.
+export async function createLavador(input: LavadorInput): Promise<Lavador> {
+  const parsed = lavadorInputSchema.parse(input)
+  const { data, error } = await db
+    .from('lavadores')
+    .insert({
+      nombre: parsed.nombre,
+      telefono: parsed.telefono,
+      fecha_ingreso: parsed.fechaIngreso,
+      fecha_cumpleanos: parsed.fechaCumpleanos,
+      pago_diario: parsed.pagoDiario,
+    })
+    .select(LAVADOR_SELECT)
+    .single()
+  if (error) throw new Error(error.message)
+  return lavadorSchema.parse(data)
 }
 
-export function registrarAsignacion(lavadorId: string) {
-  COLA = COLA.filter((id) => id !== lavadorId)
-  COLA.push(lavadorId)
+export async function updateLavador(id: string, input: LavadorInput): Promise<Lavador> {
+  const parsed = lavadorInputSchema.parse(input)
+  const { data, error } = await db
+    .from('lavadores')
+    .update({
+      nombre: parsed.nombre,
+      telefono: parsed.telefono,
+      fecha_ingreso: parsed.fechaIngreso,
+      fecha_cumpleanos: parsed.fechaCumpleanos,
+      pago_diario: parsed.pagoDiario,
+    })
+    .eq('id', id)
+    .select(LAVADOR_SELECT)
+    .single()
+  if (error) throw new Error(error.message)
+  return lavadorSchema.parse(data)
 }
 
-export function getCola(): string[] {
-  return [...COLA]
+export async function setLavadorActivo(id: string, activo: boolean): Promise<Lavador> {
+  const { data, error } = await db
+    .from('lavadores')
+    .update({ activo })
+    .eq('id', id)
+    .select(LAVADOR_SELECT)
+    .single()
+  if (error) throw new Error(error.message)
+  return lavadorSchema.parse(data)
+}
+
+// Cola de rotación persistida en la propia tabla (regla de negocio 9) — sin tabla de cola
+// aparte. El primero es el activo con más tiempo sin ser asignado (o nunca asignado, NULL
+// primero). Al asignar, se actualiza su marca de tiempo y pasa al final de la cola.
+export async function suggestNextLavador(): Promise<string | undefined> {
+  const { data, error } = await db
+    .from('lavadores')
+    .select('id')
+    .eq('activo', true)
+    .order('ultima_asignacion', { nullsFirst: true })
+    .limit(1)
+  if (error) throw new Error(error.message)
+  return data[0]?.id
+}
+
+export async function registrarAsignacion(lavadorId: string): Promise<void> {
+  const { error } = await db
+    .from('lavadores')
+    .update({ ultima_asignacion: new Date().toISOString() })
+    .eq('id', lavadorId)
+  if (error) throw new Error(error.message)
 }

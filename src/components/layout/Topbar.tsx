@@ -10,7 +10,6 @@ export function Topbar({ title, searchPlaceholder, avatarInitial }: TopbarProps)
   return (
     <header className="flex items-center justify-between gap-4 border-b border-neutral-200 bg-white px-6 py-4">
       <h1 className="text-lg font-semibold text-neutral-900">{title}</h1>
-
       <div className="flex items-center gap-4">
         {searchPlaceholder ? (
           <div className="hidden items-center gap-2 rounded-lg border border-neutral-200 bg-primary-50/60 px-3 py-2 text-sm text-neutral-500 transition-colors focus-within:border-primary-300 sm:flex">

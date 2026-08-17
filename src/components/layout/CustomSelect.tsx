@@ -13,11 +13,27 @@ interface CustomSelectProps {
   placeholder: string
   disabled?: boolean
   emptyLabel?: string
+  /** 'md' (default): py-3/text-base, para pantallas mobile-first (recepción, vigilante).
+   *  'sm': py-2.5/text-sm, para que combine con los inputs de texto de los CRUDs de admin. */
+  size?: 'sm' | 'md'
+}
+
+const SIZE_CLASSNAME: Record<'sm' | 'md', string> = {
+  sm: 'px-3 py-2.5 text-sm',
+  md: 'px-3 py-3 text-base',
 }
 
 // Reemplaza el <select> nativo del sistema operativo por un panel propio,
 // consistente con el resto del sistema de diseño (tokens de color, sombras, tipografía).
-export function CustomSelect({ value, onChange, options, placeholder, disabled, emptyLabel }: CustomSelectProps) {
+export function CustomSelect({
+  value,
+  onChange,
+  options,
+  placeholder,
+  disabled,
+  emptyLabel,
+  size = 'md',
+}: CustomSelectProps) {
   const [open, setOpen] = useState(false)
   const selected = options.find((o) => o.value === value)
 
@@ -27,7 +43,7 @@ export function CustomSelect({ value, onChange, options, placeholder, disabled, 
         type="button"
         disabled={disabled}
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between gap-2 rounded-lg border border-neutral-300 bg-white px-3 py-3 text-left text-base outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500 disabled:bg-neutral-50 disabled:text-neutral-400"
+        className={`flex w-full items-center justify-between gap-2 rounded-lg border border-neutral-300 bg-white text-left outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500 disabled:bg-neutral-50 disabled:text-neutral-400 ${SIZE_CLASSNAME[size]}`}
       >
         <span className={selected ? 'text-neutral-900' : 'text-neutral-400'}>
           {selected?.label ?? placeholder}

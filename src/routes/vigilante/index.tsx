@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { LogIn, LogOut, Car, Banknote, AlertTriangle, X, Clock } from 'lucide-react'
 import {
@@ -11,6 +11,7 @@ import {
 } from '../../data/estanciasParqueadero'
 import { entradaInputSchema, type EstanciaParqueadero, type ModalidadParqueadero } from '../../schemas/estanciaParqueadero'
 import { Card } from '../../components/layout/Card'
+import { CustomSelect } from '../../components/layout/CustomSelect'
 
 async function loadParqueadero() {
   const [estancias, resumen] = await Promise.all([fetchEstanciasAdentro(), fetchResumenHoy()])
@@ -174,6 +175,11 @@ function EntradaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
   const [modalidad, setModalidad] = useState<ModalidadParqueadero>('noche')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [tarifaNoche, setTarifaNoche] = useState(0)
+
+  useEffect(() => {
+    cobroPorModalidad('noche').then(setTarifaNoche)
+  }, [])
 
   async function handleSubmit() {
     const parsed = entradaInputSchema.safeParse({ placa, modalidad })
@@ -194,7 +200,7 @@ function EntradaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
   return (
     <ModalSheet title="Registrar entrada" onClose={onClose}>
       <div className="flex flex-col gap-4">
-        <label className="flex flex-col gap-1 text-sm">
+        <label className="flex flex-col gap-1.5 text-sm">
           <span className="font-medium text-neutral-700">Placa</span>
           <input
             autoFocus
@@ -224,7 +230,7 @@ function EntradaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
             ))}
           </div>
           {modalidad === 'noche' ? (
-            <p className="text-xs text-neutral-400">Se cobra {COP.format(8000)} al retiro, no ahora.</p>
+            <p className="text-xs text-neutral-400">Se cobra {COP.format(tarifaNoche)} al retiro, no ahora.</p>
           ) : null}
         </div>
 
@@ -257,9 +263,21 @@ function SalidaModal({
   const [estanciaId, setEstanciaId] = useState(seleccionada?.id ?? '')
   const [metodoPago, setMetodoPago] = useState<'efectivo' | 'transferencia'>('efectivo')
   const [saving, setSaving] = useState(false)
+  const [cobro, setCobro] = useState(0)
 
   const estancia = useMemo(() => estancias.find((e) => e.id === estanciaId), [estancias, estanciaId])
-  const cobro = estancia ? cobroPorModalidad(estancia.modalidad) : 0
+
+  useEffect(() => {
+    let cancelado = false
+    async function cargarCobro() {
+      const valor = estancia ? await cobroPorModalidad(estancia.modalidad) : 0
+      if (!cancelado) setCobro(valor)
+    }
+    cargarCobro()
+    return () => {
+      cancelado = true
+    }
+  }, [estancia])
 
   async function handleSubmit() {
     if (!estancia) return
@@ -276,20 +294,17 @@ function SalidaModal({
     <ModalSheet title="Registrar salida" onClose={onClose}>
       <div className="flex flex-col gap-4">
         {!seleccionada ? (
-          <label className="flex flex-col gap-1 text-sm">
+          <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-medium text-neutral-700">Placa</span>
-            <select
+            <CustomSelect
               value={estanciaId}
-              onChange={(e) => setEstanciaId(e.target.value)}
-              className="rounded-lg border border-neutral-300 bg-white px-3 py-3 text-base outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-            >
-              <option value="">Selecciona un vehículo…</option>
-              {estancias.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.placa} — {MODALIDAD_LABEL[e.modalidad]}
-                </option>
-              ))}
-            </select>
+              onChange={setEstanciaId}
+              placeholder="Selecciona un vehículo…"
+              options={estancias.map((e) => ({
+                value: e.id,
+                label: `${e.placa} — ${MODALIDAD_LABEL[e.modalidad]}`,
+              }))}
+            />
           </label>
         ) : (
           <div className="flex items-center gap-2">

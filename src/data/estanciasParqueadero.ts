@@ -1,82 +1,88 @@
+import { db } from '../lib/db'
 import {
   entradaInputSchema,
+  estanciaParqueaderoSchema,
   type EntradaInput,
   type EstanciaParqueadero,
   type ModalidadParqueadero,
 } from '../schemas/estanciaParqueadero'
 
-// Tarifa de noche fija (Plan §5). Mensualidad y fijo 24h no cobran por movimiento individual
-// — se facturan aparte (mensualidad) o ya están cubiertos (fijo) — regla de negocio 17.
-const TARIFA_NOCHE = 8000
+const ESTANCIA_SELECT =
+  'id, placa, modalidad, horaIngreso:hora_ingreso, horaSalida:hora_salida, cobro, metodoPago:metodo_pago, estado'
 
-let ESTANCIAS: EstanciaParqueadero[] = []
-
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-
-function esHoy(iso: string) {
-  const fecha = new Date(iso)
-  const hoy = new Date()
-  return (
-    fecha.getFullYear() === hoy.getFullYear() &&
-    fecha.getMonth() === hoy.getMonth() &&
-    fecha.getDate() === hoy.getDate()
-  )
+function inicioDeHoyISO(): string {
+  const ahora = new Date()
+  return new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate()).toISOString()
 }
 
 export async function fetchEstanciasAdentro(): Promise<EstanciaParqueadero[]> {
-  await delay(250)
-  return ESTANCIAS.filter((e) => e.estado === 'adentro').sort(
-    (a, b) => new Date(b.horaIngreso).getTime() - new Date(a.horaIngreso).getTime(),
-  )
+  const { data, error } = await db
+    .from('estancias_parqueadero')
+    .select(ESTANCIA_SELECT)
+    .eq('estado', 'adentro')
+    .order('hora_ingreso', { ascending: false })
+  if (error) throw new Error(error.message)
+  return estanciaParqueaderoSchema.array().parse(data)
 }
 
 export async function fetchResumenHoy(): Promise<{ vehiculosAdentro: number; dineroHoy: number }> {
-  await delay(150)
-  const vehiculosAdentro = ESTANCIAS.filter((e) => e.estado === 'adentro').length
-  const dineroHoy = ESTANCIAS.filter((e) => e.horaSalida && esHoy(e.horaSalida) && e.cobro).reduce(
-    (total, e) => total + (e.cobro ?? 0),
-    0,
-  )
-  return { vehiculosAdentro, dineroHoy }
+  const [adentroRes, salidasRes] = await Promise.all([
+    db.from('estancias_parqueadero').select('id', { count: 'exact', head: true }).eq('estado', 'adentro'),
+    db.from('estancias_parqueadero').select('cobro').eq('estado', 'fuera').gte('hora_salida', inicioDeHoyISO()),
+  ])
+  if (adentroRes.error) throw new Error(adentroRes.error.message)
+  if (salidasRes.error) throw new Error(salidasRes.error.message)
+
+  const dineroHoy = (salidasRes.data ?? []).reduce((total, e) => total + (e.cobro ?? 0), 0)
+  return { vehiculosAdentro: adentroRes.count ?? 0, dineroHoy }
 }
 
-export function cobroPorModalidad(modalidad: ModalidadParqueadero): number {
-  return modalidad === 'noche' ? TARIFA_NOCHE : 0
+// Mensualidad y fijo 24h no cobran por movimiento individual — se facturan aparte (mensualidad)
+// o ya están cubiertos (fijo) — regla de negocio 17. La tarifa viene de M1 (admin), no hardcodeada.
+export async function cobroPorModalidad(modalidad: ModalidadParqueadero): Promise<number> {
+  if (modalidad !== 'noche') return 0
+  const { data, error } = await db.from('tarifas_parqueadero').select('precio').eq('modalidad', 'noche').single()
+  if (error) throw new Error(error.message)
+  return data.precio ?? 0
 }
 
 export async function registrarEntrada(input: EntradaInput): Promise<EstanciaParqueadero> {
   const parsed = entradaInputSchema.parse(input)
-  await delay(250)
-  const estancia: EstanciaParqueadero = {
-    id: crypto.randomUUID(),
-    placa: parsed.placa,
-    modalidad: parsed.modalidad,
-    horaIngreso: new Date().toISOString(),
-    estado: 'adentro',
-  }
-  ESTANCIAS = [...ESTANCIAS, estancia]
-  return estancia
+  const { data, error } = await db
+    .from('estancias_parqueadero')
+    .insert({ placa: parsed.placa, modalidad: parsed.modalidad })
+    .select(ESTANCIA_SELECT)
+    .single()
+  if (error) throw new Error(error.message)
+  return estanciaParqueaderoSchema.parse(data)
 }
 
 export async function registrarSalida(
   id: string,
   metodoPago?: 'efectivo' | 'transferencia',
 ): Promise<EstanciaParqueadero> {
-  await delay(250)
-  let actualizada: EstanciaParqueadero | undefined
-  ESTANCIAS = ESTANCIAS.map((e) => {
-    if (e.id !== id) return e
-    actualizada = {
-      ...e,
+  const { data: actual, error: fetchError } = await db
+    .from('estancias_parqueadero')
+    .select('modalidad')
+    .eq('id', id)
+    .single()
+  if (fetchError) throw new Error(fetchError.message)
+
+  const cobro = await cobroPorModalidad(actual.modalidad as ModalidadParqueadero)
+
+  const { data, error } = await db
+    .from('estancias_parqueadero')
+    .update({
       estado: 'fuera',
-      horaSalida: new Date().toISOString(),
-      cobro: cobroPorModalidad(e.modalidad),
-      metodoPago,
-    }
-    return actualizada
-  })
-  if (!actualizada) throw new Error(`Estancia ${id} no encontrada`)
-  return actualizada
+      hora_salida: new Date().toISOString(),
+      cobro,
+      metodo_pago: cobro > 0 ? metodoPago : undefined,
+    })
+    .eq('id', id)
+    .select(ESTANCIA_SELECT)
+    .single()
+  if (error) throw new Error(error.message)
+  return estanciaParqueaderoSchema.parse(data)
 }
 
 // Ventana de salida 7:00–8:00am para noche y mensualidad (regla de negocio 7).
