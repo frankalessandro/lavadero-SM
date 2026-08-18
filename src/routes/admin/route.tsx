@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { createFileRoute, Outlet, redirect } from '@tanstack/react-router'
 import {
   LayoutDashboard,
@@ -15,7 +16,6 @@ import {
 } from 'lucide-react'
 import { Sidebar, type NavItem } from '../../components/layout/Sidebar'
 import { Topbar } from '../../components/layout/Topbar'
-import { MobileTabBar } from '../../components/layout/MobileTabBar'
 import { signOut } from '../../lib/auth'
 
 export const Route = createFileRoute('/admin')({
@@ -45,22 +45,30 @@ const NAV_ITEMS: NavItem[] = [
 
 // `fixed inset-0` saca el panel del contenedor angosto (#root) del sitio público —
 // cada área por rol es su propia superficie, no hereda el layout de marketing.
+// Con 12 ítems de nav, un MobileTabBar horizontal-scroll deja de ser usable en celular —
+// por debajo de `md` la navegación vive en el drawer del hamburguesa del Topbar en su lugar.
 function AdminLayout() {
+  const [menuOpen, setMenuOpen] = useState(false)
   return (
     <div className="fixed inset-0 z-10 flex bg-neutral-50 text-left">
-      <Sidebar navItems={NAV_ITEMS} roleLabel="Administrador" />
+      <Sidebar
+        navItems={NAV_ITEMS}
+        roleLabel="Administrador"
+        mobileOpen={menuOpen}
+        onMobileClose={() => setMenuOpen(false)}
+      />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar
           title="Panel de administración"
           searchPlaceholder="Buscar por placa…"
           avatarInitial="A"
           onLogout={signOut}
+          onMenuClick={() => setMenuOpen(true)}
         />
-        <main className="flex-1 overflow-y-auto p-4 pb-24 sm:p-6 md:pb-6">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6">
           <Outlet />
         </main>
       </div>
-      <MobileTabBar navItems={NAV_ITEMS} />
     </div>
   )
 }
