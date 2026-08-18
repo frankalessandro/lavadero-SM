@@ -10,13 +10,75 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AdminRouteRouteImport } from './routes/admin/route'
+import { Route as JefeZonaRouteRouteImport } from './routes/jefe-zona/route'
+import { Route as RecepcionRouteRouteImport } from './routes/recepcion/route'
+import { Route as VigilanteRouteRouteImport } from './routes/vigilante/route'
+import { Route as AdminIndexRouteImport } from './routes/admin/index'
+import { Route as JefeZonaIndexRouteImport } from './routes/jefe-zona/index'
+import { Route as LoginIndexRouteImport } from './routes/login/index'
+import { Route as RecepcionIndexRouteImport } from './routes/recepcion/index'
 import { Route as ServicesIndexRouteImport } from './routes/services/index'
 import { Route as ServicesServiceIdRouteImport } from './routes/services/$serviceId'
+import { Route as VigilanteIndexRouteImport } from './routes/vigilante/index'
+import { Route as AdminCombosIndexRouteImport } from './routes/admin/combos/index'
+import { Route as AdminConfiguracionIndexRouteImport } from './routes/admin/configuracion/index'
+import { Route as AdminGastosIndexRouteImport } from './routes/admin/gastos/index'
+import { Route as AdminInventarioIndexRouteImport } from './routes/admin/inventario/index'
+import { Route as AdminLavadoresIndexRouteImport } from './routes/admin/lavadores/index'
+import { Route as AdminLiquidacionesIndexRouteImport } from './routes/admin/liquidaciones/index'
+import { Route as AdminOrdenesIndexRouteImport } from './routes/admin/ordenes/index'
+import { Route as AdminParqueaderoIndexRouteImport } from './routes/admin/parqueadero/index'
+import { Route as AdminTiposVehiculoIndexRouteImport } from './routes/admin/tipos-vehiculo/index'
+import { Route as AdminTurnosIndexRouteImport } from './routes/admin/turnos/index'
+import { Route as AdminUsuariosIndexRouteImport } from './routes/admin/usuarios/index'
+import { Route as JefeZonaCajaIndexRouteImport } from './routes/jefe-zona/caja/index'
+import { Route as JefeZonaInventarioIndexRouteImport } from './routes/jefe-zona/inventario/index'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRouteRoute = AdminRouteRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const JefeZonaRouteRoute = JefeZonaRouteRouteImport.update({
+  id: '/jefe-zona',
+  path: '/jefe-zona',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RecepcionRouteRoute = RecepcionRouteRouteImport.update({
+  id: '/recepcion',
+  path: '/recepcion',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VigilanteRouteRoute = VigilanteRouteRouteImport.update({
+  id: '/vigilante',
+  path: '/vigilante',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const JefeZonaIndexRoute = JefeZonaIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => JefeZonaRouteRoute,
+} as any)
+const LoginIndexRoute = LoginIndexRouteImport.update({
+  id: '/login/',
+  path: '/login/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RecepcionIndexRoute = RecepcionIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => RecepcionRouteRoute,
 } as any)
 const ServicesIndexRoute = ServicesIndexRouteImport.update({
   id: '/services/',
@@ -28,34 +90,243 @@ const ServicesServiceIdRoute = ServicesServiceIdRouteImport.update({
   path: '/services/$serviceId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const VigilanteIndexRoute = VigilanteIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => VigilanteRouteRoute,
+} as any)
+const AdminCombosIndexRoute = AdminCombosIndexRouteImport.update({
+  id: '/combos/',
+  path: '/combos/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminConfiguracionIndexRoute = AdminConfiguracionIndexRouteImport.update({
+  id: '/configuracion/',
+  path: '/configuracion/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminGastosIndexRoute = AdminGastosIndexRouteImport.update({
+  id: '/gastos/',
+  path: '/gastos/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminInventarioIndexRoute = AdminInventarioIndexRouteImport.update({
+  id: '/inventario/',
+  path: '/inventario/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminLavadoresIndexRoute = AdminLavadoresIndexRouteImport.update({
+  id: '/lavadores/',
+  path: '/lavadores/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminLiquidacionesIndexRoute = AdminLiquidacionesIndexRouteImport.update({
+  id: '/liquidaciones/',
+  path: '/liquidaciones/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminOrdenesIndexRoute = AdminOrdenesIndexRouteImport.update({
+  id: '/ordenes/',
+  path: '/ordenes/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminParqueaderoIndexRoute = AdminParqueaderoIndexRouteImport.update({
+  id: '/parqueadero/',
+  path: '/parqueadero/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminTiposVehiculoIndexRoute = AdminTiposVehiculoIndexRouteImport.update({
+  id: '/tipos-vehiculo/',
+  path: '/tipos-vehiculo/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminTurnosIndexRoute = AdminTurnosIndexRouteImport.update({
+  id: '/turnos/',
+  path: '/turnos/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminUsuariosIndexRoute = AdminUsuariosIndexRouteImport.update({
+  id: '/usuarios/',
+  path: '/usuarios/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const JefeZonaCajaIndexRoute = JefeZonaCajaIndexRouteImport.update({
+  id: '/caja/',
+  path: '/caja/',
+  getParentRoute: () => JefeZonaRouteRoute,
+} as any)
+const JefeZonaInventarioIndexRoute = JefeZonaInventarioIndexRouteImport.update({
+  id: '/inventario/',
+  path: '/inventario/',
+  getParentRoute: () => JefeZonaRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteRouteWithChildren
+  '/jefe-zona': typeof JefeZonaRouteRouteWithChildren
+  '/recepcion': typeof RecepcionRouteRouteWithChildren
+  '/vigilante': typeof VigilanteRouteRouteWithChildren
   '/services/$serviceId': typeof ServicesServiceIdRoute
+  '/admin/': typeof AdminIndexRoute
+  '/jefe-zona/': typeof JefeZonaIndexRoute
+  '/login/': typeof LoginIndexRoute
+  '/recepcion/': typeof RecepcionIndexRoute
   '/services/': typeof ServicesIndexRoute
+  '/vigilante/': typeof VigilanteIndexRoute
+  '/admin/combos/': typeof AdminCombosIndexRoute
+  '/admin/configuracion/': typeof AdminConfiguracionIndexRoute
+  '/admin/gastos/': typeof AdminGastosIndexRoute
+  '/admin/inventario/': typeof AdminInventarioIndexRoute
+  '/admin/lavadores/': typeof AdminLavadoresIndexRoute
+  '/admin/liquidaciones/': typeof AdminLiquidacionesIndexRoute
+  '/admin/ordenes/': typeof AdminOrdenesIndexRoute
+  '/admin/parqueadero/': typeof AdminParqueaderoIndexRoute
+  '/admin/tipos-vehiculo/': typeof AdminTiposVehiculoIndexRoute
+  '/admin/turnos/': typeof AdminTurnosIndexRoute
+  '/admin/usuarios/': typeof AdminUsuariosIndexRoute
+  '/jefe-zona/caja/': typeof JefeZonaCajaIndexRoute
+  '/jefe-zona/inventario/': typeof JefeZonaInventarioIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/services/$serviceId': typeof ServicesServiceIdRoute
+  '/admin': typeof AdminIndexRoute
+  '/jefe-zona': typeof JefeZonaIndexRoute
+  '/login': typeof LoginIndexRoute
+  '/recepcion': typeof RecepcionIndexRoute
   '/services': typeof ServicesIndexRoute
+  '/vigilante': typeof VigilanteIndexRoute
+  '/admin/combos': typeof AdminCombosIndexRoute
+  '/admin/configuracion': typeof AdminConfiguracionIndexRoute
+  '/admin/gastos': typeof AdminGastosIndexRoute
+  '/admin/inventario': typeof AdminInventarioIndexRoute
+  '/admin/lavadores': typeof AdminLavadoresIndexRoute
+  '/admin/liquidaciones': typeof AdminLiquidacionesIndexRoute
+  '/admin/ordenes': typeof AdminOrdenesIndexRoute
+  '/admin/parqueadero': typeof AdminParqueaderoIndexRoute
+  '/admin/tipos-vehiculo': typeof AdminTiposVehiculoIndexRoute
+  '/admin/turnos': typeof AdminTurnosIndexRoute
+  '/admin/usuarios': typeof AdminUsuariosIndexRoute
+  '/jefe-zona/caja': typeof JefeZonaCajaIndexRoute
+  '/jefe-zona/inventario': typeof JefeZonaInventarioIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteRouteWithChildren
+  '/jefe-zona': typeof JefeZonaRouteRouteWithChildren
+  '/recepcion': typeof RecepcionRouteRouteWithChildren
+  '/vigilante': typeof VigilanteRouteRouteWithChildren
   '/services/$serviceId': typeof ServicesServiceIdRoute
+  '/admin/': typeof AdminIndexRoute
+  '/jefe-zona/': typeof JefeZonaIndexRoute
+  '/login/': typeof LoginIndexRoute
+  '/recepcion/': typeof RecepcionIndexRoute
   '/services/': typeof ServicesIndexRoute
+  '/vigilante/': typeof VigilanteIndexRoute
+  '/admin/combos/': typeof AdminCombosIndexRoute
+  '/admin/configuracion/': typeof AdminConfiguracionIndexRoute
+  '/admin/gastos/': typeof AdminGastosIndexRoute
+  '/admin/inventario/': typeof AdminInventarioIndexRoute
+  '/admin/lavadores/': typeof AdminLavadoresIndexRoute
+  '/admin/liquidaciones/': typeof AdminLiquidacionesIndexRoute
+  '/admin/ordenes/': typeof AdminOrdenesIndexRoute
+  '/admin/parqueadero/': typeof AdminParqueaderoIndexRoute
+  '/admin/tipos-vehiculo/': typeof AdminTiposVehiculoIndexRoute
+  '/admin/turnos/': typeof AdminTurnosIndexRoute
+  '/admin/usuarios/': typeof AdminUsuariosIndexRoute
+  '/jefe-zona/caja/': typeof JefeZonaCajaIndexRoute
+  '/jefe-zona/inventario/': typeof JefeZonaInventarioIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/services/$serviceId' | '/services/'
+  fullPaths:
+    | '/'
+    | '/admin'
+    | '/jefe-zona'
+    | '/recepcion'
+    | '/vigilante'
+    | '/services/$serviceId'
+    | '/admin/'
+    | '/jefe-zona/'
+    | '/login/'
+    | '/recepcion/'
+    | '/services/'
+    | '/vigilante/'
+    | '/admin/combos/'
+    | '/admin/configuracion/'
+    | '/admin/gastos/'
+    | '/admin/inventario/'
+    | '/admin/lavadores/'
+    | '/admin/liquidaciones/'
+    | '/admin/ordenes/'
+    | '/admin/parqueadero/'
+    | '/admin/tipos-vehiculo/'
+    | '/admin/turnos/'
+    | '/admin/usuarios/'
+    | '/jefe-zona/caja/'
+    | '/jefe-zona/inventario/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/services/$serviceId' | '/services'
-  id: '__root__' | '/' | '/services/$serviceId' | '/services/'
+  to:
+    | '/'
+    | '/services/$serviceId'
+    | '/admin'
+    | '/jefe-zona'
+    | '/login'
+    | '/recepcion'
+    | '/services'
+    | '/vigilante'
+    | '/admin/combos'
+    | '/admin/configuracion'
+    | '/admin/gastos'
+    | '/admin/inventario'
+    | '/admin/lavadores'
+    | '/admin/liquidaciones'
+    | '/admin/ordenes'
+    | '/admin/parqueadero'
+    | '/admin/tipos-vehiculo'
+    | '/admin/turnos'
+    | '/admin/usuarios'
+    | '/jefe-zona/caja'
+    | '/jefe-zona/inventario'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin'
+    | '/jefe-zona'
+    | '/recepcion'
+    | '/vigilante'
+    | '/services/$serviceId'
+    | '/admin/'
+    | '/jefe-zona/'
+    | '/login/'
+    | '/recepcion/'
+    | '/services/'
+    | '/vigilante/'
+    | '/admin/combos/'
+    | '/admin/configuracion/'
+    | '/admin/gastos/'
+    | '/admin/inventario/'
+    | '/admin/lavadores/'
+    | '/admin/liquidaciones/'
+    | '/admin/ordenes/'
+    | '/admin/parqueadero/'
+    | '/admin/tipos-vehiculo/'
+    | '/admin/turnos/'
+    | '/admin/usuarios/'
+    | '/jefe-zona/caja/'
+    | '/jefe-zona/inventario/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRouteRoute: typeof AdminRouteRouteWithChildren
+  JefeZonaRouteRoute: typeof JefeZonaRouteRouteWithChildren
+  RecepcionRouteRoute: typeof RecepcionRouteRouteWithChildren
+  VigilanteRouteRoute: typeof VigilanteRouteRouteWithChildren
   ServicesServiceIdRoute: typeof ServicesServiceIdRoute
+  LoginIndexRoute: typeof LoginIndexRoute
   ServicesIndexRoute: typeof ServicesIndexRoute
 }
 
@@ -67,6 +338,62 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/jefe-zona': {
+      id: '/jefe-zona'
+      path: '/jefe-zona'
+      fullPath: '/jefe-zona'
+      preLoaderRoute: typeof JefeZonaRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/recepcion': {
+      id: '/recepcion'
+      path: '/recepcion'
+      fullPath: '/recepcion'
+      preLoaderRoute: typeof RecepcionRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/vigilante': {
+      id: '/vigilante'
+      path: '/vigilante'
+      fullPath: '/vigilante'
+      preLoaderRoute: typeof VigilanteRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/': {
+      id: '/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/jefe-zona/': {
+      id: '/jefe-zona/'
+      path: '/'
+      fullPath: '/jefe-zona/'
+      preLoaderRoute: typeof JefeZonaIndexRouteImport
+      parentRoute: typeof JefeZonaRouteRoute
+    }
+    '/login/': {
+      id: '/login/'
+      path: '/login'
+      fullPath: '/login/'
+      preLoaderRoute: typeof LoginIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/recepcion/': {
+      id: '/recepcion/'
+      path: '/'
+      fullPath: '/recepcion/'
+      preLoaderRoute: typeof RecepcionIndexRouteImport
+      parentRoute: typeof RecepcionRouteRoute
     }
     '/services/': {
       id: '/services/'
@@ -82,12 +409,189 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ServicesServiceIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/vigilante/': {
+      id: '/vigilante/'
+      path: '/'
+      fullPath: '/vigilante/'
+      preLoaderRoute: typeof VigilanteIndexRouteImport
+      parentRoute: typeof VigilanteRouteRoute
+    }
+    '/admin/combos/': {
+      id: '/admin/combos/'
+      path: '/combos'
+      fullPath: '/admin/combos/'
+      preLoaderRoute: typeof AdminCombosIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/configuracion/': {
+      id: '/admin/configuracion/'
+      path: '/configuracion'
+      fullPath: '/admin/configuracion/'
+      preLoaderRoute: typeof AdminConfiguracionIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/gastos/': {
+      id: '/admin/gastos/'
+      path: '/gastos'
+      fullPath: '/admin/gastos/'
+      preLoaderRoute: typeof AdminGastosIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/inventario/': {
+      id: '/admin/inventario/'
+      path: '/inventario'
+      fullPath: '/admin/inventario/'
+      preLoaderRoute: typeof AdminInventarioIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/lavadores/': {
+      id: '/admin/lavadores/'
+      path: '/lavadores'
+      fullPath: '/admin/lavadores/'
+      preLoaderRoute: typeof AdminLavadoresIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/liquidaciones/': {
+      id: '/admin/liquidaciones/'
+      path: '/liquidaciones'
+      fullPath: '/admin/liquidaciones/'
+      preLoaderRoute: typeof AdminLiquidacionesIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/ordenes/': {
+      id: '/admin/ordenes/'
+      path: '/ordenes'
+      fullPath: '/admin/ordenes/'
+      preLoaderRoute: typeof AdminOrdenesIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/parqueadero/': {
+      id: '/admin/parqueadero/'
+      path: '/parqueadero'
+      fullPath: '/admin/parqueadero/'
+      preLoaderRoute: typeof AdminParqueaderoIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/tipos-vehiculo/': {
+      id: '/admin/tipos-vehiculo/'
+      path: '/tipos-vehiculo'
+      fullPath: '/admin/tipos-vehiculo/'
+      preLoaderRoute: typeof AdminTiposVehiculoIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/turnos/': {
+      id: '/admin/turnos/'
+      path: '/turnos'
+      fullPath: '/admin/turnos/'
+      preLoaderRoute: typeof AdminTurnosIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/usuarios/': {
+      id: '/admin/usuarios/'
+      path: '/usuarios'
+      fullPath: '/admin/usuarios/'
+      preLoaderRoute: typeof AdminUsuariosIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/jefe-zona/caja/': {
+      id: '/jefe-zona/caja/'
+      path: '/caja'
+      fullPath: '/jefe-zona/caja/'
+      preLoaderRoute: typeof JefeZonaCajaIndexRouteImport
+      parentRoute: typeof JefeZonaRouteRoute
+    }
+    '/jefe-zona/inventario/': {
+      id: '/jefe-zona/inventario/'
+      path: '/inventario'
+      fullPath: '/jefe-zona/inventario/'
+      preLoaderRoute: typeof JefeZonaInventarioIndexRouteImport
+      parentRoute: typeof JefeZonaRouteRoute
+    }
   }
 }
 
+interface AdminRouteRouteChildren {
+  AdminIndexRoute: typeof AdminIndexRoute
+  AdminCombosIndexRoute: typeof AdminCombosIndexRoute
+  AdminConfiguracionIndexRoute: typeof AdminConfiguracionIndexRoute
+  AdminGastosIndexRoute: typeof AdminGastosIndexRoute
+  AdminInventarioIndexRoute: typeof AdminInventarioIndexRoute
+  AdminLavadoresIndexRoute: typeof AdminLavadoresIndexRoute
+  AdminLiquidacionesIndexRoute: typeof AdminLiquidacionesIndexRoute
+  AdminOrdenesIndexRoute: typeof AdminOrdenesIndexRoute
+  AdminParqueaderoIndexRoute: typeof AdminParqueaderoIndexRoute
+  AdminTiposVehiculoIndexRoute: typeof AdminTiposVehiculoIndexRoute
+  AdminTurnosIndexRoute: typeof AdminTurnosIndexRoute
+  AdminUsuariosIndexRoute: typeof AdminUsuariosIndexRoute
+}
+
+const AdminRouteRouteChildren: AdminRouteRouteChildren = {
+  AdminIndexRoute: AdminIndexRoute,
+  AdminCombosIndexRoute: AdminCombosIndexRoute,
+  AdminConfiguracionIndexRoute: AdminConfiguracionIndexRoute,
+  AdminGastosIndexRoute: AdminGastosIndexRoute,
+  AdminInventarioIndexRoute: AdminInventarioIndexRoute,
+  AdminLavadoresIndexRoute: AdminLavadoresIndexRoute,
+  AdminLiquidacionesIndexRoute: AdminLiquidacionesIndexRoute,
+  AdminOrdenesIndexRoute: AdminOrdenesIndexRoute,
+  AdminParqueaderoIndexRoute: AdminParqueaderoIndexRoute,
+  AdminTiposVehiculoIndexRoute: AdminTiposVehiculoIndexRoute,
+  AdminTurnosIndexRoute: AdminTurnosIndexRoute,
+  AdminUsuariosIndexRoute: AdminUsuariosIndexRoute,
+}
+
+const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(
+  AdminRouteRouteChildren,
+)
+
+interface JefeZonaRouteRouteChildren {
+  JefeZonaIndexRoute: typeof JefeZonaIndexRoute
+  JefeZonaCajaIndexRoute: typeof JefeZonaCajaIndexRoute
+  JefeZonaInventarioIndexRoute: typeof JefeZonaInventarioIndexRoute
+}
+
+const JefeZonaRouteRouteChildren: JefeZonaRouteRouteChildren = {
+  JefeZonaIndexRoute: JefeZonaIndexRoute,
+  JefeZonaCajaIndexRoute: JefeZonaCajaIndexRoute,
+  JefeZonaInventarioIndexRoute: JefeZonaInventarioIndexRoute,
+}
+
+const JefeZonaRouteRouteWithChildren = JefeZonaRouteRoute._addFileChildren(
+  JefeZonaRouteRouteChildren,
+)
+
+interface RecepcionRouteRouteChildren {
+  RecepcionIndexRoute: typeof RecepcionIndexRoute
+}
+
+const RecepcionRouteRouteChildren: RecepcionRouteRouteChildren = {
+  RecepcionIndexRoute: RecepcionIndexRoute,
+}
+
+const RecepcionRouteRouteWithChildren = RecepcionRouteRoute._addFileChildren(
+  RecepcionRouteRouteChildren,
+)
+
+interface VigilanteRouteRouteChildren {
+  VigilanteIndexRoute: typeof VigilanteIndexRoute
+}
+
+const VigilanteRouteRouteChildren: VigilanteRouteRouteChildren = {
+  VigilanteIndexRoute: VigilanteIndexRoute,
+}
+
+const VigilanteRouteRouteWithChildren = VigilanteRouteRoute._addFileChildren(
+  VigilanteRouteRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRouteRoute: AdminRouteRouteWithChildren,
+  JefeZonaRouteRoute: JefeZonaRouteRouteWithChildren,
+  RecepcionRouteRoute: RecepcionRouteRouteWithChildren,
+  VigilanteRouteRoute: VigilanteRouteRouteWithChildren,
   ServicesServiceIdRoute: ServicesServiceIdRoute,
+  LoginIndexRoute: LoginIndexRoute,
   ServicesIndexRoute: ServicesIndexRoute,
 }
 export const routeTree = rootRouteImport
