@@ -1,11 +1,19 @@
 import type { Session } from '@supabase/supabase-js'
 import { db } from './db'
 import { fetchPerfilActual } from '../data/perfiles'
-import type { Perfil } from '../schemas/perfil'
+import type { Perfil, Rol } from '../schemas/perfil'
 
 export interface AuthContext {
   session: Session
   perfil: Perfil
+}
+
+// Pantalla de inicio por rol tras login (o al entrar a "/" ya con sesión) — un solo lugar
+// para no duplicar el mapeo entre /login y /.
+export const ROL_HOME: Record<Rol, string> = {
+  admin: '/admin',
+  jefe_zona: '/jefe-zona',
+  vigilante: '/vigilante',
 }
 
 // null = sesión resuelta, sin usuario logueado. undefined solo se usa mientras se resuelve

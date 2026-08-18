@@ -1,21 +1,19 @@
 import { useState, type FormEvent } from 'react'
-import { createFileRoute, useNavigate, useRouter } from '@tanstack/react-router'
+import { createFileRoute, redirect, useNavigate, useRouter } from '@tanstack/react-router'
 import { Lock } from 'lucide-react'
 import { Card } from '../../components/layout/Card'
-import { signIn } from '../../lib/auth'
+import { signIn, ROL_HOME } from '../../lib/auth'
 import { fetchPerfilActual } from '../../data/perfiles'
 import { db } from '../../lib/db'
-import type { Rol } from '../../schemas/perfil'
 
 export const Route = createFileRoute('/login/')({
+  beforeLoad: ({ context }) => {
+    if (context.auth?.perfil.rol && context.auth.perfil.activo) {
+      throw redirect({ to: ROL_HOME[context.auth.perfil.rol] })
+    }
+  },
   component: LoginPage,
 })
-
-const ROL_HOME: Record<Rol, string> = {
-  admin: '/admin',
-  jefe_zona: '/jefe-zona',
-  vigilante: '/vigilante',
-}
 
 function LoginPage() {
   const router = useRouter()
