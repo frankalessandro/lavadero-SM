@@ -4,6 +4,8 @@ import { ChevronDown, Check } from 'lucide-react'
 export interface SelectOption {
   value: string
   label: string
+  /** Línea secundaria opcional bajo el label, dentro del panel desplegado (ej. qué incluye un combo). */
+  description?: string
 }
 
 interface CustomSelectProps {
@@ -77,7 +79,12 @@ export function CustomSelect({
                       : 'text-neutral-700 hover:bg-neutral-50'
                   }`}
                 >
-                  {option.label}
+                  <span className="flex flex-col gap-0.5">
+                    <span>{option.label}</span>
+                    {option.description ? (
+                      <span className="text-xs font-normal text-neutral-400">{option.description}</span>
+                    ) : null}
+                  </span>
                   {option.value === value ? <Check size={15} className="shrink-0" /> : null}
                 </button>
               ))

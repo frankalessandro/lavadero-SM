@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
+import { createFileRoute, Link, redirect, useRouter } from '@tanstack/react-router'
 import { Sparkles, Car, Lock } from 'lucide-react'
+import { SimpleTopbar } from '../../components/layout/SimpleTopbar'
+import { signOut } from '../../lib/auth'
 import { fetchTiposVehiculo } from '../../data/tiposVehiculo'
 import { fetchCombos } from '../../data/combos'
 import { fetchPrecios, findPrecio } from '../../data/precios'
@@ -30,6 +32,13 @@ async function loadRecepcion() {
 }
 
 export const Route = createFileRoute('/recepcion/')({
+  beforeLoad: ({ context }) => {
+    if (!context.auth) throw redirect({ to: '/login' })
+    const { rol, activo } = context.auth.perfil
+    if ((rol !== 'jefe_zona' && rol !== 'admin') || !activo) {
+      throw redirect({ to: '/login' })
+    }
+  },
   loader: loadRecepcion,
   component: RecepcionPage,
 })
@@ -69,7 +78,9 @@ function RecepcionPage() {
   const lavadorNombre = (id: string) => lavadores.find((l) => l.id === id)?.nombre ?? '—'
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-6 pb-6">
+    <>
+      <SimpleTopbar title="Recepción" onLogout={signOut} />
+      <div className="mx-auto flex max-w-2xl flex-col gap-6 pb-6">
       {data.turno ? (
         <ReceptionForm tipos={tipos} combos={combos} precios={precios} lavadores={lavadores} onCreated={refresh} />
       ) : (
@@ -125,7 +136,8 @@ function RecepcionPage() {
           Marcar listo y cobrar/entregar se hace desde el panel de jefe de zona.
         </p>
       </div>
-    </div>
+      </div>
+    </>
   )
 }
 
@@ -170,10 +182,10 @@ function ReceptionForm({
     [combos, precios, form.tipoVehiculoId],
   )
 
+  const comboSeleccionado = form.comboId ? combos.find((c) => c.id === form.comboId) : undefined
+
   const precio =
     form.tipoVehiculoId && form.comboId ? findPrecio(precios, form.comboId, form.tipoVehiculoId)?.precio : undefined
-  const comisionLavador = precio ? Math.round(precio * 0.4) : undefined
-  const comisionNegocio = precio && comisionLavador !== undefined ? precio - comisionLavador : undefined
 
   const paso1Completo = !!(form.placa && form.clienteNombre && form.tipoVehiculoId)
   const paso2Completo = !!(form.comboId && form.lavadorId)
@@ -332,16 +344,17 @@ function ReceptionForm({
             disabled={!form.tipoVehiculoId}
             placeholder={form.tipoVehiculoId ? 'Selecciona…' : 'Primero elige el tipo de vehículo'}
             emptyLabel="No hay combos con precio para ese tipo"
-            options={combosDisponibles.map((c) => ({ value: c.id, label: c.nombre }))}
+            options={combosDisponibles.map((c) => ({ value: c.id, label: c.nombre, description: c.descripcion }))}
           />
         </label>
+
+        {comboSeleccionado?.descripcion ? (
+          <p className="text-sm text-neutral-500">{comboSeleccionado.descripcion}</p>
+        ) : null}
 
         {precio !== undefined ? (
           <div className="flex items-center justify-between rounded-lg bg-primary-50 px-3 py-2.5 text-sm">
             <span className="font-medium text-primary-900">Precio: {COP.format(precio)}</span>
-            <span className="text-xs text-primary-700">
-              Lavador {COP.format(comisionLavador ?? 0)} · Negocio {COP.format(comisionNegocio ?? 0)}
-            </span>
           </div>
         ) : null}
         <p className="text-xs text-neutral-400">
