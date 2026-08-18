@@ -45,6 +45,7 @@ CLAUDE.local.md
 .cursor/
 .windsurf/
 .aider*
+.mcp.json
 
 # Temp files
 *.tmp
