@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
+import { SimpleTopbar } from '../../components/layout/SimpleTopbar'
+import { signOut } from '../../lib/auth'
 import { LogIn, LogOut, Car, Banknote, AlertTriangle, X, Clock, Lock, Unlock } from 'lucide-react'
 import {
   fetchEstanciasAdentro,
@@ -28,6 +30,13 @@ async function loadParqueadero() {
 const HORA_FORMAT = new Intl.DateTimeFormat('es-CO', { hour: 'numeric', minute: '2-digit', hour12: true })
 
 export const Route = createFileRoute('/vigilante/')({
+  beforeLoad: ({ context }) => {
+    if (!context.auth) throw redirect({ to: '/login' })
+    const { rol, activo } = context.auth.perfil
+    if ((rol !== 'vigilante' && rol !== 'admin') || !activo) {
+      throw redirect({ to: '/login' })
+    }
+  },
   loader: loadParqueadero,
   component: VigilanteHome,
 })
@@ -72,7 +81,9 @@ function VigilanteHome() {
   }
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-4 pb-6">
+    <>
+      <SimpleTopbar title="Parqueadero" onLogout={signOut} />
+      <div className="mx-auto flex max-w-2xl flex-col gap-4 pb-6">
       {/* Turno de caja — arqueo ciego (regla 15), visible siempre arriba de todo lo demás */}
       {turno ? (
         <div className="flex items-center justify-between gap-3 rounded-2xl border border-success-100 bg-success-50 p-4">
@@ -242,7 +253,8 @@ function VigilanteHome() {
           }}
         />
       ) : null}
-    </div>
+      </div>
+    </>
   )
 }
 

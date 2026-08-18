@@ -1,4 +1,4 @@
-import { createFileRoute, Outlet } from '@tanstack/react-router'
+import { createFileRoute, Outlet, redirect } from '@tanstack/react-router'
 import {
   LayoutDashboard,
   Car,
@@ -11,12 +11,20 @@ import {
   ClipboardList,
   ClipboardCheck,
   Boxes,
+  UserCog,
 } from 'lucide-react'
 import { Sidebar, type NavItem } from '../../components/layout/Sidebar'
 import { Topbar } from '../../components/layout/Topbar'
 import { MobileTabBar } from '../../components/layout/MobileTabBar'
+import { signOut } from '../../lib/auth'
 
 export const Route = createFileRoute('/admin')({
+  beforeLoad: ({ context }) => {
+    if (!context.auth) throw redirect({ to: '/login' })
+    if (context.auth.perfil.rol !== 'admin' || !context.auth.perfil.activo) {
+      throw redirect({ to: '/login' })
+    }
+  },
   component: AdminLayout,
 })
 
@@ -31,6 +39,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/admin/inventario', label: 'Inventario', icon: Boxes },
   { to: '/admin/ordenes', label: 'Órdenes', icon: ClipboardList },
   { to: '/admin/turnos', label: 'Turnos', icon: ClipboardCheck },
+  { to: '/admin/usuarios', label: 'Usuarios', icon: UserCog },
   { to: '/admin/configuracion', label: 'Configuración', icon: Settings },
 ]
 
@@ -41,7 +50,12 @@ function AdminLayout() {
     <div className="fixed inset-0 z-10 flex bg-neutral-50 text-left">
       <Sidebar navItems={NAV_ITEMS} roleLabel="Administrador" />
       <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar title="Panel de administración" searchPlaceholder="Buscar por placa…" avatarInitial="A" />
+        <Topbar
+          title="Panel de administración"
+          searchPlaceholder="Buscar por placa…"
+          avatarInitial="A"
+          onLogout={signOut}
+        />
         <main className="flex-1 overflow-y-auto p-4 pb-24 sm:p-6 md:pb-6">
           <Outlet />
         </main>

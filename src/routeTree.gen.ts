@@ -16,6 +16,7 @@ import { Route as RecepcionRouteRouteImport } from './routes/recepcion/route'
 import { Route as VigilanteRouteRouteImport } from './routes/vigilante/route'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as JefeZonaIndexRouteImport } from './routes/jefe-zona/index'
+import { Route as LoginIndexRouteImport } from './routes/login/index'
 import { Route as RecepcionIndexRouteImport } from './routes/recepcion/index'
 import { Route as ServicesIndexRouteImport } from './routes/services/index'
 import { Route as ServicesServiceIdRouteImport } from './routes/services/$serviceId'
@@ -30,6 +31,7 @@ import { Route as AdminOrdenesIndexRouteImport } from './routes/admin/ordenes/in
 import { Route as AdminParqueaderoIndexRouteImport } from './routes/admin/parqueadero/index'
 import { Route as AdminTiposVehiculoIndexRouteImport } from './routes/admin/tipos-vehiculo/index'
 import { Route as AdminTurnosIndexRouteImport } from './routes/admin/turnos/index'
+import { Route as AdminUsuariosIndexRouteImport } from './routes/admin/usuarios/index'
 import { Route as JefeZonaCajaIndexRouteImport } from './routes/jefe-zona/caja/index'
 import { Route as JefeZonaInventarioIndexRouteImport } from './routes/jefe-zona/inventario/index'
 
@@ -67,6 +69,11 @@ const JefeZonaIndexRoute = JefeZonaIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => JefeZonaRouteRoute,
+} as any)
+const LoginIndexRoute = LoginIndexRouteImport.update({
+  id: '/login/',
+  path: '/login/',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const RecepcionIndexRoute = RecepcionIndexRouteImport.update({
   id: '/',
@@ -138,6 +145,11 @@ const AdminTurnosIndexRoute = AdminTurnosIndexRouteImport.update({
   path: '/turnos/',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const AdminUsuariosIndexRoute = AdminUsuariosIndexRouteImport.update({
+  id: '/usuarios/',
+  path: '/usuarios/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
 const JefeZonaCajaIndexRoute = JefeZonaCajaIndexRouteImport.update({
   id: '/caja/',
   path: '/caja/',
@@ -158,6 +170,7 @@ export interface FileRoutesByFullPath {
   '/services/$serviceId': typeof ServicesServiceIdRoute
   '/admin/': typeof AdminIndexRoute
   '/jefe-zona/': typeof JefeZonaIndexRoute
+  '/login/': typeof LoginIndexRoute
   '/recepcion/': typeof RecepcionIndexRoute
   '/services/': typeof ServicesIndexRoute
   '/vigilante/': typeof VigilanteIndexRoute
@@ -171,6 +184,7 @@ export interface FileRoutesByFullPath {
   '/admin/parqueadero/': typeof AdminParqueaderoIndexRoute
   '/admin/tipos-vehiculo/': typeof AdminTiposVehiculoIndexRoute
   '/admin/turnos/': typeof AdminTurnosIndexRoute
+  '/admin/usuarios/': typeof AdminUsuariosIndexRoute
   '/jefe-zona/caja/': typeof JefeZonaCajaIndexRoute
   '/jefe-zona/inventario/': typeof JefeZonaInventarioIndexRoute
 }
@@ -179,6 +193,7 @@ export interface FileRoutesByTo {
   '/services/$serviceId': typeof ServicesServiceIdRoute
   '/admin': typeof AdminIndexRoute
   '/jefe-zona': typeof JefeZonaIndexRoute
+  '/login': typeof LoginIndexRoute
   '/recepcion': typeof RecepcionIndexRoute
   '/services': typeof ServicesIndexRoute
   '/vigilante': typeof VigilanteIndexRoute
@@ -192,6 +207,7 @@ export interface FileRoutesByTo {
   '/admin/parqueadero': typeof AdminParqueaderoIndexRoute
   '/admin/tipos-vehiculo': typeof AdminTiposVehiculoIndexRoute
   '/admin/turnos': typeof AdminTurnosIndexRoute
+  '/admin/usuarios': typeof AdminUsuariosIndexRoute
   '/jefe-zona/caja': typeof JefeZonaCajaIndexRoute
   '/jefe-zona/inventario': typeof JefeZonaInventarioIndexRoute
 }
@@ -205,6 +221,7 @@ export interface FileRoutesById {
   '/services/$serviceId': typeof ServicesServiceIdRoute
   '/admin/': typeof AdminIndexRoute
   '/jefe-zona/': typeof JefeZonaIndexRoute
+  '/login/': typeof LoginIndexRoute
   '/recepcion/': typeof RecepcionIndexRoute
   '/services/': typeof ServicesIndexRoute
   '/vigilante/': typeof VigilanteIndexRoute
@@ -218,6 +235,7 @@ export interface FileRoutesById {
   '/admin/parqueadero/': typeof AdminParqueaderoIndexRoute
   '/admin/tipos-vehiculo/': typeof AdminTiposVehiculoIndexRoute
   '/admin/turnos/': typeof AdminTurnosIndexRoute
+  '/admin/usuarios/': typeof AdminUsuariosIndexRoute
   '/jefe-zona/caja/': typeof JefeZonaCajaIndexRoute
   '/jefe-zona/inventario/': typeof JefeZonaInventarioIndexRoute
 }
@@ -232,6 +250,7 @@ export interface FileRouteTypes {
     | '/services/$serviceId'
     | '/admin/'
     | '/jefe-zona/'
+    | '/login/'
     | '/recepcion/'
     | '/services/'
     | '/vigilante/'
@@ -245,6 +264,7 @@ export interface FileRouteTypes {
     | '/admin/parqueadero/'
     | '/admin/tipos-vehiculo/'
     | '/admin/turnos/'
+    | '/admin/usuarios/'
     | '/jefe-zona/caja/'
     | '/jefe-zona/inventario/'
   fileRoutesByTo: FileRoutesByTo
@@ -253,6 +273,7 @@ export interface FileRouteTypes {
     | '/services/$serviceId'
     | '/admin'
     | '/jefe-zona'
+    | '/login'
     | '/recepcion'
     | '/services'
     | '/vigilante'
@@ -266,6 +287,7 @@ export interface FileRouteTypes {
     | '/admin/parqueadero'
     | '/admin/tipos-vehiculo'
     | '/admin/turnos'
+    | '/admin/usuarios'
     | '/jefe-zona/caja'
     | '/jefe-zona/inventario'
   id:
@@ -278,6 +300,7 @@ export interface FileRouteTypes {
     | '/services/$serviceId'
     | '/admin/'
     | '/jefe-zona/'
+    | '/login/'
     | '/recepcion/'
     | '/services/'
     | '/vigilante/'
@@ -291,6 +314,7 @@ export interface FileRouteTypes {
     | '/admin/parqueadero/'
     | '/admin/tipos-vehiculo/'
     | '/admin/turnos/'
+    | '/admin/usuarios/'
     | '/jefe-zona/caja/'
     | '/jefe-zona/inventario/'
   fileRoutesById: FileRoutesById
@@ -302,6 +326,7 @@ export interface RootRouteChildren {
   RecepcionRouteRoute: typeof RecepcionRouteRouteWithChildren
   VigilanteRouteRoute: typeof VigilanteRouteRouteWithChildren
   ServicesServiceIdRoute: typeof ServicesServiceIdRoute
+  LoginIndexRoute: typeof LoginIndexRoute
   ServicesIndexRoute: typeof ServicesIndexRoute
 }
 
@@ -355,6 +380,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/jefe-zona/'
       preLoaderRoute: typeof JefeZonaIndexRouteImport
       parentRoute: typeof JefeZonaRouteRoute
+    }
+    '/login/': {
+      id: '/login/'
+      path: '/login'
+      fullPath: '/login/'
+      preLoaderRoute: typeof LoginIndexRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/recepcion/': {
       id: '/recepcion/'
@@ -454,6 +486,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminTurnosIndexRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/admin/usuarios/': {
+      id: '/admin/usuarios/'
+      path: '/usuarios'
+      fullPath: '/admin/usuarios/'
+      preLoaderRoute: typeof AdminUsuariosIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/jefe-zona/caja/': {
       id: '/jefe-zona/caja/'
       path: '/caja'
@@ -483,6 +522,7 @@ interface AdminRouteRouteChildren {
   AdminParqueaderoIndexRoute: typeof AdminParqueaderoIndexRoute
   AdminTiposVehiculoIndexRoute: typeof AdminTiposVehiculoIndexRoute
   AdminTurnosIndexRoute: typeof AdminTurnosIndexRoute
+  AdminUsuariosIndexRoute: typeof AdminUsuariosIndexRoute
 }
 
 const AdminRouteRouteChildren: AdminRouteRouteChildren = {
@@ -497,6 +537,7 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminParqueaderoIndexRoute: AdminParqueaderoIndexRoute,
   AdminTiposVehiculoIndexRoute: AdminTiposVehiculoIndexRoute,
   AdminTurnosIndexRoute: AdminTurnosIndexRoute,
+  AdminUsuariosIndexRoute: AdminUsuariosIndexRoute,
 }
 
 const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(
@@ -550,6 +591,7 @@ const rootRouteChildren: RootRouteChildren = {
   RecepcionRouteRoute: RecepcionRouteRouteWithChildren,
   VigilanteRouteRoute: VigilanteRouteRouteWithChildren,
   ServicesServiceIdRoute: ServicesServiceIdRoute,
+  LoginIndexRoute: LoginIndexRoute,
   ServicesIndexRoute: ServicesIndexRoute,
 }
 export const routeTree = rootRouteImport

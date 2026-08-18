@@ -1,7 +1,12 @@
-import { createRootRoute, Link, Outlet } from '@tanstack/react-router'
+import { createRootRouteWithContext, Link, Outlet } from '@tanstack/react-router'
 import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
+import type { AuthContext } from '../lib/auth'
 
-export const Route = createRootRoute({
+export interface RouterContext {
+  auth: AuthContext | null
+}
+
+export const Route = createRootRouteWithContext<RouterContext>()({
   component: RootLayout,
   pendingComponent: () => <div className="route-status">Cargando…</div>,
   errorComponent: ({ error }) => (

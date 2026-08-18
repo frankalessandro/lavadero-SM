@@ -1,12 +1,13 @@
-import { Bell, Search } from 'lucide-react'
+import { Bell, LogOut, Search } from 'lucide-react'
 
 interface TopbarProps {
   title: string
   searchPlaceholder?: string
   avatarInitial: string
+  onLogout: () => void
 }
 
-export function Topbar({ title, searchPlaceholder, avatarInitial }: TopbarProps) {
+export function Topbar({ title, searchPlaceholder, avatarInitial, onLogout }: TopbarProps) {
   return (
     <header className="flex items-center justify-between gap-4 border-b border-neutral-200 bg-white px-6 py-4">
       <h1 className="text-lg font-semibold text-neutral-900">{title}</h1>
@@ -23,9 +24,15 @@ export function Topbar({ title, searchPlaceholder, avatarInitial }: TopbarProps)
         >
           <Bell size={17} />
         </button>
-        <div className="flex size-9 items-center justify-center rounded-full bg-primary-600 text-sm font-semibold text-white shadow-nav-active">
-          {avatarInitial}
-        </div>
+        <button
+          type="button"
+          onClick={onLogout}
+          title="Cerrar sesión"
+          className="group relative flex size-9 items-center justify-center rounded-full bg-primary-600 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-danger-600"
+        >
+          <span className="group-hover:hidden">{avatarInitial}</span>
+          <LogOut size={15} className="hidden group-hover:block" />
+        </button>
       </div>
     </header>
   )

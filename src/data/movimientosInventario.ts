@@ -17,6 +17,18 @@ export async function fetchMovimientos(productoId?: string): Promise<MovimientoI
   return movimientoInventarioSchema.array().parse(data)
 }
 
+const MOVIMIENTO_OPERATIVO_SELECT = 'id, productoId:producto_id, tipo, cantidad, motivo, responsable, creadoEn:creado_en'
+
+// Para jefe_zona: lee movimientos_inventario_operativo (vista sin costo_unitario/proveedor,
+// ver 0012_rls_policies.sql) en vez de la tabla base — RLS bloquea a jefe_zona en la tabla real.
+export async function fetchMovimientosOperativo(productoId?: string): Promise<MovimientoInventario[]> {
+  let query = db.from('movimientos_inventario_operativo').select(MOVIMIENTO_OPERATIVO_SELECT).order('creado_en', { ascending: false })
+  if (productoId) query = query.eq('producto_id', productoId)
+  const { data, error } = await query
+  if (error) throw new Error(error.message)
+  return movimientoInventarioSchema.array().parse(data)
+}
+
 export async function createMovimiento(input: MovimientoInventarioInput): Promise<MovimientoInventario> {
   const parsed = movimientoInventarioInputSchema.parse(input)
   const { data, error } = await db
@@ -73,4 +85,18 @@ export async function fetchStockProductos(): Promise<StockProducto[]> {
       valorizacion: Math.round(v.stock * costoPromedio),
     }
   })
+}
+
+// Para jefe_zona: solo cantidad de stock, sin costo/valorización (esos datos no llegan por la
+// vista operativa — jefe_zona no tiene acceso a costos/márgenes, ver CLAUDE.md §Roles).
+export async function fetchStockProductosOperativo(): Promise<Pick<StockProducto, 'productoId' | 'stock'>[]> {
+  const { data, error } = await db.from('movimientos_inventario_operativo').select('producto_id, cantidad')
+  if (error) throw new Error(error.message)
+
+  const stockPorProducto = new Map<string, number>()
+  for (const m of data as { producto_id: string; cantidad: number }[]) {
+    stockPorProducto.set(m.producto_id, (stockPorProducto.get(m.producto_id) ?? 0) + m.cantidad)
+  }
+
+  return Array.from(stockPorProducto.entries()).map(([productoId, stock]) => ({ productoId, stock }))
 }
