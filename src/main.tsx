@@ -5,6 +5,10 @@ import '@fontsource/plus-jakarta-sans/400.css'
 import '@fontsource/plus-jakarta-sans/500.css'
 import '@fontsource/plus-jakarta-sans/600.css'
 import '@fontsource/plus-jakarta-sans/700.css'
+// Solo para los dos títulos de marca (Topbar "Lavadero"/"Panel de administración" y Sidebar
+// "Carwash SM", vía la utilidad .font-display de index.css) — un peso único, el resto de la UI
+// sigue en Plus Jakarta Sans.
+import '@fontsource/outfit/700.css'
 import './index.css'
 import { routeTree } from './routeTree.gen'
 import { App } from './App'

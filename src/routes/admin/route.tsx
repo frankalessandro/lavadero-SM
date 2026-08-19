@@ -50,6 +50,7 @@ const NAV_ITEMS: NavItem[] = [
 // Con 12 ítems de nav, un MobileTabBar horizontal-scroll deja de ser usable en celular —
 // por debajo de `md` la navegación vive en el drawer del hamburguesa del Topbar en su lugar.
 function AdminLayout() {
+  const { auth } = Route.useRouteContext()
   const [menuOpen, setMenuOpen] = useState(false)
   return (
     <div className="fixed inset-0 z-10 flex bg-neutral-50 text-left">
@@ -62,10 +63,11 @@ function AdminLayout() {
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar
           title="Panel de administración"
-          searchPlaceholder="Buscar por placa…"
           avatarInitial="A"
           onLogout={signOut}
           onMenuClick={() => setMenuOpen(true)}
+          responsable={auth?.perfil.nombre ?? undefined}
+          roleLabel="Administrador"
         />
         <main className="flex-1 overflow-y-auto p-4 sm:p-6">
           <Outlet />

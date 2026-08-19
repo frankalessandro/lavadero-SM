@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
-import { Droplets } from 'lucide-react'
 import type { ComponentType } from 'react'
+import logoFull from '../../assets/logo-full-mark.png'
 
 export interface NavItem {
   to: string
@@ -28,11 +28,9 @@ function SidebarContent({
 }) {
   return (
     <>
-      <div className="flex items-center gap-2.5 px-6 py-6">
-        <span className="flex size-9 items-center justify-center rounded-xl bg-primary-600 text-white shadow-nav-active">
-          <Droplets size={18} strokeWidth={2.25} />
-        </span>
-        <span className="text-sm font-semibold tracking-wide text-neutral-900">Lavadero SM</span>
+      <div className="flex flex-col items-center gap-2 px-6 pt-7 pb-6">
+        <img src={logoFull} alt="Carwash SM" className="h-32 w-32 shrink-0 object-contain" />
+        <span className="font-display text-lg font-bold tracking-tight text-primary-700">Carwash SM</span>
       </div>
 
       <nav className="flex flex-1 flex-col gap-1 px-3">

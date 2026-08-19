@@ -2,6 +2,8 @@
 
 @theme {
   --font-sans: 'Plus Jakarta Sans', system-ui, 'Segoe UI', Roboto, sans-serif;
+  /* Solo para los títulos de marca (Topbar/Sidebar) — utilidad `font-display`, ver src/main.tsx. */
+  --font-display: 'Outfit', 'Plus Jakarta Sans', system-ui, 'Segoe UI', Roboto, sans-serif;
 
   /* Azul-celeste — color de marca del sistema */
   --color-primary-50: #eff8ff;
