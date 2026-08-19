@@ -9,7 +9,7 @@ import {
   X,
   CheckCircle2,
   Banknote,
-  Sparkles,
+  Package,
   Car,
   Clock,
   SprayCan,
@@ -17,6 +17,9 @@ import {
   Timer,
   LockOpen,
   Lock,
+  MessageCircle,
+  Motorbike,
+  UserRound,
 } from 'lucide-react'
 import {
   fetchOrdenesHoy,
@@ -27,6 +30,7 @@ import {
 } from '../../data/ordenes'
 import { fetchLavadores } from '../../data/lavadores'
 import { fetchCombos } from '../../data/combos'
+import { fetchTiposVehiculo } from '../../data/tiposVehiculo'
 import { fetchTurnoAbierto } from '../../data/turnos'
 import { cobroInputSchema, type MetodoPago, type Orden } from '../../schemas/orden'
 import { StatCard } from '../../components/layout/StatCard'
@@ -34,17 +38,20 @@ import { Card } from '../../components/layout/Card'
 import { CustomSelect } from '../../components/layout/CustomSelect'
 import { ReciboModal, type ReciboData } from '../../components/layout/ReciboModal'
 import { ConfirmModal } from '../../components/layout/ConfirmModal'
+import { ContactoModal } from '../../components/layout/ContactoModal'
+import { LavadoAnimation } from '../../components/layout/LavadoAnimation'
 import { BarChart } from '../../components/layout/BarChart'
 
 async function loadDashboard() {
-  const [ordenesHoy, entregadasHoy, lavadores, combos, turno] = await Promise.all([
+  const [ordenesHoy, entregadasHoy, lavadores, combos, tiposVehiculo, turno] = await Promise.all([
     fetchOrdenesHoy(),
     fetchOrdenesEntregadasHoy(),
     fetchLavadores(),
     fetchCombos(),
+    fetchTiposVehiculo(),
     fetchTurnoAbierto('jefe_zona'),
   ])
-  return { ordenesHoy, entregadasHoy, lavadores, combos, turno }
+  return { ordenesHoy, entregadasHoy, lavadores, combos, tiposVehiculo, turno }
 }
 
 export const Route = createFileRoute('/jefe-zona/')({
@@ -54,12 +61,21 @@ export const Route = createFileRoute('/jefe-zona/')({
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 
-// Misma fórmula que `tiempoTranscurrido` en src/routes/vigilante/index.tsx — formato "12 min" / "1 h 5 min".
-function tiempoTranscurrido(desde: string): string {
-  const minutos = Math.max(0, Math.floor((Date.now() - new Date(desde).getTime()) / 60000))
-  if (minutos < 60) return `${minutos} min`
-  const horas = Math.floor(minutos / 60)
-  return `${horas} h ${minutos % 60} min`
+// Formato "45 seg" / "12 min 5 seg" / "1 h 5 min 30 seg" — a diferencia de `tiempoTranscurrido` en
+// src/routes/vigilante/index.tsx (ese se queda en min), este dashboard sí necesita precisión de segundos.
+// Recibe `ahora` en vez de leer Date.now() adentro: el React Compiler solo re-evalúa esta llamada
+// en cada render si detecta que uno de sus argumentos cambió, y `ahora` (el tick del estado) es
+// justamente lo que lo fuerza a actualizarse cada segundo en vez de quedarse memoizado.
+function tiempoTranscurrido(desde: string, ahora: number): string {
+  const totalSegundos = Math.max(0, Math.floor((ahora - new Date(desde).getTime()) / 1000))
+  const horas = Math.floor(totalSegundos / 3600)
+  const minutos = Math.floor((totalSegundos % 3600) / 60)
+  const segundos = totalSegundos % 60
+  const partes: string[] = []
+  if (horas > 0) partes.push(`${horas} h`)
+  if (horas > 0 || minutos > 0) partes.push(`${minutos} min`)
+  partes.push(`${segundos} seg`)
+  return partes.join(' ')
 }
 
 function formatMinutos(minutos: number): string {
@@ -75,17 +91,21 @@ function JefeZonaDashboard() {
   const [entregadasHoy, setEntregadasHoy] = useState(data.entregadasHoy)
   const [lavadores] = useState(data.lavadores)
   const [combos] = useState(data.combos)
+  const [tiposVehiculo] = useState(data.tiposVehiculo)
   const [turno, setTurno] = useState(data.turno)
   const [cobrando, setCobrando] = useState<Orden | null>(null)
   const [reasignando, setReasignando] = useState<Orden | null>(null)
   const [finalizando, setFinalizando] = useState<Orden | null>(null)
   const [recibo, setRecibo] = useState<ReciboData | null>(null)
+  const [contactando, setContactando] = useState<Orden | null>(null)
 
-  // Tick compartido para el contador en vivo de cada tarjeta — un solo interval en vez de
-  // uno por tarjeta, se limpia al desmontar el dashboard.
-  const [, setTick] = useState(0)
+  // Reloj compartido para el contador en vivo de cada tarjeta — un solo interval en vez de
+  // uno por tarjeta, se limpia al desmontar el dashboard. Se guarda como estado (no un simple
+  // contador descartado) porque `tiempoTranscurrido` lo recibe como argumento explícito: así el
+  // React Compiler lo detecta como dependencia real y no memoiza el texto entre ticks.
+  const [ahora, setAhora] = useState(() => Date.now())
   useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), 60_000)
+    const id = setInterval(() => setAhora(Date.now()), 1_000)
     return () => clearInterval(id)
   }, [])
 
@@ -108,6 +128,7 @@ function JefeZonaDashboard() {
 
   const comboNombre = (id: string) => combos.find((c) => c.id === id)?.nombre ?? '—'
   const lavadorNombre = (id: string) => lavadores.find((l) => l.id === id)?.nombre ?? '—'
+  const tipoVehiculo = (id: string) => tiposVehiculo.find((t) => t.id === id)
 
   const enProcesoLista = ordenesHoy.filter((o) => o.estado === 'en_proceso')
   const listoLista = ordenesHoy.filter((o) => o.estado === 'listo')
@@ -279,9 +300,12 @@ function JefeZonaDashboard() {
                 orden={orden}
                 comboNombre={comboNombre(orden.comboId)}
                 lavadorNombre={lavadorNombre(orden.lavadorId)}
-                desde={orden.creadoEn}
+                tipoVehiculoNombre={tipoVehiculo(orden.tipoVehiculoId)?.nombre ?? '—'}
+                esMoto={tipoVehiculo(orden.tipoVehiculoId)?.categoria === 'moto'}
+                tiempoTexto={tiempoTranscurrido(orden.creadoEn, ahora)}
                 onFinalizar={() => setFinalizando(orden)}
                 onReasignar={() => setReasignando(orden)}
+                onContactar={() => setContactando(orden)}
               />
             ))}
             {enProcesoLista.length === 0 ? (
@@ -302,8 +326,11 @@ function JefeZonaDashboard() {
                 orden={orden}
                 comboNombre={comboNombre(orden.comboId)}
                 lavadorNombre={lavadorNombre(orden.lavadorId)}
-                desde={orden.listaEn ?? orden.creadoEn}
+                tipoVehiculoNombre={tipoVehiculo(orden.tipoVehiculoId)?.nombre ?? '—'}
+                esMoto={tipoVehiculo(orden.tipoVehiculoId)?.categoria === 'moto'}
+                tiempoTexto={tiempoTranscurrido(orden.listaEn ?? orden.creadoEn, ahora)}
                 onCobrar={() => setCobrando(orden)}
+                onContactar={() => setContactando(orden)}
               />
             ))}
             {listoLista.length === 0 ? (
@@ -335,6 +362,21 @@ function JefeZonaDashboard() {
 
       {recibo ? <ReciboModal recibo={recibo} variant="pago" onClose={() => setRecibo(null)} /> : null}
 
+      {contactando ? (
+        <ContactoModal
+          nombre={contactando.clienteNombre}
+          placa={contactando.placa}
+          telefono={contactando.clienteTelefono}
+          correo={contactando.clienteCorreo}
+          mensajeWhatsapp={
+            contactando.estado === 'listo'
+              ? `Hola ${contactando.clienteNombre}, tu vehículo ${contactando.placa} ya está listo para recoger.`
+              : `Hola ${contactando.clienteNombre}, te contactamos sobre tu vehículo ${contactando.placa}.`
+          }
+          onClose={() => setContactando(null)}
+        />
+      ) : null}
+
       {finalizando ? (
         <ConfirmModal
           title={`¿Finalizar el lavado de ${finalizando.placa}?`}
@@ -356,62 +398,100 @@ function OrdenCard({
   orden,
   comboNombre,
   lavadorNombre,
-  desde,
+  tipoVehiculoNombre,
+  esMoto,
+  tiempoTexto,
   onFinalizar,
   onCobrar,
   onReasignar,
+  onContactar,
 }: {
   orden: Orden
   comboNombre: string
   lavadorNombre: string
-  desde: string
+  tipoVehiculoNombre: string
+  esMoto: boolean
+  tiempoTexto: string
   onFinalizar?: () => void
   onCobrar?: () => void
   onReasignar?: () => void
+  onContactar?: () => void
 }) {
   const enProceso = orden.estado === 'en_proceso'
+  const VehiculoIcon = esMoto ? Motorbike : Car
   return (
     <Card
-      className={`flex items-center justify-between gap-4 border-l-4 p-4 transition-all duration-300 ${
+      className={`group border-l-4 p-0 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-card-hover ${
         enProceso ? 'border-l-warning-600 bg-warning-50/40' : 'border-l-primary-500 bg-primary-50/40 shadow-nav-active'
       }`}
     >
-      <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-lg font-bold tracking-tight text-neutral-900">{orden.placa}</span>
-          <span className="text-xs text-neutral-400">#{orden.consecutivo}</span>
+      <div className="flex items-center justify-between gap-2 p-3 pb-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-lg font-bold tracking-tight text-neutral-900">{orden.placa}</span>
+            <span className="text-xs text-neutral-400">#{orden.consecutivo}</span>
+          </div>
+          <p className="mt-0.5 flex items-center gap-1.5 text-sm font-medium text-neutral-700">
+            <UserRound size={14} className="shrink-0 text-neutral-400" />
+            <span className="truncate">{orden.clienteNombre}</span>
+          </p>
+
+          <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-neutral-500">
+            <span className="flex items-center gap-1">
+              <VehiculoIcon size={13} className="text-primary-500" /> {tipoVehiculoNombre}
+            </span>
+            <span className="flex items-center gap-1">
+              <Package size={13} className="text-primary-500" /> {comboNombre}
+            </span>
+            <span className="flex items-center gap-1">
+              <Users size={13} className="text-primary-500" /> {lavadorNombre}
+            </span>
+            <span className="flex items-center gap-1 font-medium text-neutral-600">
+              <Clock size={13} /> {tiempoTexto}
+            </span>
+          </p>
         </div>
-        <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-500">
-          <span className="flex items-center gap-1">
-            <Sparkles size={13} className="text-primary-500" /> {comboNombre}
-          </span>
-          <span className="flex items-center gap-1">
-            <Car size={13} className="text-primary-500" /> {lavadorNombre}
-          </span>
-          <span className="flex items-center gap-1 font-medium text-neutral-600">
-            <Clock size={13} /> {tiempoTranscurrido(desde)}
-          </span>
-        </p>
+
+        {/* Protagonista pero a la medida del bloque de texto — no un banner aparte. Solo mientras
+            está en proceso; "listo para cobrar" se queda con el ícono de tipo de vehículo de arriba. */}
+        {enProceso ? (
+          <LavadoAnimation tipo={esMoto ? 'moto' : 'auto'} className="h-20 w-28 shrink-0 sm:h-24 sm:w-32" />
+        ) : null}
       </div>
-      <div className="flex shrink-0 flex-col items-end gap-2">
-        <span className="text-base font-semibold text-neutral-900">{COP.format(orden.precio)}</span>
-        <div className="flex items-center gap-1.5">
+
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-neutral-100 bg-white/60 px-3 py-2">
+        <div className="flex items-center gap-1">
+          {onContactar ? (
+            <button
+              type="button"
+              onClick={onContactar}
+              className="group/btn flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-success-50 hover:text-success-700"
+            >
+              <MessageCircle size={14} className="transition-transform group-hover/btn:scale-110" />
+              Contactar
+            </button>
+          ) : null}
           {onReasignar ? (
             <button
               type="button"
               onClick={onReasignar}
-              title="Reasignar lavador"
-              aria-label="Reasignar lavador"
-              className="flex size-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100"
+              className="group/btn flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-primary-50 hover:text-primary-700"
             >
-              <Repeat size={14} />
+              <Repeat size={14} className="transition-transform group-hover/btn:rotate-180" />
+              Reasignar
             </button>
           ) : null}
+        </div>
+
+        <div className="flex items-center gap-2.5">
+          <span className="rounded-md bg-success-50 px-2 py-1 text-sm font-bold text-success-700">
+            {COP.format(orden.precio)}
+          </span>
           {onFinalizar ? (
             <button
               type="button"
               onClick={onFinalizar}
-              className="flex items-center gap-1.5 rounded-lg bg-warning-600 px-3 py-2 text-xs font-semibold text-white shadow-card transition-colors hover:bg-warning-700"
+              className="flex items-center gap-1.5 rounded-lg bg-warning-600 px-3 py-2 text-xs font-semibold text-white shadow-card transition-all hover:-translate-y-0.5 hover:bg-warning-700 hover:shadow-card-hover"
             >
               <SprayCan size={14} />
               Finalizar lavado
@@ -421,7 +501,7 @@ function OrdenCard({
             <button
               type="button"
               onClick={onCobrar}
-              className="flex items-center gap-1.5 rounded-lg bg-primary-600 px-3 py-2 text-xs font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700"
+              className="flex items-center gap-1.5 rounded-lg bg-success-600 px-3 py-2 text-xs font-semibold text-white shadow-nav-active transition-all hover:-translate-y-0.5 hover:bg-success-700 hover:shadow-card-hover"
             >
               <Banknote size={14} />
               Cobrar y entregar

@@ -14,7 +14,7 @@ import { fetchConfiguracion } from './configuracion'
 import { fetchTurnoAbierto } from './turnos'
 
 const ORDEN_SELECT =
-  'id, consecutivo, placa, clienteNombre:cliente_nombre, clienteTelefono:cliente_telefono, clienteCorreo:cliente_correo, tipoVehiculoId:tipo_vehiculo_id, comboId:combo_id, lavadorId:lavador_id, precio, comisionLavador:comision_lavador, comisionNegocio:comision_negocio, metodoPago:metodo_pago, referenciaPago:referencia_pago, observaciones, estado, creadoEn:creado_en, listaEn:lista_en, entregadaEn:entregada_en, liquidacionId:liquidacion_id, motivoAnulacion:motivo_anulacion, anuladaEn:anulada_en, anuladaPor:anulada_por'
+  'id, consecutivo, placa, clienteNombre:cliente_nombre, clienteTelefono:cliente_telefono, clienteCorreo:cliente_correo, tipoVehiculoId:tipo_vehiculo_id, comboId:combo_id, lavadorId:lavador_id, precio, comisionLavador:comision_lavador, comisionNegocio:comision_negocio, metodoPago:metodo_pago, referenciaPago:referencia_pago, observaciones, estado, creadoEn:creado_en, listaEn:lista_en, entregadaEn:entregada_en, tiempoLavadoSegundos:tiempo_lavado_segundos, tiempoEsperaEntregaSegundos:tiempo_espera_entrega_segundos, liquidacionId:liquidacion_id, motivoAnulacion:motivo_anulacion, anuladaEn:anulada_en, anuladaPor:anulada_por'
 
 function inicioDeHoyISO(): string {
   const ahora = new Date()
@@ -145,10 +145,30 @@ export async function createOrden(input: OrdenInput): Promise<Orden> {
 }
 
 // M3: el lavador terminó, el vehículo espera en el patio a que el cliente venga a pagar.
+// `tiempo_lavado_segundos` queda fijo aquí (creado_en → este momento) como KPI de M10 — no se
+// recalcula después, por eso se lee `creado_en` antes del update en vez de restar en el cliente
+// (PostgREST no permite expresiones sobre columnas existentes dentro de un update).
 export async function marcarListo(id: string): Promise<Orden> {
+  const { data: actual, error: errorActual } = await db
+    .from('ordenes')
+    .select('creadoEn:creado_en')
+    .eq('id', id)
+    .single()
+  if (errorActual) throw new Error(errorActual.message)
+
+  const ahora = new Date()
+  const tiempoLavadoSegundos = Math.max(
+    0,
+    Math.round((ahora.getTime() - new Date(actual.creadoEn as string).getTime()) / 1000),
+  )
+
   const { data, error } = await db
     .from('ordenes')
-    .update({ estado: 'listo', lista_en: new Date().toISOString() })
+    .update({
+      estado: 'listo',
+      lista_en: ahora.toISOString(),
+      tiempo_lavado_segundos: tiempoLavadoSegundos,
+    })
     .eq('id', id)
     .select(ORDEN_SELECT)
     .single()
@@ -178,14 +198,27 @@ export async function reasignarLavador(id: string, nuevoLavadorId: string): Prom
 // — no el registro del vehículo, que puede haber pasado en un turno anterior).
 export async function cobrarYEntregarOrden(id: string, input: CobroInput): Promise<Orden> {
   const parsed = cobroInputSchema.parse(input)
-  const turno = await fetchTurnoAbierto('jefe_zona')
+  const [turno, actual] = await Promise.all([
+    fetchTurnoAbierto('jefe_zona'),
+    db.from('ordenes').select('listaEn:lista_en, creadoEn:creado_en').eq('id', id).single(),
+  ])
+  if (actual.error) throw new Error(actual.error.message)
+
+  const ahora = new Date()
+  // Cuánto se demoró el cliente en reclamar el vehículo ya lavado (KPI de M10). Si por lo que
+  // sea no hay lista_en (no debería pasar en el flujo normal, siempre pasa por marcarListo
+  // antes de cobrar), se usa creado_en para no dejar la columna vacía.
+  const desde = (actual.data.listaEn as string | null) ?? (actual.data.creadoEn as string)
+  const tiempoEsperaEntregaSegundos = Math.max(0, Math.round((ahora.getTime() - new Date(desde).getTime()) / 1000))
+
   const { data, error } = await db
     .from('ordenes')
     .update({
       estado: 'entregado',
       metodo_pago: parsed.metodoPago,
       referencia_pago: parsed.referenciaPago,
-      entregada_en: new Date().toISOString(),
+      entregada_en: ahora.toISOString(),
+      tiempo_espera_entrega_segundos: tiempoEsperaEntregaSegundos,
       turno_id: turno?.id,
     })
     .eq('id', id)
