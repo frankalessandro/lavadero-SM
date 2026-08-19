@@ -3,7 +3,7 @@ import { createFileRoute, Outlet, redirect } from '@tanstack/react-router'
 import {
   LayoutDashboard,
   Car,
-  Sparkles,
+  Package,
   CircleParking,
   Users,
   Settings,
@@ -13,6 +13,7 @@ import {
   ClipboardCheck,
   Boxes,
   UserCog,
+  BookUser,
 } from 'lucide-react'
 import { Sidebar, type NavItem } from '../../components/layout/Sidebar'
 import { Topbar } from '../../components/layout/Topbar'
@@ -31,13 +32,14 @@ export const Route = createFileRoute('/admin')({
 const NAV_ITEMS: NavItem[] = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/admin/tipos-vehiculo', label: 'Tipos de vehículo', icon: Car },
-  { to: '/admin/combos', label: 'Combos', icon: Sparkles },
+  { to: '/admin/combos', label: 'Combos', icon: Package },
   { to: '/admin/parqueadero', label: 'Parqueadero', icon: CircleParking },
   { to: '/admin/lavadores', label: 'Lavadores', icon: Users },
   { to: '/admin/liquidaciones', label: 'Liquidaciones', icon: Wallet },
   { to: '/admin/gastos', label: 'Gastos', icon: Receipt },
   { to: '/admin/inventario', label: 'Inventario', icon: Boxes },
   { to: '/admin/ordenes', label: 'Órdenes', icon: ClipboardList },
+  { to: '/admin/clientes', label: 'Clientes', icon: BookUser },
   { to: '/admin/turnos', label: 'Turnos', icon: ClipboardCheck },
   { to: '/admin/usuarios', label: 'Usuarios', icon: UserCog },
   { to: '/admin/configuracion', label: 'Configuración', icon: Settings },

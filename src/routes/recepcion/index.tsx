@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { createFileRoute, Link, redirect, useRouter } from '@tanstack/react-router'
-import { Sparkles, Car, Lock } from 'lucide-react'
+import { Package, Car, Lock } from 'lucide-react'
 import { SimpleTopbar } from '../../components/layout/SimpleTopbar'
 import { signOut } from '../../lib/auth'
 import { fetchTiposVehiculo } from '../../data/tiposVehiculo'
@@ -336,7 +336,7 @@ function ReceptionForm({
       >
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="flex items-center gap-1.5 font-medium text-neutral-700">
-            <Sparkles size={14} className="text-primary-500" /> Combo
+            <Package size={14} className="text-primary-500" /> Combo
           </span>
           <CustomSelect
             value={form.comboId}

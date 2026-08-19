@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { signOut } from './auth'
 
-const TIMEOUT_MS = 30 * 60 * 1000 // 30 min — regla antifraude: cierre de sesión automático por inactividad.
+const TIMEOUT_MS = 12 * 60 * 60 * 1000 // 12 h — regla antifraude: cierre de sesión automático por inactividad (ajustado por Alessandro, confirmado explícitamente).
 const EVENTS = ['mousemove', 'keydown', 'click', 'touchstart'] as const
 
 // Se monta una sola vez en App (main.tsx), activo solo mientras hay sesión — cubre los 3 roles
