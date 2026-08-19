@@ -21,6 +21,7 @@ import { Route as RecepcionIndexRouteImport } from './routes/recepcion/index'
 import { Route as ServicesIndexRouteImport } from './routes/services/index'
 import { Route as ServicesServiceIdRouteImport } from './routes/services/$serviceId'
 import { Route as VigilanteIndexRouteImport } from './routes/vigilante/index'
+import { Route as AdminClientesIndexRouteImport } from './routes/admin/clientes/index'
 import { Route as AdminCombosIndexRouteImport } from './routes/admin/combos/index'
 import { Route as AdminConfiguracionIndexRouteImport } from './routes/admin/configuracion/index'
 import { Route as AdminGastosIndexRouteImport } from './routes/admin/gastos/index'
@@ -94,6 +95,11 @@ const VigilanteIndexRoute = VigilanteIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => VigilanteRouteRoute,
+} as any)
+const AdminClientesIndexRoute = AdminClientesIndexRouteImport.update({
+  id: '/clientes/',
+  path: '/clientes/',
+  getParentRoute: () => AdminRouteRoute,
 } as any)
 const AdminCombosIndexRoute = AdminCombosIndexRouteImport.update({
   id: '/combos/',
@@ -174,6 +180,7 @@ export interface FileRoutesByFullPath {
   '/recepcion/': typeof RecepcionIndexRoute
   '/services/': typeof ServicesIndexRoute
   '/vigilante/': typeof VigilanteIndexRoute
+  '/admin/clientes/': typeof AdminClientesIndexRoute
   '/admin/combos/': typeof AdminCombosIndexRoute
   '/admin/configuracion/': typeof AdminConfiguracionIndexRoute
   '/admin/gastos/': typeof AdminGastosIndexRoute
@@ -197,6 +204,7 @@ export interface FileRoutesByTo {
   '/recepcion': typeof RecepcionIndexRoute
   '/services': typeof ServicesIndexRoute
   '/vigilante': typeof VigilanteIndexRoute
+  '/admin/clientes': typeof AdminClientesIndexRoute
   '/admin/combos': typeof AdminCombosIndexRoute
   '/admin/configuracion': typeof AdminConfiguracionIndexRoute
   '/admin/gastos': typeof AdminGastosIndexRoute
@@ -225,6 +233,7 @@ export interface FileRoutesById {
   '/recepcion/': typeof RecepcionIndexRoute
   '/services/': typeof ServicesIndexRoute
   '/vigilante/': typeof VigilanteIndexRoute
+  '/admin/clientes/': typeof AdminClientesIndexRoute
   '/admin/combos/': typeof AdminCombosIndexRoute
   '/admin/configuracion/': typeof AdminConfiguracionIndexRoute
   '/admin/gastos/': typeof AdminGastosIndexRoute
@@ -254,6 +263,7 @@ export interface FileRouteTypes {
     | '/recepcion/'
     | '/services/'
     | '/vigilante/'
+    | '/admin/clientes/'
     | '/admin/combos/'
     | '/admin/configuracion/'
     | '/admin/gastos/'
@@ -277,6 +287,7 @@ export interface FileRouteTypes {
     | '/recepcion'
     | '/services'
     | '/vigilante'
+    | '/admin/clientes'
     | '/admin/combos'
     | '/admin/configuracion'
     | '/admin/gastos'
@@ -304,6 +315,7 @@ export interface FileRouteTypes {
     | '/recepcion/'
     | '/services/'
     | '/vigilante/'
+    | '/admin/clientes/'
     | '/admin/combos/'
     | '/admin/configuracion/'
     | '/admin/gastos/'
@@ -416,6 +428,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VigilanteIndexRouteImport
       parentRoute: typeof VigilanteRouteRoute
     }
+    '/admin/clientes/': {
+      id: '/admin/clientes/'
+      path: '/clientes'
+      fullPath: '/admin/clientes/'
+      preLoaderRoute: typeof AdminClientesIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/admin/combos/': {
       id: '/admin/combos/'
       path: '/combos'
@@ -512,6 +531,7 @@ declare module '@tanstack/react-router' {
 
 interface AdminRouteRouteChildren {
   AdminIndexRoute: typeof AdminIndexRoute
+  AdminClientesIndexRoute: typeof AdminClientesIndexRoute
   AdminCombosIndexRoute: typeof AdminCombosIndexRoute
   AdminConfiguracionIndexRoute: typeof AdminConfiguracionIndexRoute
   AdminGastosIndexRoute: typeof AdminGastosIndexRoute
@@ -527,6 +547,7 @@ interface AdminRouteRouteChildren {
 
 const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminIndexRoute: AdminIndexRoute,
+  AdminClientesIndexRoute: AdminClientesIndexRoute,
   AdminCombosIndexRoute: AdminCombosIndexRoute,
   AdminConfiguracionIndexRoute: AdminConfiguracionIndexRoute,
   AdminGastosIndexRoute: AdminGastosIndexRoute,
