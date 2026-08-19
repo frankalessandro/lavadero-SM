@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { Wallet, X, CheckCircle2, ClipboardCheck } from 'lucide-react'
-import { fetchTurnoAbierto, fetchTurnos, abrirTurno, calcularValorEsperado, cerrarTurno } from '../../../data/turnos'
+import { X, CheckCircle2, ClipboardCheck } from 'lucide-react'
+import { fetchTurnoAbierto, fetchTurnos, calcularValorEsperado, cerrarTurno } from '../../../data/turnos'
 import type { TurnoCaja } from '../../../schemas/turnoCaja'
 import { Card } from '../../../components/layout/Card'
 import { CurrencyInput } from '../../../components/layout/CurrencyInput'
+import { AbrirTurnoPrompt, TurnoResponsableBanner } from '../../../components/layout/TurnoResponsableBanner'
 
 async function loadCaja() {
   const [turnoAbierto, turnosRecientes] = await Promise.all([
@@ -46,9 +47,18 @@ function CajaJefeZona() {
   return (
     <div className="flex flex-col gap-6">
       {turnoAbierto ? (
-        <TurnoAbiertoCard turno={turnoAbierto} onCerrar={() => setCerrando(true)} />
+        <TurnoResponsableBanner turno={turnoAbierto} onTransferido={setTurnoAbierto}>
+          <button
+            type="button"
+            onClick={() => setCerrando(true)}
+            className="flex items-center justify-center gap-2 rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700"
+          >
+            <ClipboardCheck size={16} />
+            Cerrar turno
+          </button>
+        </TurnoResponsableBanner>
       ) : (
-        <AbrirTurnoCard onAbierto={refresh} />
+        <AbrirTurnoPrompt onAbierto={refresh} />
       )}
 
       <div>
@@ -74,119 +84,6 @@ function CajaJefeZona() {
         />
       ) : null}
     </div>
-  )
-}
-
-function TurnoAbiertoCard({ turno, onCerrar }: { turno: TurnoCaja; onCerrar: () => void }) {
-  return (
-    <Card className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
-            <Wallet size={20} strokeWidth={2} />
-          </span>
-          <div>
-            <h2 className="text-base font-semibold text-neutral-900">Turno abierto</h2>
-            <p className="text-xs text-neutral-500">Responsable: {turno.responsable}</p>
-          </div>
-        </div>
-        <span className="inline-flex rounded-full bg-success-50 px-2.5 py-1 text-xs font-medium text-success-700">
-          En curso
-        </span>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2">
-        <div className="rounded-lg bg-neutral-50 p-3">
-          <p className="text-xs text-neutral-500">Apertura</p>
-          <p className="text-sm font-semibold text-neutral-900">{formatFecha(turno.abiertoEn)}</p>
-        </div>
-        <div className="rounded-lg bg-neutral-50 p-3">
-          <p className="text-xs text-neutral-500">Base inicial</p>
-          <p className="text-sm font-semibold text-neutral-900">{COP.format(turno.baseInicial)}</p>
-        </div>
-      </div>
-
-      <button
-        type="button"
-        onClick={onCerrar}
-        className="flex items-center justify-center gap-2 rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700"
-      >
-        <ClipboardCheck size={16} />
-        Cerrar turno
-      </button>
-    </Card>
-  )
-}
-
-function AbrirTurnoCard({ onAbierto }: { onAbierto: () => Promise<void> }) {
-  const [responsable, setResponsable] = useState('')
-  const [baseInicial, setBaseInicial] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault()
-    setError(null)
-    const base = Number(baseInicial)
-    if (!responsable.trim()) {
-      setError('El responsable es obligatorio')
-      return
-    }
-    if (!Number.isFinite(base) || base < 0) {
-      setError('La base inicial no puede ser negativa')
-      return
-    }
-    setSaving(true)
-    try {
-      await abrirTurno({ rol: 'jefe_zona', responsable: responsable.trim(), baseInicial: Math.round(base) })
-      await onAbierto()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo abrir el turno')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Card className="flex flex-col gap-5">
-      <div className="flex items-center gap-3">
-        <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
-          <Wallet size={20} strokeWidth={2} />
-        </span>
-        <div>
-          <h2 className="text-base font-semibold text-neutral-900">No hay turno abierto</h2>
-          <p className="text-xs text-neutral-500">Abre el turno para empezar a registrar la caja del día.</p>
-        </div>
-      </div>
-
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <label className="flex flex-col gap-1.5 text-sm">
-          <span className="font-medium text-neutral-700">Responsable</span>
-          <input
-            autoFocus
-            value={responsable}
-            onChange={(e) => setResponsable(e.target.value)}
-            placeholder="Nombre de quien abre el turno"
-            className="rounded-lg border border-neutral-300 px-3 py-3 text-base outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-          />
-        </label>
-
-        <label className="flex flex-col gap-1.5 text-sm">
-          <span className="font-medium text-neutral-700">Base inicial</span>
-          <CurrencyInput size="sm" prefix="$" value={baseInicial} onChange={setBaseInicial} />
-        </label>
-
-        {error ? <p className="text-xs text-danger-600">{error}</p> : null}
-
-        <button
-          type="submit"
-          disabled={saving}
-          className="flex items-center justify-center gap-2 rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
-        >
-          {saving ? 'Abriendo…' : 'Abrir turno'}
-        </button>
-      </form>
-    </Card>
   )
 }
 
@@ -251,7 +148,7 @@ function CerrarTurnoModal({
   const [conteoFisico, setConteoFisico] = useState('')
   const [valorEsperado, setValorEsperado] = useState<number | null>(null)
   const [justificacion, setJustificacion] = useState('')
-  const [cerradoPor, setCerradoPor] = useState('')
+  const [cerradoPor, setCerradoPor] = useState(turno.responsableActual)
   const [recibidoPor, setRecibidoPor] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)

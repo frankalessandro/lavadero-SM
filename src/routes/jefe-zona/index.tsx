@@ -133,25 +133,51 @@ function JefeZonaDashboard() {
   const enProcesoLista = ordenesHoy.filter((o) => o.estado === 'en_proceso')
   const listoLista = ordenesHoy.filter((o) => o.estado === 'listo')
   const lavadoresActivos = lavadores.filter((l) => l.activo).length
+
+  // Misma regla de la cola de rotación que usa `suggestNextLavador` en /recepcion (regla de
+  // negocio 9): NULL primero (nunca asignado), luego el que lleva más tiempo sin lavar. Acá se
+  // ordena en el cliente sobre la misma lista que ya trae el loader — no es una fuente de verdad
+  // aparte, es la misma cola, solo que mostrando el orden completo en vez de únicamente el primero.
+  const ordenRotacion = [...lavadores]
+    .filter((l) => l.activo)
+    .sort((a, b) => {
+      if (!a.ultimaAsignacion && !b.ultimaAsignacion) return 0
+      if (!a.ultimaAsignacion) return -1
+      if (!b.ultimaAsignacion) return 1
+      return new Date(a.ultimaAsignacion).getTime() - new Date(b.ultimaAsignacion).getTime()
+    })
   // Solo lo cobrado hoy — un vehículo registrado hoy pero no entregado no cuenta como plata en caja.
   const cajaDelDia = entregadasHoy.reduce((total, o) => total + o.precio, 0)
 
-  // Tiempo promedio de atención de hoy (M3), por combo y por lavador — solo entregadas, que
-  // son las que tienen `entregadaEn` real.
+  // Tiempo de lavado de hoy (M3), por combo y por lavador — mide solo el lavado en sí
+  // (creado→listo, `tiempoLavadoSegundos`), no el ciclo completo. Antes se calculaba como
+  // entregadaEn−creadoEn, pero eso mezclaba el lavado con cuánto se demora el CLIENTE en venir
+  // a recoger — un combo podía verse "lento" solo porque a sus clientes les gusta dejar el carro
+  // más tiempo, sin que el lavado en sí tardara más. Con las columnas fijas en cada orden
+  // (ver M3/M9) separamos las dos cosas: esto sí varía por combo/lavador (tiene sentido como
+  // chart), la espera del cliente no depende de ninguno de los dos (por eso va como un solo
+  // número más abajo, no como una tercera barra sin lógica real detrás).
   const promedios = useMemo(() => {
     const porCombo = new Map<string, { total: number; cantidad: number }>()
     const porLavador = new Map<string, { total: number; cantidad: number }>()
+    let esperaTotal = 0
+    let esperaCantidad = 0
     for (const orden of entregadasHoy) {
-      if (!orden.entregadaEn) continue
-      const minutos = (new Date(orden.entregadaEn).getTime() - new Date(orden.creadoEn).getTime()) / 60000
-      const combo = porCombo.get(orden.comboId) ?? { total: 0, cantidad: 0 }
-      combo.total += minutos
-      combo.cantidad += 1
-      porCombo.set(orden.comboId, combo)
-      const lavador = porLavador.get(orden.lavadorId) ?? { total: 0, cantidad: 0 }
-      lavador.total += minutos
-      lavador.cantidad += 1
-      porLavador.set(orden.lavadorId, lavador)
+      if (orden.tiempoLavadoSegundos != null) {
+        const minutos = orden.tiempoLavadoSegundos / 60
+        const combo = porCombo.get(orden.comboId) ?? { total: 0, cantidad: 0 }
+        combo.total += minutos
+        combo.cantidad += 1
+        porCombo.set(orden.comboId, combo)
+        const lavador = porLavador.get(orden.lavadorId) ?? { total: 0, cantidad: 0 }
+        lavador.total += minutos
+        lavador.cantidad += 1
+        porLavador.set(orden.lavadorId, lavador)
+      }
+      if (orden.tiempoEsperaEntregaSegundos != null) {
+        esperaTotal += orden.tiempoEsperaEntregaSegundos / 60
+        esperaCantidad += 1
+      }
     }
     return {
       porCombo: Array.from(porCombo.entries()).map(([id, v]) => ({
@@ -162,6 +188,7 @@ function JefeZonaDashboard() {
         nombre: lavadorNombre(id),
         promedio: v.total / v.cantidad,
       })),
+      esperaPromedioMinutos: esperaCantidad > 0 ? esperaTotal / esperaCantidad : undefined,
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entregadasHoy])
@@ -205,84 +232,132 @@ function JefeZonaDashboard() {
         <StatCard label="Caja del día" value={COP.format(cajaDelDia)} hint="Solo lo cobrado — sin arqueo (M5)" icon={Wallet} />
       </div>
 
-      {/* Uso de escritorio: caja a la vista, sin salir del dashboard */}
-      <Card className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <span
-            className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${
-              turno ? 'bg-success-50 text-success-700' : 'bg-warning-50 text-warning-700'
-            }`}
-          >
-            {turno ? <LockOpen size={18} strokeWidth={2} /> : <Lock size={18} strokeWidth={2} />}
-          </span>
-          <div>
-            <p className="text-sm font-semibold text-neutral-900">
-              {turno ? `Turno abierto — ${turno.responsable}` : 'No hay turno abierto'}
-            </p>
-            <p className="text-xs text-neutral-500">
-              {turno ? `Desde las ${new Date(turno.abiertoEn).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' })} · base ${COP.format(turno.baseInicial)}` : 'Ábrelo para que el arqueo cuadre al cierre.'}
-            </p>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {/* Uso de escritorio: caja a la vista, sin salir del dashboard */}
+        <Card className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span
+              className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${
+                turno ? 'bg-success-50 text-success-700' : 'bg-warning-50 text-warning-700'
+              }`}
+            >
+              {turno ? <LockOpen size={18} strokeWidth={2} /> : <Lock size={18} strokeWidth={2} />}
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-neutral-900">
+                {turno ? `Turno abierto — ${turno.responsableActual}` : 'No hay turno abierto'}
+              </p>
+              <p className="text-xs text-neutral-500">
+                {turno ? `Desde las ${new Date(turno.abiertoEn).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' })} · base ${COP.format(turno.baseInicial)}` : 'Ábrelo para que el arqueo cuadre al cierre.'}
+              </p>
+            </div>
           </div>
-        </div>
-        <Link
-          to="/jefe-zona/caja"
-          className="whitespace-nowrap rounded-lg border border-neutral-200 px-3 py-2 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
-        >
-          {turno ? 'Ir a caja' : 'Abrir turno'}
-        </Link>
-      </Card>
+          <Link
+            to="/jefe-zona/caja"
+            className="whitespace-nowrap rounded-lg border border-neutral-200 px-3 py-2 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
+          >
+            {turno ? 'Ir a caja' : 'Abrir turno'}
+          </Link>
+        </Card>
 
-      {/* Tiempo promedio — solo tiene sentido como chart cuando hay varios combos/lavadores que
+        {/* Misma cola que sugiere /recepcion al recibir un vehículo (regla de negocio 9) —
+            mostrar el orden completo, no solo el primero, para que quede claro por qué se
+            sugiere a ese lavador y no a otro. */}
+        <Card className="flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
+              <Repeat size={18} strokeWidth={2} />
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-neutral-900">
+                {ordenRotacion[0] ? `Próximo en rotación: ${ordenRotacion[0].nombre}` : 'Sin lavadores activos'}
+              </p>
+              <p className="text-xs text-neutral-500">Por orden de llegada — mide vehículos atendidos, no ingresos.</p>
+            </div>
+          </div>
+          {ordenRotacion.length > 0 ? (
+            <ol className="flex flex-wrap gap-1.5">
+              {ordenRotacion.map((lavador, i) => (
+                <li
+                  key={lavador.id}
+                  className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${
+                    i === 0 ? 'bg-primary-50 text-primary-700' : 'bg-neutral-50 text-neutral-500'
+                  }`}
+                >
+                  <span className="font-semibold">{i + 1}.</span> {lavador.nombre}
+                </li>
+              ))}
+            </ol>
+          ) : null}
+        </Card>
+      </div>
+
+      {/* Tiempo de lavado — solo tiene sentido como chart cuando hay varios combos/lavadores que
           comparar; con 1–2 nada más un número es más claro que una barra. Full-width para que
-          las barras horizontales tengan espacio real, no un cuarto de página. */}
+          las barras horizontales tengan espacio real, no un cuarto de página. La espera para
+          recoger va como un solo número junto al título, no como una tercera barra: no depende
+          de combo ni de lavador, así que partirla "por categoría" no tendría una lógica real
+          detrás (ver comentario de `promedios` arriba). */}
       {entregadasHoy.length > 0 ? (
         <Card>
-          <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-neutral-900">
-            <Timer size={15} className="text-primary-500" />
-            Tiempo promedio de atención (hoy)
-          </h3>
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-            <div>
-              <p className="mb-2 text-xs font-medium text-neutral-500">Por combo</p>
-              {promedios.porCombo.length > 2 ? (
-                <BarChart
-                  labels={promedios.porCombo.map((p) => p.nombre)}
-                  data={promedios.porCombo.map((p) => p.promedio)}
-                  valueFormatter={formatMinutos}
-                  height={Math.max(100, promedios.porCombo.length * 36)}
-                />
-              ) : (
-                <ul className="flex flex-col gap-1.5 text-sm">
-                  {promedios.porCombo.map((p) => (
-                    <li key={p.nombre} className="flex items-center justify-between gap-2">
-                      <span className="truncate text-neutral-600">{p.nombre}</span>
-                      <span className="shrink-0 font-medium text-neutral-900">{formatMinutos(p.promedio)}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <div>
-              <p className="mb-2 text-xs font-medium text-neutral-500">Por lavador</p>
-              {promedios.porLavador.length > 2 ? (
-                <BarChart
-                  labels={promedios.porLavador.map((p) => p.nombre)}
-                  data={promedios.porLavador.map((p) => p.promedio)}
-                  valueFormatter={formatMinutos}
-                  height={Math.max(100, promedios.porLavador.length * 36)}
-                />
-              ) : (
-                <ul className="flex flex-col gap-1.5 text-sm">
-                  {promedios.porLavador.map((p) => (
-                    <li key={p.nombre} className="flex items-center justify-between gap-2">
-                      <span className="truncate text-neutral-600">{p.nombre}</span>
-                      <span className="shrink-0 font-medium text-neutral-900">{formatMinutos(p.promedio)}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <h3 className="flex items-center gap-1.5 text-sm font-semibold text-neutral-900">
+              <Timer size={15} className="text-primary-500" />
+              Tiempo de lavado (hoy)
+            </h3>
+            {promedios.esperaPromedioMinutos !== undefined ? (
+              <p className="text-xs text-neutral-500">
+                Espera promedio para recoger:{' '}
+                <span className="font-semibold text-neutral-900">{formatMinutos(promedios.esperaPromedioMinutos)}</span>
+              </p>
+            ) : null}
           </div>
+          {promedios.porCombo.length === 0 ? (
+            <p className="py-6 text-center text-sm text-neutral-400">Sin datos de tiempo de lavado hoy todavía.</p>
+          ) : (
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <div>
+                <p className="mb-2 text-xs font-medium text-neutral-500">Por combo</p>
+                {promedios.porCombo.length > 2 ? (
+                  <BarChart
+                    labels={promedios.porCombo.map((p) => p.nombre)}
+                    data={promedios.porCombo.map((p) => p.promedio)}
+                    valueFormatter={formatMinutos}
+                    height={Math.max(100, promedios.porCombo.length * 36)}
+                  />
+                ) : (
+                  <ul className="flex flex-col gap-1.5 text-sm">
+                    {promedios.porCombo.map((p) => (
+                      <li key={p.nombre} className="flex items-center justify-between gap-2">
+                        <span className="truncate text-neutral-600">{p.nombre}</span>
+                        <span className="shrink-0 font-medium text-neutral-900">{formatMinutos(p.promedio)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div>
+                <p className="mb-2 text-xs font-medium text-neutral-500">Por lavador</p>
+                {promedios.porLavador.length > 2 ? (
+                  <BarChart
+                    labels={promedios.porLavador.map((p) => p.nombre)}
+                    data={promedios.porLavador.map((p) => p.promedio)}
+                    valueFormatter={formatMinutos}
+                    height={Math.max(100, promedios.porLavador.length * 36)}
+                  />
+                ) : (
+                  <ul className="flex flex-col gap-1.5 text-sm">
+                    {promedios.porLavador.map((p) => (
+                      <li key={p.nombre} className="flex items-center justify-between gap-2">
+                        <span className="truncate text-neutral-600">{p.nombre}</span>
+                        <span className="shrink-0 font-medium text-neutral-900">{formatMinutos(p.promedio)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
         </Card>
       ) : null}
 

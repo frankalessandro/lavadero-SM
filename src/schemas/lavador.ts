@@ -19,6 +19,10 @@ export const lavadorSchema = z.object({
   fechaCumpleanos: nullableDate,
   activo: z.boolean(),
   pagoDiario: z.boolean(), // excepción parametrizable — regla de negocio 4
+  // Cola de rotación (regla de negocio 9) — NULL = nunca asignado, va primero. Se expone para
+  // poder mostrar el orden completo en el dashboard, no solo el siguiente (suggestNextLavador
+  // sigue siendo la fuente de verdad al momento de asignar en /recepcion).
+  ultimaAsignacion: nullableDate,
 })
 
 export const lavadorInputSchema = z.object({

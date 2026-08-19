@@ -2,13 +2,17 @@ import { db } from '../lib/db'
 import {
   abrirTurnoInputSchema,
   turnoCajaSchema,
+  traspasoTurnoSchema,
   type AbrirTurnoInput,
   type RolCaja,
   type TurnoCaja,
+  type TraspasoTurno,
 } from '../schemas/turnoCaja'
 
 const TURNO_SELECT =
-  'id, rol, responsable, baseInicial:base_inicial, abiertoEn:abierto_en, cerrado, conteoFisico:conteo_fisico, valorEsperado:valor_esperado, diferencia, justificacionDiferencia:justificacion_diferencia, cerradoPor:cerrado_por, cerradoEn:cerrado_en, recibidoPor:recibido_por'
+  'id, rol, responsable, responsableActual:responsable_actual, baseInicial:base_inicial, abiertoEn:abierto_en, cerrado, conteoFisico:conteo_fisico, valorEsperado:valor_esperado, diferencia, justificacionDiferencia:justificacion_diferencia, cerradoPor:cerrado_por, cerradoEn:cerrado_en, recibidoPor:recibido_por'
+
+const TRASPASO_SELECT = 'id, turnoId:turno_id, de, a, hechoEn:hecho_en'
 
 export async function fetchTurnoAbierto(rol: RolCaja): Promise<TurnoCaja | undefined> {
   const { data, error } = await db
@@ -33,11 +37,52 @@ export async function abrirTurno(input: AbrirTurnoInput): Promise<TurnoCaja> {
   const parsed = abrirTurnoInputSchema.parse(input)
   const { data, error } = await db
     .from('turnos_caja')
-    .insert({ rol: parsed.rol, responsable: parsed.responsable, base_inicial: parsed.baseInicial })
+    .insert({
+      rol: parsed.rol,
+      responsable: parsed.responsable,
+      responsable_actual: parsed.responsable,
+      base_inicial: parsed.baseInicial,
+    })
     .select(TURNO_SELECT)
     .single()
   if (error) throw new Error(error.message)
   return turnoCajaSchema.parse(data)
+}
+
+// Transfiere la responsabilidad del turno a mitad de servicio (ej. el jefe de zona se ausenta)
+// sin cerrar/reabrir turno — `responsable` (quién lo abrió) no cambia, regla de negocio 14 sigue
+// intacta. Se registra primero en el log de traspasos y luego se actualiza el turno (no atómico,
+// mismo criterio que `generarLiquidacion`: si el update fallara después del insert, error
+// explícito para revisión manual — caso excepcional, no falla en silencio).
+export async function transferirResponsable(turnoId: string, actual: string, nuevoResponsable: string): Promise<TurnoCaja> {
+  const { error: errorTraspaso } = await db
+    .from('traspasos_turno')
+    .insert({ turno_id: turnoId, de: actual, a: nuevoResponsable })
+  if (errorTraspaso) throw new Error(errorTraspaso.message)
+
+  const { data, error } = await db
+    .from('turnos_caja')
+    .update({ responsable_actual: nuevoResponsable })
+    .eq('id', turnoId)
+    .eq('cerrado', false) // regla de negocio 14: un turno cerrado es inmodificable
+    .select(TURNO_SELECT)
+    .single()
+  if (error) {
+    throw new Error(
+      `El traspaso quedó registrado pero no se pudo actualizar el turno ${turnoId} — revisa manualmente. ${error.message}`,
+    )
+  }
+  return turnoCajaSchema.parse(data)
+}
+
+export async function fetchTraspasos(turnoId: string): Promise<TraspasoTurno[]> {
+  const { data, error } = await db
+    .from('traspasos_turno')
+    .select(TRASPASO_SELECT)
+    .eq('turno_id', turnoId)
+    .order('hecho_en', { ascending: false })
+  if (error) throw new Error(error.message)
+  return traspasoTurnoSchema.array().parse(data)
 }
 
 // Solo la modalidad efectivo es dinero físico que se puede contar — transferencias no entran
