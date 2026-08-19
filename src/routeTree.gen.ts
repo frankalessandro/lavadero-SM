@@ -33,6 +33,7 @@ import { Route as AdminParqueaderoIndexRouteImport } from './routes/admin/parque
 import { Route as AdminTiposVehiculoIndexRouteImport } from './routes/admin/tipos-vehiculo/index'
 import { Route as AdminTurnosIndexRouteImport } from './routes/admin/turnos/index'
 import { Route as AdminUsuariosIndexRouteImport } from './routes/admin/usuarios/index'
+import { Route as JefeZonaAsistenciaIndexRouteImport } from './routes/jefe-zona/asistencia/index'
 import { Route as JefeZonaCajaIndexRouteImport } from './routes/jefe-zona/caja/index'
 import { Route as JefeZonaInventarioIndexRouteImport } from './routes/jefe-zona/inventario/index'
 
@@ -156,6 +157,11 @@ const AdminUsuariosIndexRoute = AdminUsuariosIndexRouteImport.update({
   path: '/usuarios/',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const JefeZonaAsistenciaIndexRoute = JefeZonaAsistenciaIndexRouteImport.update({
+  id: '/asistencia/',
+  path: '/asistencia/',
+  getParentRoute: () => JefeZonaRouteRoute,
+} as any)
 const JefeZonaCajaIndexRoute = JefeZonaCajaIndexRouteImport.update({
   id: '/caja/',
   path: '/caja/',
@@ -192,6 +198,7 @@ export interface FileRoutesByFullPath {
   '/admin/tipos-vehiculo/': typeof AdminTiposVehiculoIndexRoute
   '/admin/turnos/': typeof AdminTurnosIndexRoute
   '/admin/usuarios/': typeof AdminUsuariosIndexRoute
+  '/jefe-zona/asistencia/': typeof JefeZonaAsistenciaIndexRoute
   '/jefe-zona/caja/': typeof JefeZonaCajaIndexRoute
   '/jefe-zona/inventario/': typeof JefeZonaInventarioIndexRoute
 }
@@ -216,6 +223,7 @@ export interface FileRoutesByTo {
   '/admin/tipos-vehiculo': typeof AdminTiposVehiculoIndexRoute
   '/admin/turnos': typeof AdminTurnosIndexRoute
   '/admin/usuarios': typeof AdminUsuariosIndexRoute
+  '/jefe-zona/asistencia': typeof JefeZonaAsistenciaIndexRoute
   '/jefe-zona/caja': typeof JefeZonaCajaIndexRoute
   '/jefe-zona/inventario': typeof JefeZonaInventarioIndexRoute
 }
@@ -245,6 +253,7 @@ export interface FileRoutesById {
   '/admin/tipos-vehiculo/': typeof AdminTiposVehiculoIndexRoute
   '/admin/turnos/': typeof AdminTurnosIndexRoute
   '/admin/usuarios/': typeof AdminUsuariosIndexRoute
+  '/jefe-zona/asistencia/': typeof JefeZonaAsistenciaIndexRoute
   '/jefe-zona/caja/': typeof JefeZonaCajaIndexRoute
   '/jefe-zona/inventario/': typeof JefeZonaInventarioIndexRoute
 }
@@ -275,6 +284,7 @@ export interface FileRouteTypes {
     | '/admin/tipos-vehiculo/'
     | '/admin/turnos/'
     | '/admin/usuarios/'
+    | '/jefe-zona/asistencia/'
     | '/jefe-zona/caja/'
     | '/jefe-zona/inventario/'
   fileRoutesByTo: FileRoutesByTo
@@ -299,6 +309,7 @@ export interface FileRouteTypes {
     | '/admin/tipos-vehiculo'
     | '/admin/turnos'
     | '/admin/usuarios'
+    | '/jefe-zona/asistencia'
     | '/jefe-zona/caja'
     | '/jefe-zona/inventario'
   id:
@@ -327,6 +338,7 @@ export interface FileRouteTypes {
     | '/admin/tipos-vehiculo/'
     | '/admin/turnos/'
     | '/admin/usuarios/'
+    | '/jefe-zona/asistencia/'
     | '/jefe-zona/caja/'
     | '/jefe-zona/inventario/'
   fileRoutesById: FileRoutesById
@@ -512,6 +524,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminUsuariosIndexRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/jefe-zona/asistencia/': {
+      id: '/jefe-zona/asistencia/'
+      path: '/asistencia'
+      fullPath: '/jefe-zona/asistencia/'
+      preLoaderRoute: typeof JefeZonaAsistenciaIndexRouteImport
+      parentRoute: typeof JefeZonaRouteRoute
+    }
     '/jefe-zona/caja/': {
       id: '/jefe-zona/caja/'
       path: '/caja'
@@ -567,12 +586,14 @@ const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(
 
 interface JefeZonaRouteRouteChildren {
   JefeZonaIndexRoute: typeof JefeZonaIndexRoute
+  JefeZonaAsistenciaIndexRoute: typeof JefeZonaAsistenciaIndexRoute
   JefeZonaCajaIndexRoute: typeof JefeZonaCajaIndexRoute
   JefeZonaInventarioIndexRoute: typeof JefeZonaInventarioIndexRoute
 }
 
 const JefeZonaRouteRouteChildren: JefeZonaRouteRouteChildren = {
   JefeZonaIndexRoute: JefeZonaIndexRoute,
+  JefeZonaAsistenciaIndexRoute: JefeZonaAsistenciaIndexRoute,
   JefeZonaCajaIndexRoute: JefeZonaCajaIndexRoute,
   JefeZonaInventarioIndexRoute: JefeZonaInventarioIndexRoute,
 }
