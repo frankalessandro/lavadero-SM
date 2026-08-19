@@ -1,5 +1,5 @@
-import { Droplets } from 'lucide-react'
 import type { MetodoPago } from '../../schemas/orden'
+import logoMark from '../../assets/logo-mark.png'
 
 export interface ReciboData {
   consecutivo: number
@@ -37,14 +37,8 @@ export function ReciboModal({
       <div className="flex max-h-full w-full max-w-sm flex-col overflow-y-auto rounded-t-2xl bg-white shadow-card-hover sm:rounded-2xl">
         <div className={`h-2 ${esPago ? 'bg-success-600' : 'bg-primary-600'}`} />
         <div className="flex flex-col items-center gap-1.5 px-6 pt-6 pb-4 text-center">
-          <span
-            className={`flex size-11 items-center justify-center rounded-xl text-white shadow-nav-active ${
-              esPago ? 'bg-success-600' : 'bg-primary-600'
-            }`}
-          >
-            <Droplets size={20} strokeWidth={2.25} />
-          </span>
-          <p className="mt-1 text-sm font-semibold text-neutral-900">Lavadero SM</p>
+          <img src={logoMark} alt="Carwash SM" className="size-11 shrink-0 object-contain" />
+          <p className="mt-1 text-sm font-semibold text-neutral-900">Carwash SM</p>
           <p className="text-xs text-neutral-400">{esPago ? 'Comprobante de pago' : 'Comprobante de ingreso'}</p>
         </div>
 
