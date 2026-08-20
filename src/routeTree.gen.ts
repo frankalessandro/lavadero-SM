@@ -21,6 +21,7 @@ import { Route as RecepcionIndexRouteImport } from './routes/recepcion/index'
 import { Route as ServicesIndexRouteImport } from './routes/services/index'
 import { Route as ServicesServiceIdRouteImport } from './routes/services/$serviceId'
 import { Route as VigilanteIndexRouteImport } from './routes/vigilante/index'
+import { Route as AdminClientesIndexRouteImport } from './routes/admin/clientes/index'
 import { Route as AdminCombosIndexRouteImport } from './routes/admin/combos/index'
 import { Route as AdminConfiguracionIndexRouteImport } from './routes/admin/configuracion/index'
 import { Route as AdminGastosIndexRouteImport } from './routes/admin/gastos/index'
@@ -32,6 +33,7 @@ import { Route as AdminParqueaderoIndexRouteImport } from './routes/admin/parque
 import { Route as AdminTiposVehiculoIndexRouteImport } from './routes/admin/tipos-vehiculo/index'
 import { Route as AdminTurnosIndexRouteImport } from './routes/admin/turnos/index'
 import { Route as AdminUsuariosIndexRouteImport } from './routes/admin/usuarios/index'
+import { Route as JefeZonaAsistenciaIndexRouteImport } from './routes/jefe-zona/asistencia/index'
 import { Route as JefeZonaCajaIndexRouteImport } from './routes/jefe-zona/caja/index'
 import { Route as JefeZonaInventarioIndexRouteImport } from './routes/jefe-zona/inventario/index'
 
@@ -95,6 +97,11 @@ const VigilanteIndexRoute = VigilanteIndexRouteImport.update({
   path: '/',
   getParentRoute: () => VigilanteRouteRoute,
 } as any)
+const AdminClientesIndexRoute = AdminClientesIndexRouteImport.update({
+  id: '/clientes/',
+  path: '/clientes/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
 const AdminCombosIndexRoute = AdminCombosIndexRouteImport.update({
   id: '/combos/',
   path: '/combos/',
@@ -150,6 +157,11 @@ const AdminUsuariosIndexRoute = AdminUsuariosIndexRouteImport.update({
   path: '/usuarios/',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const JefeZonaAsistenciaIndexRoute = JefeZonaAsistenciaIndexRouteImport.update({
+  id: '/asistencia/',
+  path: '/asistencia/',
+  getParentRoute: () => JefeZonaRouteRoute,
+} as any)
 const JefeZonaCajaIndexRoute = JefeZonaCajaIndexRouteImport.update({
   id: '/caja/',
   path: '/caja/',
@@ -174,6 +186,7 @@ export interface FileRoutesByFullPath {
   '/recepcion/': typeof RecepcionIndexRoute
   '/services/': typeof ServicesIndexRoute
   '/vigilante/': typeof VigilanteIndexRoute
+  '/admin/clientes/': typeof AdminClientesIndexRoute
   '/admin/combos/': typeof AdminCombosIndexRoute
   '/admin/configuracion/': typeof AdminConfiguracionIndexRoute
   '/admin/gastos/': typeof AdminGastosIndexRoute
@@ -185,6 +198,7 @@ export interface FileRoutesByFullPath {
   '/admin/tipos-vehiculo/': typeof AdminTiposVehiculoIndexRoute
   '/admin/turnos/': typeof AdminTurnosIndexRoute
   '/admin/usuarios/': typeof AdminUsuariosIndexRoute
+  '/jefe-zona/asistencia/': typeof JefeZonaAsistenciaIndexRoute
   '/jefe-zona/caja/': typeof JefeZonaCajaIndexRoute
   '/jefe-zona/inventario/': typeof JefeZonaInventarioIndexRoute
 }
@@ -197,6 +211,7 @@ export interface FileRoutesByTo {
   '/recepcion': typeof RecepcionIndexRoute
   '/services': typeof ServicesIndexRoute
   '/vigilante': typeof VigilanteIndexRoute
+  '/admin/clientes': typeof AdminClientesIndexRoute
   '/admin/combos': typeof AdminCombosIndexRoute
   '/admin/configuracion': typeof AdminConfiguracionIndexRoute
   '/admin/gastos': typeof AdminGastosIndexRoute
@@ -208,6 +223,7 @@ export interface FileRoutesByTo {
   '/admin/tipos-vehiculo': typeof AdminTiposVehiculoIndexRoute
   '/admin/turnos': typeof AdminTurnosIndexRoute
   '/admin/usuarios': typeof AdminUsuariosIndexRoute
+  '/jefe-zona/asistencia': typeof JefeZonaAsistenciaIndexRoute
   '/jefe-zona/caja': typeof JefeZonaCajaIndexRoute
   '/jefe-zona/inventario': typeof JefeZonaInventarioIndexRoute
 }
@@ -225,6 +241,7 @@ export interface FileRoutesById {
   '/recepcion/': typeof RecepcionIndexRoute
   '/services/': typeof ServicesIndexRoute
   '/vigilante/': typeof VigilanteIndexRoute
+  '/admin/clientes/': typeof AdminClientesIndexRoute
   '/admin/combos/': typeof AdminCombosIndexRoute
   '/admin/configuracion/': typeof AdminConfiguracionIndexRoute
   '/admin/gastos/': typeof AdminGastosIndexRoute
@@ -236,6 +253,7 @@ export interface FileRoutesById {
   '/admin/tipos-vehiculo/': typeof AdminTiposVehiculoIndexRoute
   '/admin/turnos/': typeof AdminTurnosIndexRoute
   '/admin/usuarios/': typeof AdminUsuariosIndexRoute
+  '/jefe-zona/asistencia/': typeof JefeZonaAsistenciaIndexRoute
   '/jefe-zona/caja/': typeof JefeZonaCajaIndexRoute
   '/jefe-zona/inventario/': typeof JefeZonaInventarioIndexRoute
 }
@@ -254,6 +272,7 @@ export interface FileRouteTypes {
     | '/recepcion/'
     | '/services/'
     | '/vigilante/'
+    | '/admin/clientes/'
     | '/admin/combos/'
     | '/admin/configuracion/'
     | '/admin/gastos/'
@@ -265,6 +284,7 @@ export interface FileRouteTypes {
     | '/admin/tipos-vehiculo/'
     | '/admin/turnos/'
     | '/admin/usuarios/'
+    | '/jefe-zona/asistencia/'
     | '/jefe-zona/caja/'
     | '/jefe-zona/inventario/'
   fileRoutesByTo: FileRoutesByTo
@@ -277,6 +297,7 @@ export interface FileRouteTypes {
     | '/recepcion'
     | '/services'
     | '/vigilante'
+    | '/admin/clientes'
     | '/admin/combos'
     | '/admin/configuracion'
     | '/admin/gastos'
@@ -288,6 +309,7 @@ export interface FileRouteTypes {
     | '/admin/tipos-vehiculo'
     | '/admin/turnos'
     | '/admin/usuarios'
+    | '/jefe-zona/asistencia'
     | '/jefe-zona/caja'
     | '/jefe-zona/inventario'
   id:
@@ -304,6 +326,7 @@ export interface FileRouteTypes {
     | '/recepcion/'
     | '/services/'
     | '/vigilante/'
+    | '/admin/clientes/'
     | '/admin/combos/'
     | '/admin/configuracion/'
     | '/admin/gastos/'
@@ -315,6 +338,7 @@ export interface FileRouteTypes {
     | '/admin/tipos-vehiculo/'
     | '/admin/turnos/'
     | '/admin/usuarios/'
+    | '/jefe-zona/asistencia/'
     | '/jefe-zona/caja/'
     | '/jefe-zona/inventario/'
   fileRoutesById: FileRoutesById
@@ -416,6 +440,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VigilanteIndexRouteImport
       parentRoute: typeof VigilanteRouteRoute
     }
+    '/admin/clientes/': {
+      id: '/admin/clientes/'
+      path: '/clientes'
+      fullPath: '/admin/clientes/'
+      preLoaderRoute: typeof AdminClientesIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/admin/combos/': {
       id: '/admin/combos/'
       path: '/combos'
@@ -493,6 +524,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminUsuariosIndexRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/jefe-zona/asistencia/': {
+      id: '/jefe-zona/asistencia/'
+      path: '/asistencia'
+      fullPath: '/jefe-zona/asistencia/'
+      preLoaderRoute: typeof JefeZonaAsistenciaIndexRouteImport
+      parentRoute: typeof JefeZonaRouteRoute
+    }
     '/jefe-zona/caja/': {
       id: '/jefe-zona/caja/'
       path: '/caja'
@@ -512,6 +550,7 @@ declare module '@tanstack/react-router' {
 
 interface AdminRouteRouteChildren {
   AdminIndexRoute: typeof AdminIndexRoute
+  AdminClientesIndexRoute: typeof AdminClientesIndexRoute
   AdminCombosIndexRoute: typeof AdminCombosIndexRoute
   AdminConfiguracionIndexRoute: typeof AdminConfiguracionIndexRoute
   AdminGastosIndexRoute: typeof AdminGastosIndexRoute
@@ -527,6 +566,7 @@ interface AdminRouteRouteChildren {
 
 const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminIndexRoute: AdminIndexRoute,
+  AdminClientesIndexRoute: AdminClientesIndexRoute,
   AdminCombosIndexRoute: AdminCombosIndexRoute,
   AdminConfiguracionIndexRoute: AdminConfiguracionIndexRoute,
   AdminGastosIndexRoute: AdminGastosIndexRoute,
@@ -546,12 +586,14 @@ const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(
 
 interface JefeZonaRouteRouteChildren {
   JefeZonaIndexRoute: typeof JefeZonaIndexRoute
+  JefeZonaAsistenciaIndexRoute: typeof JefeZonaAsistenciaIndexRoute
   JefeZonaCajaIndexRoute: typeof JefeZonaCajaIndexRoute
   JefeZonaInventarioIndexRoute: typeof JefeZonaInventarioIndexRoute
 }
 
 const JefeZonaRouteRouteChildren: JefeZonaRouteRouteChildren = {
   JefeZonaIndexRoute: JefeZonaIndexRoute,
+  JefeZonaAsistenciaIndexRoute: JefeZonaAsistenciaIndexRoute,
   JefeZonaCajaIndexRoute: JefeZonaCajaIndexRoute,
   JefeZonaInventarioIndexRoute: JefeZonaInventarioIndexRoute,
 }

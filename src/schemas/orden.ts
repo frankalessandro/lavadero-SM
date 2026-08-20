@@ -16,6 +16,13 @@ const nullableTimestamp = z
   .nullish()
   .transform((value) => value ?? undefined)
 
+const nullableSegundos = z
+  .number()
+  .int()
+  .nonnegative()
+  .nullish()
+  .transform((value) => value ?? undefined)
+
 export const ordenSchema = z.object({
   id: z.string(),
   consecutivo: z.number().int().positive(),
@@ -37,6 +44,9 @@ export const ordenSchema = z.object({
   creadoEn: z.string(),
   listaEn: nullableTimestamp,
   entregadaEn: nullableTimestamp,
+  // KPIs de M3/M10: duración fijada al momento de cada transición, no recalculada después.
+  tiempoLavadoSegundos: nullableSegundos,
+  tiempoEsperaEntregaSegundos: nullableSegundos,
   liquidacionId: nullableTimestamp,
   motivoAnulacion: nullableTrimmedString,
   anuladaEn: nullableTimestamp,

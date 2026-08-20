@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { RouterProvider } from '@tanstack/react-router'
-import { db } from './lib/db'
-import { resolveAuthContext, type AuthContext } from './lib/auth'
+import { resolveAuthContext, subscribeAuthChanges, type AuthContext } from './lib/auth'
 import { useIdleLogout } from './lib/idleTimer'
 
 type AppRouter = Parameters<typeof RouterProvider>[0]['router']
@@ -12,14 +11,14 @@ export function App({ router }: { router: AppRouter }) {
   useEffect(() => {
     resolveAuthContext().then(setAuth)
 
-    const { data: subscription } = db.auth.onAuthStateChange(() => {
+    const unsubscribe = subscribeAuthChanges(() => {
       resolveAuthContext().then((next) => {
         setAuth(next)
         router.invalidate()
       })
     })
 
-    return () => subscription.subscription.unsubscribe()
+    return unsubscribe
   }, [router])
 
   useIdleLogout(!!auth)

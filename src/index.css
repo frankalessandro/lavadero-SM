@@ -2,6 +2,8 @@
 
 @theme {
   --font-sans: 'Plus Jakarta Sans', system-ui, 'Segoe UI', Roboto, sans-serif;
+  /* Solo para los títulos de marca (Topbar/Sidebar) — utilidad `font-display`, ver src/main.tsx. */
+  --font-display: 'Outfit', 'Plus Jakarta Sans', system-ui, 'Segoe UI', Roboto, sans-serif;
 
   /* Azul-celeste — color de marca del sistema */
   --color-primary-50: #eff8ff;
@@ -210,4 +212,62 @@ code {
 
 .service-list a {
   color: var(--text);
+}
+
+/* Animación "lavado en proceso" (/jefe-zona, src/components/layout/LavadoAnimation.tsx) —
+   definida una sola vez a nivel global en vez de inyectar un <style> completo por tarjeta:
+   con varias tarjetas en pantalla eso duplicaba cientos de líneas de CSS y forzaba recálculos
+   de estilo pesados durante el scroll. El chorro de agua también se pasó de animar
+   `stroke-dashoffset` a animar solo `opacity`: junto con `transform` (que ya usa la manguera),
+   es lo único que el navegador compone en su propio hilo sin repintar cada frame — el dashoffset
+   sí exige repintar, y se atrasaba frente al hilo principal ocupado por el scroll, dando la
+   sensación de que la manguera "se movía sola" respecto al agua. */
+@keyframes lavado-jet-pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+@keyframes lavado-wand-oscillate {
+  0%, 100% { transform: rotate(-8deg) translateY(-10px); }
+  50% { transform: rotate(14deg) translateY(12px); }
+}
+@keyframes lavado-car-wand-oscillate {
+  0%, 100% { transform: rotate(-7deg) translateY(-8px); }
+  50% { transform: rotate(12deg) translateY(10px); }
+}
+
+.lavado-anim-wand {
+  transform-origin: 980px 140px;
+  animation: lavado-wand-oscillate 3.2s infinite ease-in-out;
+  will-change: transform;
+}
+.lavado-carro-wand {
+  transform-origin: 980px 140px;
+  animation: lavado-car-wand-oscillate 3.6s infinite ease-in-out;
+  will-change: transform;
+}
+.lavado-jet,
+.lavado-carro-jet {
+  animation: lavado-jet-pulse 0.9s infinite ease-in-out;
+  will-change: opacity;
+}
+.lavado-jet:nth-child(2),
+.lavado-carro-jet:nth-child(2) { animation-delay: 0.15s; }
+.lavado-jet:nth-child(3),
+.lavado-carro-jet:nth-child(3) { animation-delay: 0.3s; }
+.lavado-jet:nth-child(4),
+.lavado-carro-jet:nth-child(4) { animation-delay: 0.45s; }
+.lavado-jet:nth-child(5),
+.lavado-carro-jet:nth-child(5) { animation-delay: 0.6s; }
+
+.lavado-anim-paused * {
+  animation-play-state: paused !important;
+  opacity: 0.45;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lavado-anim-wand,
+  .lavado-carro-wand,
+  .lavado-jet,
+  .lavado-carro-jet {
+    animation: none !important;
+  }
 }

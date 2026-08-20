@@ -9,7 +9,7 @@ export const Route = createFileRoute('/recepcion')({
 // siempre desde celular/tablet. `fixed inset-0` la saca del contenedor angosto del sitio público.
 function RecepcionLayout() {
   return (
-    <div className="fixed inset-0 z-10 flex flex-col overflow-y-auto bg-neutral-50 text-left">
+    <div className="fixed inset-0 z-10 flex flex-col overflow-x-hidden overflow-y-auto bg-neutral-50 text-left">
       <header className="flex items-center justify-between gap-2.5 border-b border-neutral-200 bg-white px-4 py-4 sm:px-6">
         <div className="flex items-center gap-2.5">
           <span className="flex size-9 items-center justify-center rounded-xl bg-primary-600 text-white shadow-nav-active">

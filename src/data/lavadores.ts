@@ -2,7 +2,7 @@ import { db } from '../lib/db'
 import { lavadorInputSchema, lavadorSchema, type Lavador, type LavadorInput } from '../schemas/lavador'
 
 const LAVADOR_SELECT =
-  'id, nombre, telefono, fechaIngreso:fecha_ingreso, fechaCumpleanos:fecha_cumpleanos, activo, pagoDiario:pago_diario'
+  'id, nombre, telefono, fechaIngreso:fecha_ingreso, fechaCumpleanos:fecha_cumpleanos, activo, pagoDiario:pago_diario, ultimaAsignacion:ultima_asignacion'
 
 export async function fetchLavadores(): Promise<Lavador[]> {
   const { data, error } = await db

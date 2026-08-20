@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from 'react'
 import { createFileRoute, redirect, useNavigate, useRouter } from '@tanstack/react-router'
-import { Lock } from 'lucide-react'
 import { Card } from '../../components/layout/Card'
 import { signIn, ROL_HOME } from '../../lib/auth'
 import { fetchPerfilActual } from '../../data/perfiles'
 import { db } from '../../lib/db'
+import logoMark from '../../assets/logo-mark.png'
 
 export const Route = createFileRoute('/login/')({
   beforeLoad: ({ context }) => {
@@ -55,11 +55,9 @@ function LoginPage() {
     <div className="fixed inset-0 z-10 flex items-center justify-center bg-neutral-50 px-4">
       <Card className="w-full max-w-sm p-6 sm:p-7">
         <div className="mb-6 flex flex-col items-center gap-2 text-center">
-          <span className="flex size-11 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
-            <Lock size={20} strokeWidth={2} />
-          </span>
+          <img src={logoMark} alt="Carwash SM" className="size-16 shrink-0 object-contain" />
           <h1 className="text-lg font-semibold text-neutral-900">Iniciar sesión</h1>
-          <p className="text-sm text-neutral-500">Lavadero — acceso por rol</p>
+          <p className="text-sm text-neutral-500">Carwash SM — acceso por rol</p>
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
