@@ -99,8 +99,10 @@ export function ReciboModal({
 function ReciboRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <span className="text-neutral-500">{label}</span>
-      <span className={`text-right font-medium text-neutral-900 ${mono ? 'font-mono' : ''}`}>{value}</span>
+      <span className="shrink-0 text-neutral-500">{label}</span>
+      <span className={`min-w-0 truncate text-right font-medium text-neutral-900 ${mono ? 'font-mono' : ''}`}>
+        {value}
+      </span>
     </div>
   )
 }

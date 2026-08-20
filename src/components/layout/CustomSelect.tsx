@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ChevronDown, Check } from 'lucide-react'
 
 export interface SelectOption {
@@ -39,6 +39,17 @@ export function CustomSelect({
   const [open, setOpen] = useState(false)
   const selected = options.find((o) => o.value === value)
 
+  // En touch, arrastrar/scrollear la página sobre el backdrop cancela el `click`
+  // sintético (el navegador lo suprime tras un gesto de arrastre), así que el backdrop
+  // invisible se queda cubriendo la pantalla y absorbe el siguiente toque. Cerrar también
+  // al hacer scroll evita que quede "atascado" en tablet/celular.
+  useEffect(() => {
+    if (!open) return
+    const close = () => setOpen(false)
+    window.addEventListener('scroll', close, { passive: true })
+    return () => window.removeEventListener('scroll', close)
+  }, [open])
+
   return (
     <div className="relative">
       <button
@@ -47,7 +58,7 @@ export function CustomSelect({
         onClick={() => setOpen((o) => !o)}
         className={`flex w-full items-center justify-between gap-2 rounded-lg border border-neutral-300 bg-white text-left outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500 disabled:bg-neutral-50 disabled:text-neutral-400 ${SIZE_CLASSNAME[size]}`}
       >
-        <span className={selected ? 'text-neutral-900' : 'text-neutral-400'}>
+        <span className={`min-w-0 truncate ${selected ? 'text-neutral-900' : 'text-neutral-400'}`}>
           {selected?.label ?? placeholder}
         </span>
         <ChevronDown size={16} className={`shrink-0 text-neutral-400 transition-transform ${open ? 'rotate-180' : ''}`} />
@@ -79,8 +90,8 @@ export function CustomSelect({
                       : 'text-neutral-700 hover:bg-neutral-50'
                   }`}
                 >
-                  <span className="flex flex-col gap-0.5">
-                    <span>{option.label}</span>
+                  <span className="flex min-w-0 flex-col gap-0.5">
+                    <span className="truncate">{option.label}</span>
                     {option.description ? (
                       <span className="text-xs font-normal text-neutral-400">{option.description}</span>
                     ) : null}
