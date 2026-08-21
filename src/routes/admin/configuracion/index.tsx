@@ -22,10 +22,26 @@ const BASE_OPCIONES: { value: Configuracion['comisionBase']; label: string; desc
   },
 ]
 
+const PERIODICIDAD_OPCIONES: { value: Configuracion['periodicidadLiquidacion']; label: string; descripcion: string }[] = [
+  {
+    value: 'diaria',
+    label: 'Diaria',
+    descripcion: 'Lo normal: liquidar las comisiones de cada lavador día a día.',
+  },
+  {
+    value: 'semanal',
+    label: 'Semanal',
+    descripcion: 'Acumular y liquidar cada 7 días en vez de a diario.',
+  },
+]
+
 function ConfiguracionPage() {
   const initial = Route.useLoaderData()
   const [comisionPorcentaje, setComisionPorcentaje] = useState(String(initial.comisionLavadorPorcentaje * 100))
   const [comisionBase, setComisionBase] = useState<Configuracion['comisionBase']>(initial.comisionBase)
+  const [periodicidadLiquidacion, setPeriodicidadLiquidacion] = useState<Configuracion['periodicidadLiquidacion']>(
+    initial.periodicidadLiquidacion,
+  )
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -40,6 +56,7 @@ function ConfiguracionPage() {
     const parsed = configuracionSchema.safeParse({
       comisionLavadorPorcentaje: numero / 100,
       comisionBase,
+      periodicidadLiquidacion,
     })
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Datos inválidos')
@@ -107,6 +124,40 @@ function ConfiguracionPage() {
                   <span
                     className={`block text-sm font-medium ${
                       comisionBase === opcion.value ? 'text-primary-700' : 'text-neutral-900'
+                    }`}
+                  >
+                    {opcion.label}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-neutral-500">{opcion.descripcion}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2 text-left text-sm">
+            <span className="font-medium text-neutral-700">Periodicidad de liquidación</span>
+            <p className="text-xs text-neutral-500">
+              Rango que propone por defecto "Generar liquidación" en Liquidaciones — liquidar sigue siendo manual y
+              opcional, esto solo fija cuál es lo normal.
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              {PERIODICIDAD_OPCIONES.map((opcion) => (
+                <button
+                  key={opcion.value}
+                  type="button"
+                  onClick={() => {
+                    setPeriodicidadLiquidacion(opcion.value)
+                    setSaved(false)
+                  }}
+                  className={`flex-1 rounded-lg border px-4 py-3 text-left transition-colors ${
+                    periodicidadLiquidacion === opcion.value
+                      ? 'border-primary-500 bg-primary-50'
+                      : 'border-neutral-200 hover:border-neutral-300'
+                  }`}
+                >
+                  <span
+                    className={`block text-sm font-medium ${
+                      periodicidadLiquidacion === opcion.value ? 'text-primary-700' : 'text-neutral-900'
                     }`}
                   >
                     {opcion.label}

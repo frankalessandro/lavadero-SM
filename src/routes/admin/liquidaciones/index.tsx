@@ -8,9 +8,11 @@ import {
   marcarLiquidacionPagada,
 } from '../../../data/liquidaciones'
 import { fetchLavadores } from '../../../data/lavadores'
+import { fetchConfiguracion } from '../../../data/configuracion'
 import type { ComisionPendiente } from '../../../data/liquidaciones'
 import type { Liquidacion } from '../../../schemas/liquidacion'
 import type { Lavador } from '../../../schemas/lavador'
+import type { Configuracion } from '../../../schemas/configuracion'
 import { Card } from '../../../components/layout/Card'
 import { ConfirmModal } from '../../../components/layout/ConfirmModal'
 import { BarChart } from '../../../components/layout/BarChart'
@@ -24,12 +26,20 @@ function hoyISO(offsetDias = 0): string {
 }
 
 async function loadData() {
-  const [pendientes, historico, lavadores] = await Promise.all([
+  const [pendientes, historico, lavadores, configuracion] = await Promise.all([
     fetchComisionesPendientes(),
     fetchLiquidaciones(),
     fetchLavadores(),
+    fetchConfiguracion(),
   ])
-  return { pendientes, historico, lavadores }
+  return { pendientes, historico, lavadores, configuracion }
+}
+
+// Rango que propone "Generar liquidación" según la periodicidad normal configurada (regla de
+// negocio 4, parametrizable) — diaria = solo hoy, semanal = últimos 7 días (comportamiento
+// previo). Generar liquidación sigue siendo manual/opcional, esto solo fija el default.
+function rangoPorPeriodicidad(periodicidad: Configuracion['periodicidadLiquidacion']): [string, string] {
+  return periodicidad === 'diaria' ? [hoyISO(), hoyISO()] : [hoyISO(-7), hoyISO()]
 }
 
 export const Route = createFileRoute('/admin/liquidaciones/')({
@@ -43,6 +53,8 @@ function LiquidacionesPage() {
   const [pendientes, setPendientes] = useState(initial.pendientes)
   const [historico, setHistorico] = useState(initial.historico)
   const [lavadores, setLavadores] = useState(initial.lavadores)
+  const [configuracion, setConfiguracion] = useState(initial.configuracion)
+  const periodicidadLabel = configuracion.periodicidadLiquidacion === 'diaria' ? 'diaria' : 'semanal'
   const [generando, setGenerando] = useState<string | null>(null)
   const [pagando, setPagando] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -57,6 +69,7 @@ function LiquidacionesPage() {
     setPendientes(data.pendientes)
     setHistorico(data.historico)
     setLavadores(data.lavadores)
+    setConfiguracion(data.configuracion)
     router.invalidate()
   }
 
@@ -64,7 +77,8 @@ function LiquidacionesPage() {
     setError(null)
     setGenerando(comision.lavadorId)
     try {
-      await generarLiquidacion(comision.lavadorId, hoyISO(-7), hoyISO())
+      const [periodoInicio, periodoFin] = rangoPorPeriodicidad(configuracion.periodicidadLiquidacion)
+      await generarLiquidacion(comision.lavadorId, periodoInicio, periodoFin)
       await refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo generar la liquidación')
@@ -88,7 +102,8 @@ function LiquidacionesPage() {
       <div>
         <h2 className="text-base font-semibold text-neutral-900">Liquidaciones</h2>
         <p className="text-sm text-neutral-500">
-          Liquidación semanal sobre el acumulado, sin descuentos al lavador (regla de negocio 4).
+          Liquidación {periodicidadLabel} sobre el acumulado, sin descuentos al lavador (regla de negocio 4) —
+          periodicidad configurable en <span className="font-medium text-neutral-700">Configuración</span>.
         </p>
       </div>
 
@@ -138,7 +153,7 @@ function LiquidacionesPage() {
                   onClick={() => setConfirmandoGenerar(comision)}
                   className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {generando === comision.lavadorId ? 'Generando…' : 'Generar liquidación semanal'}
+                  {generando === comision.lavadorId ? 'Generando…' : `Generar liquidación ${periodicidadLabel}`}
                 </button>
               </Card>
             ))}
@@ -151,7 +166,7 @@ function LiquidacionesPage() {
             {lavadoresPagoDiario.map((l) => l.nombre).join(', ')}{' '}
             {lavadoresPagoDiario.length === 1 ? 'tiene' : 'tienen'} activada la excepción de pago
             diario (regla de negocio 4) — no {lavadoresPagoDiario.length === 1 ? 'entra' : 'entran'} en
-            este flujo de liquidación semanal.
+            este flujo de liquidación {periodicidadLabel}.
           </p>
         ) : null}
       </section>
@@ -193,8 +208,10 @@ function LiquidacionesPage() {
 
       {confirmandoGenerar ? (
         <ConfirmModal
-          title="Generar liquidación semanal"
-          message={`¿Generar la liquidación de los últimos 7 días para ${confirmandoGenerar.lavadorNombre} por ${COP.format(confirmandoGenerar.montoPendiente)}?`}
+          title={`Generar liquidación ${periodicidadLabel}`}
+          message={`¿Generar la liquidación ${
+            configuracion.periodicidadLiquidacion === 'diaria' ? 'de hoy' : 'de los últimos 7 días'
+          } para ${confirmandoGenerar.lavadorNombre} por ${COP.format(confirmandoGenerar.montoPendiente)}?`}
           confirmLabel="Generar liquidación"
           variant="primary"
           onConfirm={async () => {

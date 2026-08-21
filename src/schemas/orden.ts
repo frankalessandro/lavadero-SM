@@ -71,6 +71,14 @@ export const ordenInputSchema = z.object({
   observaciones: z.string().trim().optional(),
 })
 
+// Edición de datos de contacto del cliente mientras el vehículo sigue en_proceso o listo (antes
+// de cobrar/entregar) — placa/combo/tipo no se tocan aquí, esos definen el servicio ya registrado.
+export const clienteInfoInputSchema = z.object({
+  clienteNombre: z.string().trim().min(1, 'El nombre del cliente es obligatorio'),
+  clienteTelefono: z.string().trim().optional(),
+  clienteCorreo: z.string().trim().email('Correo inválido').optional(),
+})
+
 // Cobro + entrega (M3: no se entrega sin haberse cobrado).
 export const cobroInputSchema = z
   .object({
@@ -85,6 +93,7 @@ export const cobroInputSchema = z
 export type Orden = z.infer<typeof ordenSchema>
 export type OrdenInput = z.infer<typeof ordenInputSchema>
 export type CobroInput = z.infer<typeof cobroInputSchema>
+export type ClienteInfoInput = z.infer<typeof clienteInfoInputSchema>
 export type AnularOrdenInput = z.infer<typeof anularOrdenInputSchema>
 export type MetodoPago = z.infer<typeof metodoPagoSchema>
 export type EstadoOrden = z.infer<typeof estadoOrdenSchema>

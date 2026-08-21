@@ -21,7 +21,7 @@ const UN_DIA_MS = 24 * 60 * 60 * 1000
 // el patrón se repite exacto cada 4 semanas, así que es 100% determinístico desde la fecha ancla
 // (semana 1 del cronograma original) — no depende de qué tan lejos se haya generado antes.
 const EPOCA_LUNES_UTC = Date.UTC(2026, 7, 17) // 17 ago 2026 (lunes), semana 1 del cronograma
-const ORDEN_BASE_NOMBRES = ['Luis', 'Moises', 'Ivan', 'Javier'] // lunes, martes, miércoles, jueves de la semana 1
+const CANTIDAD_ORDEN_BASE = 4 // lunes, martes, miércoles, jueves de la semana 1
 
 function toFechaISO(utcMs: number): string {
   return new Date(utcMs).toISOString().slice(0, 10)
@@ -34,21 +34,30 @@ function posicionQueDescansa(utcMs: number): number | undefined {
   const diaSemana = diffDias % 7 // 0 = lunes ... 6 = domingo (la fecha ancla es un lunes)
   if (diaSemana > 3) return undefined
   const semanaIndex = Math.floor(diffDias / 7)
-  const rotacion = semanaIndex % ORDEN_BASE_NOMBRES.length
-  return (diaSemana + ORDEN_BASE_NOMBRES.length - rotacion) % ORDEN_BASE_NOMBRES.length
+  const rotacion = semanaIndex % CANTIDAD_ORDEN_BASE
+  return (diaSemana + CANTIDAD_ORDEN_BASE - rotacion) % CANTIDAD_ORDEN_BASE
 }
 
+// La posición 0-3 vive en `lavadores.posicion_cronograma_base` (migración 0020), asignada una
+// sola vez al lavador por `id` — renombrar o inactivar ya no rompe la búsqueda, a diferencia de
+// la versión anterior que resolvía por nombre exacto en cada visita a la pantalla.
 async function resolverIdsOrdenBase(): Promise<string[]> {
-  const { data, error } = await db.from('lavadores').select('id, nombre').in('nombre', ORDEN_BASE_NOMBRES)
+  const { data, error } = await db
+    .from('lavadores')
+    .select('id, posicionCronogramaBase:posicion_cronograma_base')
+    .not('posicion_cronograma_base', 'is', null)
+    .order('posicion_cronograma_base')
   if (error) throw new Error(error.message)
-  const porNombre = new Map((data as { id: string; nombre: string }[]).map((l) => [l.nombre, l.id]))
-  const ids = ORDEN_BASE_NOMBRES.map((nombre) => porNombre.get(nombre))
-  if (ids.some((id) => !id)) {
+
+  const filas = data as { id: string; posicionCronogramaBase: number }[]
+  if (filas.length !== CANTIDAD_ORDEN_BASE) {
     throw new Error(
-      'No se encontraron los 4 lavadores del cronograma base (Luis, Moises, Ivan, Javier) en /admin/lavadores — revisa que no hayan cambiado de nombre.',
+      `El cronograma base necesita ${CANTIDAD_ORDEN_BASE} lavadores con posición asignada y hay ${filas.length} — revisa "posicion_cronograma_base" en /admin/lavadores.`,
     )
   }
-  return ids as string[]
+  const ids = new Array<string>(CANTIDAD_ORDEN_BASE)
+  for (const fila of filas) ids[fila.posicionCronogramaBase] = fila.id
+  return ids
 }
 
 export async function fetchDiasDescanso(desdeISO: string, hastaISO: string): Promise<DiaDescanso[]> {

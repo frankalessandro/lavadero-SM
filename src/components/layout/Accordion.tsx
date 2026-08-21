@@ -1,5 +1,5 @@
 import { ChevronDown, Check } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 
 interface AccordionSectionProps {
   step: number
@@ -14,12 +14,19 @@ interface AccordionSectionProps {
 // Acordeón propio (no un <details> nativo): numera los pasos, muestra un resumen
 // cuando está cerrado y anima el alto con la técnica grid-rows (sin medir con JS).
 export function AccordionSection({ step, title, summary, isOpen, isComplete, onToggle, children }: AccordionSectionProps) {
+  // `overflow-hidden` solo debe estar activo mientras la sección está cerrada o animando
+  // (lo necesita la técnica grid-rows para colapsar a 0). Una vez abierta y asentada, se
+  // libera a `overflow-visible` para que paneles flotantes internos (CustomSelect) puedan
+  // desbordar hacia la sección siguiente en vez de quedar recortados.
+  const [settledOpen, setSettledOpen] = useState(isOpen)
+  const showOverflow = isOpen && settledOpen
+
   return (
-    <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-card">
+    <div className={`rounded-2xl border border-neutral-200 bg-white shadow-card ${showOverflow ? '' : 'overflow-hidden'}`}>
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-center gap-3 px-4 py-4 text-left transition-colors hover:bg-neutral-50"
+        className="flex w-full items-center gap-3 rounded-t-2xl px-4 py-4 text-left transition-colors hover:bg-neutral-50"
       >
         <span
           className={`flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-colors ${
@@ -39,8 +46,11 @@ export function AccordionSection({ step, title, summary, isOpen, isComplete, onT
         <ChevronDown size={18} className={`shrink-0 text-neutral-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
-      <div className={`grid transition-[grid-template-rows] duration-300 ease-out ${isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
-        <div className="overflow-hidden">
+      <div
+        className={`grid transition-[grid-template-rows] duration-300 ease-out ${isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+        onTransitionEnd={() => setSettledOpen(isOpen)}
+      >
+        <div className={showOverflow ? 'overflow-visible' : 'overflow-hidden'}>
           <div className="flex flex-col gap-4 border-t border-neutral-100 px-4 py-4">{children}</div>
         </div>
       </div>
