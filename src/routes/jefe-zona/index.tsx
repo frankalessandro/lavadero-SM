@@ -20,6 +20,7 @@ import {
   MessageCircle,
   Motorbike,
   UserRound,
+  Pencil,
 } from 'lucide-react'
 import {
   fetchOrdenesHoy,
@@ -27,12 +28,14 @@ import {
   marcarListo,
   cobrarYEntregarOrden,
   reasignarLavador,
+  editarInfoCliente,
 } from '../../data/ordenes'
 import { fetchLavadores } from '../../data/lavadores'
+import { fetchAsistenciasDelDia, fetchDiasDescanso } from '../../data/asistenciaLavadores'
 import { fetchCombos } from '../../data/combos'
 import { fetchTiposVehiculo } from '../../data/tiposVehiculo'
 import { fetchTurnoAbierto } from '../../data/turnos'
-import { cobroInputSchema, type MetodoPago, type Orden } from '../../schemas/orden'
+import { clienteInfoInputSchema, cobroInputSchema, type MetodoPago, type Orden } from '../../schemas/orden'
 import { StatCard } from '../../components/layout/StatCard'
 import { Card } from '../../components/layout/Card'
 import { CustomSelect } from '../../components/layout/CustomSelect'
@@ -42,16 +45,24 @@ import { ContactoModal } from '../../components/layout/ContactoModal'
 import { LavadoAnimation } from '../../components/layout/LavadoAnimation'
 import { BarChart } from '../../components/layout/BarChart'
 
+function hoyISO(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
 async function loadDashboard() {
-  const [ordenesHoy, entregadasHoy, lavadores, combos, tiposVehiculo, turno] = await Promise.all([
-    fetchOrdenesHoy(),
-    fetchOrdenesEntregadasHoy(),
-    fetchLavadores(),
-    fetchCombos(),
-    fetchTiposVehiculo(),
-    fetchTurnoAbierto('jefe_zona'),
-  ])
-  return { ordenesHoy, entregadasHoy, lavadores, combos, tiposVehiculo, turno }
+  const hoy = hoyISO()
+  const [ordenesHoy, entregadasHoy, lavadores, combos, tiposVehiculo, turno, asistenciasHoy, descansosHoy] =
+    await Promise.all([
+      fetchOrdenesHoy(),
+      fetchOrdenesEntregadasHoy(),
+      fetchLavadores(),
+      fetchCombos(),
+      fetchTiposVehiculo(),
+      fetchTurnoAbierto('jefe_zona'),
+      fetchAsistenciasDelDia(hoy),
+      fetchDiasDescanso(hoy, hoy),
+    ])
+  return { ordenesHoy, entregadasHoy, lavadores, combos, tiposVehiculo, turno, asistenciasHoy, descansosHoy }
 }
 
 export const Route = createFileRoute('/jefe-zona/')({
@@ -90,11 +101,14 @@ function JefeZonaDashboard() {
   const [ordenesHoy, setOrdenesHoy] = useState(data.ordenesHoy)
   const [entregadasHoy, setEntregadasHoy] = useState(data.entregadasHoy)
   const [lavadores] = useState(data.lavadores)
+  const [asistenciasHoy] = useState(data.asistenciasHoy)
+  const [descansosHoy] = useState(data.descansosHoy)
   const [combos] = useState(data.combos)
   const [tiposVehiculo] = useState(data.tiposVehiculo)
   const [turno, setTurno] = useState(data.turno)
   const [cobrando, setCobrando] = useState<Orden | null>(null)
   const [reasignando, setReasignando] = useState<Orden | null>(null)
+  const [editandoCliente, setEditandoCliente] = useState<Orden | null>(null)
   const [finalizando, setFinalizando] = useState<Orden | null>(null)
   const [recibo, setRecibo] = useState<ReciboData | null>(null)
   const [contactando, setContactando] = useState<Orden | null>(null)
@@ -146,6 +160,16 @@ function JefeZonaDashboard() {
       if (!b.ultimaAsignacion) return 1
       return new Date(a.ultimaAsignacion).getTime() - new Date(b.ultimaAsignacion).getTime()
     })
+  const presentesHoyIds = new Set(asistenciasHoy.map((a) => a.lavadorId))
+  const descansaHoyId = descansosHoy[0]?.lavadorId
+  const ocupadosIds = new Set(enProcesoLista.map((o) => o.lavadorId))
+  // Mismo criterio de elegibilidad que suggestNextLavador (M9 + regla de negocio 9): activo,
+  // presente hoy, sin descanso asignado hoy, y no ocupado ahora mismo (con una orden en_proceso
+  // a su cargo). No se ocultan los demás de la lista — se marcan, para que quede claro por qué se
+  // saltan en vez de simplemente desaparecer.
+  const proximoEnRotacion = ordenRotacion.find(
+    (l) => presentesHoyIds.has(l.id) && l.id !== descansaHoyId && !ocupadosIds.has(l.id),
+  )
   // Solo lo cobrado hoy — un vehículo registrado hoy pero no entregado no cuenta como plata en caja.
   const cajaDelDia = entregadasHoy.reduce((total, o) => total + o.precio, 0)
 
@@ -270,23 +294,33 @@ function JefeZonaDashboard() {
             </span>
             <div>
               <p className="text-sm font-semibold text-neutral-900">
-                {ordenRotacion[0] ? `Próximo en rotación: ${ordenRotacion[0].nombre}` : 'Sin lavadores activos'}
+                {proximoEnRotacion ? `Próximo en rotación: ${proximoEnRotacion.nombre}` : 'Nadie disponible ahora mismo'}
               </p>
-              <p className="text-xs text-neutral-500">Por orden de llegada — mide vehículos atendidos, no ingresos.</p>
+              <p className="text-xs text-neutral-500">
+                Por orden de llegada, entre quienes marcaron asistencia hoy y no descansan (M9).
+              </p>
             </div>
           </div>
           {ordenRotacion.length > 0 ? (
             <ol className="flex flex-wrap gap-1.5">
-              {ordenRotacion.map((lavador, i) => (
-                <li
-                  key={lavador.id}
-                  className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${
-                    i === 0 ? 'bg-primary-50 text-primary-700' : 'bg-neutral-50 text-neutral-500'
-                  }`}
-                >
-                  <span className="font-semibold">{i + 1}.</span> {lavador.nombre}
-                </li>
-              ))}
+              {ordenRotacion.map((lavador) => {
+                const descansaHoy = lavador.id === descansaHoyId
+                const presente = presentesHoyIds.has(lavador.id)
+                const ocupado = ocupadosIds.has(lavador.id)
+                const esProximo = lavador.id === proximoEnRotacion?.id
+                const etiqueta = descansaHoy ? 'descansa hoy' : !presente ? 'sin llegada' : ocupado ? 'ocupado' : undefined
+                return (
+                  <li
+                    key={lavador.id}
+                    className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${
+                      esProximo ? 'bg-primary-50 text-primary-700' : etiqueta ? 'bg-neutral-50 text-neutral-400' : 'bg-neutral-50 text-neutral-500'
+                    }`}
+                  >
+                    {lavador.nombre}
+                    {etiqueta ? <span className="italic">({etiqueta})</span> : null}
+                  </li>
+                )
+              })}
             </ol>
           ) : null}
         </Card>
@@ -381,6 +415,7 @@ function JefeZonaDashboard() {
                 onFinalizar={() => setFinalizando(orden)}
                 onReasignar={() => setReasignando(orden)}
                 onContactar={() => setContactando(orden)}
+                onEditarCliente={() => setEditandoCliente(orden)}
               />
             ))}
             {enProcesoLista.length === 0 ? (
@@ -406,6 +441,7 @@ function JefeZonaDashboard() {
                 tiempoTexto={tiempoTranscurrido(orden.listaEn ?? orden.creadoEn, ahora)}
                 onCobrar={() => setCobrando(orden)}
                 onContactar={() => setContactando(orden)}
+                onEditarCliente={() => setEditandoCliente(orden)}
               />
             ))}
             {listoLista.length === 0 ? (
@@ -430,6 +466,17 @@ function JefeZonaDashboard() {
           onClose={() => setReasignando(null)}
           onReasignado={async () => {
             setReasignando(null)
+            await refresh()
+          }}
+        />
+      ) : null}
+
+      {editandoCliente ? (
+        <EditarClienteModal
+          orden={editandoCliente}
+          onClose={() => setEditandoCliente(null)}
+          onGuardado={async () => {
+            setEditandoCliente(null)
             await refresh()
           }}
         />
@@ -480,6 +527,7 @@ function OrdenCard({
   onCobrar,
   onReasignar,
   onContactar,
+  onEditarCliente,
 }: {
   orden: Orden
   comboNombre: string
@@ -491,6 +539,7 @@ function OrdenCard({
   onCobrar?: () => void
   onReasignar?: () => void
   onContactar?: () => void
+  onEditarCliente?: () => void
 }) {
   const enProceso = orden.estado === 'en_proceso'
   const VehiculoIcon = esMoto ? Motorbike : Car
@@ -554,6 +603,16 @@ function OrdenCard({
             >
               <Repeat size={14} className="transition-transform group-hover/btn:rotate-180" />
               Reasignar
+            </button>
+          ) : null}
+          {onEditarCliente ? (
+            <button
+              type="button"
+              onClick={onEditarCliente}
+              className="group/btn flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-primary-50 hover:text-primary-700"
+            >
+              <Pencil size={14} />
+              Editar cliente
             </button>
           ) : null}
         </div>
@@ -651,6 +710,100 @@ function ReasignarModal({
           {saving ? 'Guardando…' : 'Confirmar reasignación'}
         </button>
       </div>
+    </div>
+  )
+}
+
+function EditarClienteModal({
+  orden,
+  onClose,
+  onGuardado,
+}: {
+  orden: Orden
+  onClose: () => void
+  onGuardado: () => Promise<void>
+}) {
+  const [clienteNombre, setClienteNombre] = useState(orden.clienteNombre)
+  const [clienteTelefono, setClienteTelefono] = useState(orden.clienteTelefono ?? '')
+  const [clienteCorreo, setClienteCorreo] = useState(orden.clienteCorreo ?? '')
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault()
+    const parsed = clienteInfoInputSchema.safeParse({
+      clienteNombre,
+      clienteTelefono: clienteTelefono || undefined,
+      clienteCorreo: clienteCorreo || undefined,
+    })
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.message ?? 'Datos inválidos')
+      return
+    }
+    setError(null)
+    setSaving(true)
+    try {
+      await editarInfoCliente(orden.id, parsed.data)
+      await onGuardado()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo guardar el cambio')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-20 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-[2px]">
+      <form onSubmit={handleSubmit} className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-card-hover">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-base font-semibold text-neutral-900">Editar datos del cliente</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <p className="mb-4 text-xs text-neutral-500">
+          {orden.placa} · #{orden.consecutivo}
+        </p>
+        <div className="flex flex-col gap-3">
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="font-medium text-neutral-700">Nombre</span>
+            <input
+              value={clienteNombre}
+              onChange={(event) => setClienteNombre(event.target.value)}
+              className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="font-medium text-neutral-700">Teléfono</span>
+            <input
+              value={clienteTelefono}
+              onChange={(event) => setClienteTelefono(event.target.value)}
+              className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="font-medium text-neutral-700">Correo</span>
+            <input
+              type="email"
+              value={clienteCorreo}
+              onChange={(event) => setClienteCorreo(event.target.value)}
+              className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+            />
+          </label>
+        </div>
+        {error ? <p className="mt-3 text-xs text-danger-600">{error}</p> : null}
+        <button
+          type="submit"
+          disabled={saving}
+          className="mt-5 w-full rounded-lg bg-primary-600 py-2.5 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
+        >
+          {saving ? 'Guardando…' : 'Guardar cambios'}
+        </button>
+      </form>
     </div>
   )
 }

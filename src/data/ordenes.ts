@@ -1,10 +1,12 @@
 import { db } from '../lib/db'
 import {
   anularOrdenInputSchema,
+  clienteInfoInputSchema,
   cobroInputSchema,
   ordenInputSchema,
   ordenSchema,
   type AnularOrdenInput,
+  type ClienteInfoInput,
   type CobroInput,
   type Orden,
   type OrdenInput,
@@ -188,6 +190,26 @@ export async function reasignarLavador(id: string, nuevoLavadorId: string): Prom
     .single()
   if (error) throw new Error(error.message)
   await registrarAsignacion(nuevoLavadorId)
+  return ordenSchema.parse(data)
+}
+
+// Corrige un dato de contacto mal tomado en recepción (nombre/teléfono/correo) mientras el
+// vehículo sigue en_proceso o listo — placa/combo/tipo/lavador no se tocan aquí, esos definen
+// el servicio ya registrado y cobrado. No hay guarda de estado a nivel de base de datos (mismo
+// criterio que reasignarLavador): la UI solo ofrece la acción en esas dos columnas del tablero.
+export async function editarInfoCliente(id: string, input: ClienteInfoInput): Promise<Orden> {
+  const parsed = clienteInfoInputSchema.parse(input)
+  const { data, error } = await db
+    .from('ordenes')
+    .update({
+      cliente_nombre: parsed.clienteNombre,
+      cliente_telefono: parsed.clienteTelefono ?? null,
+      cliente_correo: parsed.clienteCorreo ?? null,
+    })
+    .eq('id', id)
+    .select(ORDEN_SELECT)
+    .single()
+  if (error) throw new Error(error.message)
   return ordenSchema.parse(data)
 }
 

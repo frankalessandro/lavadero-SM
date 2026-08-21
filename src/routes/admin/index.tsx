@@ -117,9 +117,15 @@ function AdminDashboard() {
           icon={TrendingUp}
         />
         <StatCard
-          label="Comisiones pendientes de pago"
+          label="Comisiones de lavadores (hoy)"
+          value={COP.format(comisionesHoy)}
+          hint="Generadas hoy, aún sin liquidar"
+          icon={HandCoins}
+        />
+        <StatCard
+          label="Comisiones pendientes (total)"
           value={COP.format(totalComisionesPendientes)}
-          hint="Excluye lavadores con pago diario"
+          hint="Acumulado sin liquidar, excluye pago diario"
           icon={HandCoins}
         />
         <StatCard label="Anulaciones de hoy" value={String(anuladasHoy.length)} icon={Ban} />
