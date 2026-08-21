@@ -149,16 +149,23 @@ function JefeZonaDashboard() {
   const lavadoresActivos = lavadores.filter((l) => l.activo).length
 
   // Misma regla de la cola de rotación que usa `suggestNextLavador` en /recepcion (regla de
-  // negocio 9): NULL primero (nunca asignado), luego el que lleva más tiempo sin lavar. Acá se
-  // ordena en el cliente sobre la misma lista que ya trae el loader — no es una fuente de verdad
-  // aparte, es la misma cola, solo que mostrando el orden completo en vez de únicamente el primero.
+  // negocio 9): NULL primero (nunca asignado), luego el que lleva más tiempo sin lavar; si
+  // empatan (típicamente todos en NULL al abrir un día nuevo, antes del primer lavado), la
+  // primera oleada del día se desempata por `hora_entrada` real de la asistencia (confirmado con
+  // Alessandro). Acá se ordena en el cliente sobre la misma lista que ya trae el loader — no es
+  // una fuente de verdad aparte, es la misma cola, solo que mostrando el orden completo en vez de
+  // únicamente el primero.
+  const horaEntradaPorId = new Map(asistenciasHoy.map((a) => [a.lavadorId, a.horaEntrada]))
   const ordenRotacion = [...lavadores]
     .filter((l) => l.activo)
     .sort((a, b) => {
-      if (!a.ultimaAsignacion && !b.ultimaAsignacion) return 0
-      if (!a.ultimaAsignacion) return -1
-      if (!b.ultimaAsignacion) return 1
-      return new Date(a.ultimaAsignacion).getTime() - new Date(b.ultimaAsignacion).getTime()
+      const asigA = a.ultimaAsignacion ? new Date(a.ultimaAsignacion).getTime() : -Infinity
+      const asigB = b.ultimaAsignacion ? new Date(b.ultimaAsignacion).getTime() : -Infinity
+      if (asigA !== asigB) return asigA - asigB
+      const horaA = horaEntradaPorId.get(a.id)
+      const horaB = horaEntradaPorId.get(b.id)
+      if (!horaA || !horaB) return 0
+      return new Date(horaA).getTime() - new Date(horaB).getTime()
     })
   const presentesHoyIds = new Set(asistenciasHoy.map((a) => a.lavadorId))
   const descansaHoyId = descansosHoy[0]?.lavadorId

@@ -68,24 +68,39 @@ export async function setLavadorActivo(id: string, activo: boolean): Promise<Lav
 // a su cargo — regla 9: si está ocupado la cola avanza y él conserva su posición para la
 // siguiente ronda, lo cual sale gratis de no tocar su `ultima_asignacion` mientras no aparece
 // en este cálculo). Al asignar, se actualiza su marca de tiempo y pasa al final de la cola.
+// Desempate por `hora_entrada` (confirmado con Alessandro): cuando `ultima_asignacion` empata
+// —típicamente todos en NULL al abrir un día nuevo, antes del primer lavado— la primera oleada
+// del día se ordena por orden de llegada real (asistencia), no alfabético ni arbitrario.
 export async function suggestNextLavador(): Promise<string | undefined> {
   const hoy = new Date().toISOString().slice(0, 10)
   const [asistenciasHoy, descansosHoy, { data: ocupados, error: errorOcupados }, { data, error }] = await Promise.all([
     fetchAsistenciasDelDia(hoy),
     fetchDiasDescanso(hoy, hoy),
     db.from('ordenes').select('lavador_id').eq('estado', 'en_proceso'),
-    db.from('lavadores').select('id').eq('activo', true).order('ultima_asignacion', { nullsFirst: true }),
+    db.from('lavadores').select('id, ultimaAsignacion:ultima_asignacion').eq('activo', true),
   ])
   if (errorOcupados) throw new Error(errorOcupados.message)
   if (error) throw new Error(error.message)
 
   const presentesIds = new Set(asistenciasHoy.map((a) => a.lavadorId))
+  const horaEntradaPorId = new Map(asistenciasHoy.map((a) => [a.lavadorId, a.horaEntrada]))
   const descansaHoyId = descansosHoy[0]?.lavadorId
   const ocupadosIds = new Set((ocupados as { lavador_id: string }[]).map((o) => o.lavador_id))
 
-  return (data as { id: string }[]).find(
+  const elegibles = (data as { id: string; ultimaAsignacion: string | null }[]).filter(
     (l) => presentesIds.has(l.id) && l.id !== descansaHoyId && !ocupadosIds.has(l.id),
-  )?.id
+  )
+  elegibles.sort((a, b) => {
+    const asigA = a.ultimaAsignacion ? new Date(a.ultimaAsignacion).getTime() : -Infinity
+    const asigB = b.ultimaAsignacion ? new Date(b.ultimaAsignacion).getTime() : -Infinity
+    if (asigA !== asigB) return asigA - asigB
+    const horaA = horaEntradaPorId.get(a.id)
+    const horaB = horaEntradaPorId.get(b.id)
+    if (!horaA || !horaB) return 0
+    return new Date(horaA).getTime() - new Date(horaB).getTime()
+  })
+
+  return elegibles[0]?.id
 }
 
 export async function registrarAsignacion(lavadorId: string): Promise<void> {
