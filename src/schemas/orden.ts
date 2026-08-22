@@ -91,8 +91,12 @@ export const ordenInputSchema = z
   })
 
 // Edición de datos de contacto del cliente mientras el vehículo sigue en_proceso o listo (antes
-// de cobrar/entregar) — placa/combo/tipo no se tocan aquí, esos definen el servicio ya registrado.
+// de cobrar/entregar) — combo/tipo/lavador no se tocan aquí, esos definen el servicio ya
+// registrado. La placa sí es editable acá porque es un dato de captura en recepción que se
+// puede haber tomado mal (typo, confusión con otro vehículo) y hay que poder corregirlo antes
+// de cobrar/entregar.
 export const clienteInfoInputSchema = z.object({
+  placa: z.string().trim().min(1, 'La placa es obligatoria').toUpperCase(),
   clienteNombre: z.string().trim().min(1, 'El nombre del cliente es obligatorio'),
   clienteTelefono: z.string().trim().optional(),
   clienteCorreo: z.string().trim().email('Correo inválido').optional(),

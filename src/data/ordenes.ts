@@ -302,15 +302,16 @@ export async function reasignarLavador(id: string, nuevoLavadorId: string): Prom
   return mapOrdenRow(data as unknown as Record<string, unknown>)
 }
 
-// Corrige un dato de contacto mal tomado en recepción (nombre/teléfono/correo) mientras el
-// vehículo sigue en_proceso o listo — placa/combo/tipo/lavador no se tocan aquí, esos definen
-// el servicio ya registrado y cobrado. No hay guarda de estado a nivel de base de datos (mismo
-// criterio que reasignarLavador): la UI solo ofrece la acción en esas dos columnas del tablero.
+// Corrige un dato de contacto o la placa mal tomados en recepción mientras el vehículo sigue
+// en_proceso o listo — combo/tipo/lavador no se tocan aquí, esos definen el servicio ya
+// registrado y cobrado. No hay guarda de estado a nivel de base de datos (mismo criterio que
+// reasignarLavador): la UI solo ofrece la acción en esas dos columnas del tablero.
 export async function editarInfoCliente(id: string, input: ClienteInfoInput): Promise<Orden> {
   const parsed = clienteInfoInputSchema.parse(input)
   const { data, error } = await db
     .from('ordenes')
     .update({
+      placa: parsed.placa,
       cliente_nombre: parsed.clienteNombre,
       cliente_telefono: parsed.clienteTelefono ?? null,
       cliente_correo: parsed.clienteCorreo ?? null,

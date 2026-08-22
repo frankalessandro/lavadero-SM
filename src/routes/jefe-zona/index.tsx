@@ -43,6 +43,7 @@ import { Card } from '../../components/layout/Card'
 import { CustomSelect } from '../../components/layout/CustomSelect'
 import { ReciboModal, type ReciboData } from '../../components/layout/ReciboModal'
 import { ConfirmModal } from '../../components/layout/ConfirmModal'
+import { CurrencyInput } from '../../components/layout/CurrencyInput'
 import { ContactoModal } from '../../components/layout/ContactoModal'
 import { LavadoAnimation } from '../../components/layout/LavadoAnimation'
 import { BarChart } from '../../components/layout/BarChart'
@@ -513,6 +514,7 @@ function JefeZonaDashboard() {
                   esMoto={tipoVehiculo(orden.tipoVehiculoId)?.categoria === 'moto'}
                   tiempoTexto={tiempoTranscurrido(orden.listaEn ?? orden.creadoEn, ahora)}
                   onCobrar={() => setCobrando(orden)}
+                  onReasignar={() => setReasignando(orden)}
                   onContactar={() => setContactando(orden)}
                   onEditarCliente={() => setEditandoCliente(orden)}
                   onVerTiquete={() => abrirTiquete(orden)}
@@ -1036,6 +1038,7 @@ function EditarClienteModal({
   onClose: () => void
   onGuardado: () => Promise<void>
 }) {
+  const [placa, setPlaca] = useState(orden.placa)
   const [clienteNombre, setClienteNombre] = useState(orden.clienteNombre)
   const [clienteTelefono, setClienteTelefono] = useState(orden.clienteTelefono ?? '')
   const [clienteCorreo, setClienteCorreo] = useState(orden.clienteCorreo ?? '')
@@ -1045,6 +1048,7 @@ function EditarClienteModal({
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     const parsed = clienteInfoInputSchema.safeParse({
+      placa,
       clienteNombre,
       clienteTelefono: clienteTelefono || undefined,
       clienteCorreo: clienteCorreo || undefined,
@@ -1082,6 +1086,14 @@ function EditarClienteModal({
           {orden.placa} · #{orden.consecutivo}
         </p>
         <div className="flex flex-col gap-3">
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="font-medium text-neutral-700">Placa</span>
+            <input
+              value={placa}
+              onChange={(event) => setPlaca(event.target.value.toUpperCase())}
+              className="rounded-lg border border-neutral-300 px-3 py-2.5 font-mono text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+            />
+          </label>
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-medium text-neutral-700">Nombre</span>
             <input
@@ -1132,8 +1144,12 @@ function CobroModal({
 }) {
   const [metodoPago, setMetodoPago] = useState<MetodoPago>('efectivo')
   const [referenciaPago, setReferenciaPago] = useState('')
+  // Solo ayuda visual para el cajero (cuánto devolver) — no es parte de `cobroInputSchema`, no
+  // se persiste en la orden.
+  const [montoRecibido, setMontoRecibido] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const cambio = montoRecibido ? Number(montoRecibido) - orden.precio : undefined
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -1212,6 +1228,20 @@ function CobroModal({
                 placeholder="Comprobante"
                 className="rounded-lg border border-neutral-300 px-3 py-3 text-base outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
               />
+            </label>
+          ) : null}
+
+          {metodoPago === 'efectivo' ? (
+            <label className="flex flex-col gap-1.5 text-sm">
+              <span className="font-medium text-neutral-700">Con cuánto paga</span>
+              <CurrencyInput value={montoRecibido} onChange={setMontoRecibido} placeholder="0" />
+              {cambio !== undefined ? (
+                <span className={`text-xs font-medium ${cambio < 0 ? 'text-danger-600' : 'text-neutral-500'}`}>
+                  {cambio < 0
+                    ? `Falta ${COP.format(Math.abs(cambio))}`
+                    : `Devolver ${COP.format(cambio)}`}
+                </span>
+              ) : null}
             </label>
           ) : null}
 
