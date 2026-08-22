@@ -10,6 +10,7 @@ import '@fontsource/plus-jakarta-sans/700.css'
 // sigue en Plus Jakarta Sans.
 import '@fontsource/outfit/700.css'
 import './index.css'
+import './styles/tiquete-print.css'
 import { routeTree } from './routeTree.gen'
 import { App } from './App'
 

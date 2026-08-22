@@ -1,0 +1,150 @@
+/* Tiquete térmico 58mm (POS JALTECH). CSS plano, fuera de Tailwind a propósito —
+   ver nota "Trampa de cascade layers" en CLAUDE.md: nada de esto debe convivir
+   con utilidades ni con el CSS legacy de src/index.css. Solo se activa al imprimir
+   (@media print); en pantalla el tiquete permanece oculto.
+   El tiquete se porta a document.body (fuera de #root, ver TiquetePrint.tsx) —
+   así basta con ocultar #root entero al imprimir, sin visibility:hidden en el
+   resto del árbol (eso dejaba reservado el alto de la app completa y sacaba
+   páginas en blanco de la térmica).
+   Fuente sans-serif en negrita a propósito, no monoespaciada/serif: a 58mm/203dpi
+   los trazos delgados (Courier, weight 400) se cortan/pierden en el cabezal
+   térmico — sans-serif bold imprime denso y legible incluso en texto chico. */
+
+.tiquete-58 {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: 58mm auto;
+    margin: 0;
+  }
+
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 58mm;
+    background: #fff !important;
+  }
+
+  #root {
+    display: none !important;
+  }
+
+  .tiquete-58 {
+    display: block;
+    width: 58mm;
+    margin: 0 auto;
+    padding: 2mm 1.5mm 10mm;
+    font-family: Arial, Helvetica, sans-serif;
+    font-weight: 700;
+    color: #000;
+    background: #fff;
+    box-sizing: border-box;
+  }
+
+  .tiquete-58__marca {
+    text-align: center;
+    font-size: 17px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+
+  .tiquete-58__tagline {
+    text-align: center;
+    font-size: 10px;
+    font-weight: 600;
+    margin-top: 0.5mm;
+  }
+
+  .tiquete-58__titulo {
+    text-align: center;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    margin-top: 2mm;
+  }
+
+  .tiquete-58__linea {
+    border: none;
+    border-top: 1px dashed #000;
+    margin: 2mm 0;
+  }
+
+  .tiquete-58__linea-solida {
+    border: none;
+    border-top: 1.5px solid #000;
+    margin: 1.5mm 0;
+  }
+
+  .tiquete-58__seccion {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin: 0 0 1mm;
+  }
+
+  .tiquete-58__fila {
+    display: flex;
+    justify-content: space-between;
+    gap: 2mm;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.7;
+  }
+
+  .tiquete-58__fila-label {
+    white-space: nowrap;
+    font-weight: 600;
+  }
+
+  .tiquete-58__fila-valor {
+    text-align: right;
+    font-weight: 800;
+    word-break: break-word;
+  }
+
+  .tiquete-58__placa {
+    margin-top: 1.5mm;
+    padding: 1.5mm;
+    border: 1.5px solid #000;
+    border-radius: 1mm;
+    text-align: center;
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+  }
+
+  .tiquete-58__total {
+    display: flex;
+    justify-content: space-between;
+    font-size: 15px;
+    font-weight: 800;
+    margin-top: 1mm;
+  }
+
+  .tiquete-58__aviso {
+    text-align: center;
+    font-size: 11px;
+    font-weight: 600;
+    margin-top: 2mm;
+  }
+
+  .tiquete-58__pie {
+    text-align: center;
+    font-size: 11px;
+    font-weight: 700;
+    margin-top: 3mm;
+  }
+
+  .tiquete-58__pie-legal {
+    text-align: center;
+    font-size: 8px;
+    font-weight: 500;
+    margin-top: 1.5mm;
+    color: #333;
+  }
+}
