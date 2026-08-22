@@ -2,6 +2,8 @@ import { db } from '../lib/db'
 import { liquidacionSchema, type Liquidacion } from '../schemas/liquidacion'
 import { fetchLavadores } from './lavadores'
 import { fetchOrdenesEnRango } from './ordenes'
+import type { TipoVehiculo } from '../schemas/tipoVehiculo'
+import type { Combo } from '../schemas/combo'
 
 const LIQUIDACION_SELECT =
   'id, lavadorId:lavador_id, periodoInicio:periodo_inicio, periodoFin:periodo_fin, monto, pagada, pagadaEn:pagada_en, creadoEn:creado_en'
@@ -31,13 +33,15 @@ export async function fetchComisionesPendientes(): Promise<ComisionPendiente[]> 
   const elegibles = lavadores.filter((l) => l.activo)
   if (elegibles.length === 0) return []
 
-  // Solo entregadas: la comisión se vuelve pagable cuando el servicio se cobró de verdad,
-  // no mientras el vehículo sigue en proceso o listo esperando al cliente.
+  // Cuenta en_proceso + listo + entregado (todo menos anuladas) — confirmado explícitamente con
+  // el negocio: se le paga al lavador por el trabajo del día sin importar si el cliente ya pagó
+  // o si el lavado sigue en curso, porque la comisión ya quedó fija desde que se creó la orden
+  // (regla 1), no depende de en qué estado esté.
   const { data, error } = await db
     .from('ordenes')
     .select('lavador_id, comision_lavador')
     .is('liquidacion_id', null)
-    .eq('estado', 'entregado')
+    .neq('estado', 'anulada')
   if (error) throw new Error(error.message)
 
   const acumulado = new Map<string, { monto: number; cantidad: number }>()
@@ -72,23 +76,118 @@ async function ordenesElegibles(lavadorId: string, periodoInicio: string, period
 
   return (
     await fetchOrdenesEnRango(new Date(`${periodoInicio}T00:00:00.000Z`).toISOString(), hastaExclusivoISO.toISOString())
-  ).filter((orden) => orden.lavadorId === lavadorId && orden.liquidacionId === undefined && orden.estado === 'entregado')
+  ).filter((orden) => orden.lavadorId === lavadorId && orden.liquidacionId === undefined && orden.estado !== 'anulada')
+}
+
+export interface DesgloseComboItem {
+  comboNombre: string
+  cantidad: number
+  monto: number
+}
+
+export interface DesgloseCategoria {
+  cantidad: number
+  monto: number
+  // Detalle por combo dentro de la categoría — así "5 carros" no se queda genérico, se ve
+  // exactamente cuántos fueron de cada combo (ej. 2 de "Combo 1", 3 de "Combo 6"). Las órdenes
+  // sin combo (solo servicios sueltos) van aparte, bajo "Sin combo".
+  porCombo: DesgloseComboItem[]
+}
+
+export interface DesgloseVehiculos {
+  autos: DesgloseCategoria
+  motos: DesgloseCategoria
+}
+
+const SIN_COMBO_LABEL = 'Sin combo'
+
+// Reparte un grupo de órdenes (ya filtradas al lavador/rango o liquidación que corresponda) en
+// autos/motos según `tipos_vehiculo.categoria` — cualquier tipo que no sea 'moto' (auto,
+// camioneta, camioneta de platón...) cuenta como "carro", que es como lo pidió el negocio
+// ("cuántos carros, cuántas motos"), no una tercera categoría suelta. Dentro de cada categoría,
+// además reparte por combo (por id, no por nombre — auto y moto pueden compartir nombre de
+// combo como "Combo 2" siendo filas distintas, ver CLAUDE.md).
+function desglosarPorCategoria(
+  ordenes: { tipoVehiculoId: string; comboId?: string; comisionLavador: number }[],
+  tiposVehiculo: Pick<TipoVehiculo, 'id' | 'categoria'>[],
+  combos: Pick<Combo, 'id' | 'nombre'>[],
+): DesgloseVehiculos {
+  const categoriaPorTipo = new Map(tiposVehiculo.map((t) => [t.id, t.categoria]))
+  const nombrePorCombo = new Map(combos.map((c) => [c.id, c.nombre]))
+
+  const acumuladores = {
+    autos: new Map<string, DesgloseComboItem>(),
+    motos: new Map<string, DesgloseComboItem>(),
+  }
+
+  for (const orden of ordenes) {
+    const acumulador = categoriaPorTipo.get(orden.tipoVehiculoId) === 'moto' ? acumuladores.motos : acumuladores.autos
+    const comboKey = orden.comboId ?? 'sin-combo'
+    const comboNombre = orden.comboId ? (nombrePorCombo.get(orden.comboId) ?? 'Combo eliminado') : SIN_COMBO_LABEL
+    const actual = acumulador.get(comboKey) ?? { comboNombre, cantidad: 0, monto: 0 }
+    actual.cantidad += 1
+    actual.monto += orden.comisionLavador
+    acumulador.set(comboKey, actual)
+  }
+
+  function totalizar(acumulador: Map<string, DesgloseComboItem>): DesgloseCategoria {
+    const porCombo = Array.from(acumulador.values()).sort((a, b) => b.cantidad - a.cantidad)
+    return {
+      cantidad: porCombo.reduce((suma, item) => suma + item.cantidad, 0),
+      monto: porCombo.reduce((suma, item) => suma + item.monto, 0),
+      porCombo,
+    }
+  }
+
+  return { autos: totalizar(acumuladores.autos), motos: totalizar(acumuladores.motos) }
 }
 
 export interface MontoPeriodo {
   monto: number
   cantidadOrdenes: number
+  desglose: DesgloseVehiculos
 }
 
 // Preview del monto real que generaría una liquidación diaria o semanal para este lavador y
 // rango — se usa antes de confirmar, porque `montoPendiente` de fetchComisionesPendientes es el
 // acumulado TOTAL sin liquidar, no lo que cae dentro de un rango diario/semanal específico.
-export async function fetchMontoPeriodo(lavadorId: string, periodoInicio: string, periodoFin: string): Promise<MontoPeriodo> {
+// Incluye el desglose por carros/motos para que el admin vea, antes de generar, cuánto hizo con
+// cada uno en ese periodo.
+export async function fetchMontoPeriodo(
+  lavadorId: string,
+  periodoInicio: string,
+  periodoFin: string,
+  tiposVehiculo: Pick<TipoVehiculo, 'id' | 'categoria'>[],
+  combos: Pick<Combo, 'id' | 'nombre'>[],
+): Promise<MontoPeriodo> {
   const ordenes = await ordenesElegibles(lavadorId, periodoInicio, periodoFin)
   return {
     monto: ordenes.reduce((suma, orden) => suma + orden.comisionLavador, 0),
     cantidadOrdenes: ordenes.length,
+    desglose: desglosarPorCategoria(ordenes, tiposVehiculo, combos),
   }
+}
+
+// Desglose por carros/motos de una liquidación YA generada — a diferencia de fetchMontoPeriodo
+// (que mira el rango de fechas), esto lee directo `ordenes.liquidacion_id`, así que es exacto a
+// lo que quedó liquidado de verdad (sirve tanto recién generada como para reimprimir la colilla
+// de una liquidación vieja del histórico).
+export async function fetchDesgloseLiquidacion(
+  liquidacionId: string,
+  tiposVehiculo: Pick<TipoVehiculo, 'id' | 'categoria'>[],
+  combos: Pick<Combo, 'id' | 'nombre'>[],
+): Promise<DesgloseVehiculos> {
+  const { data, error } = await db
+    .from('ordenes')
+    .select('tipoVehiculoId:tipo_vehiculo_id, comboId:combo_id, comisionLavador:comision_lavador')
+    .eq('liquidacion_id', liquidacionId)
+  if (error) throw new Error(error.message)
+  const filas = data as { tipoVehiculoId: string; comboId: string | null; comisionLavador: number }[]
+  return desglosarPorCategoria(
+    filas.map((f) => ({ tipoVehiculoId: f.tipoVehiculoId, comboId: f.comboId ?? undefined, comisionLavador: f.comisionLavador })),
+    tiposVehiculo,
+    combos,
+  )
 }
 
 // No hay transacciones multi-tabla vía PostgREST plano, así que se hace en dos pasos:
