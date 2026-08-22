@@ -21,6 +21,8 @@ import {
   Motorbike,
   UserRound,
   Pencil,
+  Receipt,
+  ClipboardCheck,
 } from 'lucide-react'
 import {
   fetchOrdenesHoy,
@@ -112,6 +114,10 @@ function JefeZonaDashboard() {
   const [finalizando, setFinalizando] = useState<Orden | null>(null)
   const [recibo, setRecibo] = useState<ReciboData | null>(null)
   const [contactando, setContactando] = useState<Orden | null>(null)
+  // Tablero de seguimiento (en proceso/listos) vs. tabla de entregados hoy — ambas vistas
+  // permiten reabrir e imprimir el tiquete de cualquier orden, en cualquier estado.
+  const [vista, setVista] = useState<'seguimiento' | 'entregados'>('seguimiento')
+  const [viendoDetalle, setViendoDetalle] = useState<Orden | null>(null)
 
   // Reloj compartido para el contador en vivo de cada tarjeta — un solo interval en vez de
   // uno por tarjeta, se limpia al desmontar el dashboard. Se guarda como estado (no un simple
@@ -234,7 +240,8 @@ function JefeZonaDashboard() {
       placa: orden.placa,
       clienteNombre: orden.clienteNombre,
       comboNombre: comboNombre(orden.comboId),
-      tipoNombre: '—',
+      serviciosAdicionales: orden.serviciosAdicionales.map((s) => s.nombre),
+      tipoNombre: tipoVehiculo(orden.tipoVehiculoId)?.nombre ?? '—',
       lavadorNombre: lavadorNombre(orden.lavadorId),
       precio: orden.precio,
       fecha: new Date().toISOString(),
@@ -243,6 +250,25 @@ function JefeZonaDashboard() {
     })
     setCobrando(null)
     await refresh()
+  }
+
+  // Reabrir el tiquete de una orden ya existente, en cualquier estado (en proceso, listo o
+  // entregado) — mismo componente/diseño que el comprobante que se muestra al registrar o
+  // cobrar, para poder verlo/reimprimirlo en cualquier momento sin repetir esa acción.
+  function abrirTiquete(orden: Orden) {
+    setRecibo({
+      consecutivo: orden.consecutivo,
+      placa: orden.placa,
+      clienteNombre: orden.clienteNombre,
+      comboNombre: comboNombre(orden.comboId),
+      serviciosAdicionales: orden.serviciosAdicionales.map((s) => s.nombre),
+      tipoNombre: tipoVehiculo(orden.tipoVehiculoId)?.nombre ?? '—',
+      lavadorNombre: lavadorNombre(orden.lavadorId),
+      precio: orden.precio,
+      fecha: orden.estado === 'entregado' ? (orden.entregadaEn ?? orden.creadoEn) : orden.creadoEn,
+      metodoPago: orden.metodoPago,
+      referenciaPago: orden.referenciaPago,
+    })
   }
 
   return (
@@ -406,61 +432,103 @@ function JefeZonaDashboard() {
         </Card>
       ) : null}
 
-      {/* Tablero de seguimiento (M3) — 2 columnas en escritorio, apiladas en celular */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div>
-          <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-neutral-900">
-            <SprayCan size={15} className="text-warning-600" />
-            En proceso ({enProcesoLista.length})
-          </h2>
-          <div className="flex flex-col gap-3">
-            {enProcesoLista.map((orden) => (
-              <OrdenCard
-                key={orden.id}
-                orden={orden}
-                comboNombre={comboNombre(orden.comboId)}
-                lavadorNombre={lavadorNombre(orden.lavadorId)}
-                tipoVehiculoNombre={tipoVehiculo(orden.tipoVehiculoId)?.nombre ?? '—'}
-                esMoto={tipoVehiculo(orden.tipoVehiculoId)?.categoria === 'moto'}
-                tiempoTexto={tiempoTranscurrido(orden.creadoEn, ahora)}
-                onFinalizar={() => setFinalizando(orden)}
-                onReasignar={() => setReasignando(orden)}
-                onContactar={() => setContactando(orden)}
-                onEditarCliente={() => setEditandoCliente(orden)}
-              />
-            ))}
-            {enProcesoLista.length === 0 ? (
-              <Card className="py-8 text-center text-sm text-neutral-400">Nada en proceso ahora mismo.</Card>
-            ) : null}
-          </div>
-        </div>
-
-        <div>
-          <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-neutral-900">
-            <CheckCircle2 size={15} className="text-primary-600" />
-            Listos para cobrar ({listoLista.length})
-          </h2>
-          <div className="flex flex-col gap-3">
-            {listoLista.map((orden) => (
-              <OrdenCard
-                key={orden.id}
-                orden={orden}
-                comboNombre={comboNombre(orden.comboId)}
-                lavadorNombre={lavadorNombre(orden.lavadorId)}
-                tipoVehiculoNombre={tipoVehiculo(orden.tipoVehiculoId)?.nombre ?? '—'}
-                esMoto={tipoVehiculo(orden.tipoVehiculoId)?.categoria === 'moto'}
-                tiempoTexto={tiempoTranscurrido(orden.listaEn ?? orden.creadoEn, ahora)}
-                onCobrar={() => setCobrando(orden)}
-                onContactar={() => setContactando(orden)}
-                onEditarCliente={() => setEditandoCliente(orden)}
-              />
-            ))}
-            {listoLista.length === 0 ? (
-              <Card className="py-8 text-center text-sm text-neutral-400">Nada listo para cobrar todavía.</Card>
-            ) : null}
-          </div>
-        </div>
+      {/* Seguimiento (M3) vs. entregados hoy — ambas vistas permiten reabrir/imprimir el
+          tiquete de cualquier orden, sin importar el estado. */}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => setVista('seguimiento')}
+          className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+            vista === 'seguimiento'
+              ? 'border-primary-600 bg-primary-50 text-primary-700'
+              : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
+          }`}
+        >
+          <SprayCan size={15} />
+          Seguimiento
+        </button>
+        <button
+          type="button"
+          onClick={() => setVista('entregados')}
+          className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+            vista === 'entregados'
+              ? 'border-primary-600 bg-primary-50 text-primary-700'
+              : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
+          }`}
+        >
+          <ClipboardCheck size={15} />
+          Entregados hoy ({entregadasHoy.length})
+        </button>
       </div>
+
+      {vista === 'seguimiento' ? (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div>
+            <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-neutral-900">
+              <SprayCan size={15} className="text-warning-600" />
+              En proceso ({enProcesoLista.length})
+            </h2>
+            <div className="flex flex-col gap-3">
+              {enProcesoLista.map((orden) => (
+                <OrdenCard
+                  key={orden.id}
+                  orden={orden}
+                  comboNombre={comboNombre(orden.comboId)}
+                  lavadorNombre={lavadorNombre(orden.lavadorId)}
+                  tipoVehiculoNombre={tipoVehiculo(orden.tipoVehiculoId)?.nombre ?? '—'}
+                  esMoto={tipoVehiculo(orden.tipoVehiculoId)?.categoria === 'moto'}
+                  tiempoTexto={tiempoTranscurrido(orden.creadoEn, ahora)}
+                  onFinalizar={() => setFinalizando(orden)}
+                  onReasignar={() => setReasignando(orden)}
+                  onContactar={() => setContactando(orden)}
+                  onEditarCliente={() => setEditandoCliente(orden)}
+                  onVerTiquete={() => abrirTiquete(orden)}
+                  onVerDetalle={() => setViendoDetalle(orden)}
+                />
+              ))}
+              {enProcesoLista.length === 0 ? (
+                <Card className="py-8 text-center text-sm text-neutral-400">Nada en proceso ahora mismo.</Card>
+              ) : null}
+            </div>
+          </div>
+
+          <div>
+            <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-neutral-900">
+              <CheckCircle2 size={15} className="text-primary-600" />
+              Listos para cobrar ({listoLista.length})
+            </h2>
+            <div className="flex flex-col gap-3">
+              {listoLista.map((orden) => (
+                <OrdenCard
+                  key={orden.id}
+                  orden={orden}
+                  comboNombre={comboNombre(orden.comboId)}
+                  lavadorNombre={lavadorNombre(orden.lavadorId)}
+                  tipoVehiculoNombre={tipoVehiculo(orden.tipoVehiculoId)?.nombre ?? '—'}
+                  esMoto={tipoVehiculo(orden.tipoVehiculoId)?.categoria === 'moto'}
+                  tiempoTexto={tiempoTranscurrido(orden.listaEn ?? orden.creadoEn, ahora)}
+                  onCobrar={() => setCobrando(orden)}
+                  onContactar={() => setContactando(orden)}
+                  onEditarCliente={() => setEditandoCliente(orden)}
+                  onVerTiquete={() => abrirTiquete(orden)}
+                  onVerDetalle={() => setViendoDetalle(orden)}
+                />
+              ))}
+              {listoLista.length === 0 ? (
+                <Card className="py-8 text-center text-sm text-neutral-400">Nada listo para cobrar todavía.</Card>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <EntregadosHoyTable
+          entregadasHoy={entregadasHoy}
+          comboNombre={comboNombre}
+          lavadorNombre={lavadorNombre}
+          tipoNombre={(id) => tipoVehiculo(id)?.nombre ?? '—'}
+          onVerTiquete={abrirTiquete}
+        />
+      )}
 
       {cobrando ? (
         <CobroModal
@@ -493,7 +561,23 @@ function JefeZonaDashboard() {
         />
       ) : null}
 
-      {recibo ? <ReciboModal recibo={recibo} variant="pago" onClose={() => setRecibo(null)} /> : null}
+      {recibo ? (
+        <ReciboModal recibo={recibo} variant={recibo.metodoPago ? 'pago' : 'ingreso'} onClose={() => setRecibo(null)} />
+      ) : null}
+
+      {viendoDetalle ? (
+        <DetalleOrdenModal
+          orden={viendoDetalle}
+          comboNombre={comboNombre(viendoDetalle.comboId)}
+          lavadorNombre={lavadorNombre(viendoDetalle.lavadorId)}
+          tipoVehiculoNombre={tipoVehiculo(viendoDetalle.tipoVehiculoId)?.nombre ?? '—'}
+          onClose={() => setViendoDetalle(null)}
+          onVerTiquete={() => {
+            abrirTiquete(viendoDetalle)
+            setViendoDetalle(null)
+          }}
+        />
+      ) : null}
 
       {contactando ? (
         <ContactoModal
@@ -539,6 +623,8 @@ function OrdenCard({
   onReasignar,
   onContactar,
   onEditarCliente,
+  onVerTiquete,
+  onVerDetalle,
 }: {
   orden: Orden
   comboNombre: string
@@ -551,6 +637,8 @@ function OrdenCard({
   onReasignar?: () => void
   onContactar?: () => void
   onEditarCliente?: () => void
+  onVerTiquete?: () => void
+  onVerDetalle?: () => void
 }) {
   const enProceso = orden.estado === 'en_proceso'
   const VehiculoIcon = esMoto ? Motorbike : Car
@@ -560,7 +648,15 @@ function OrdenCard({
         enProceso ? 'border-l-warning-600 bg-warning-50/40' : 'border-l-primary-500 bg-primary-50/40 shadow-nav-active'
       }`}
     >
-      <div className="flex items-center justify-between gap-2 p-3 pb-2">
+      <div
+        role={onVerDetalle ? 'button' : undefined}
+        tabIndex={onVerDetalle ? 0 : undefined}
+        onClick={onVerDetalle}
+        onKeyDown={(e) => {
+          if (onVerDetalle && (e.key === 'Enter' || e.key === ' ')) onVerDetalle()
+        }}
+        className={`flex items-center justify-between gap-2 p-3 pb-2 ${onVerDetalle ? 'cursor-pointer' : ''}`}
+      >
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="font-mono text-lg font-bold tracking-tight text-neutral-900">{orden.placa}</span>
@@ -626,6 +722,16 @@ function OrdenCard({
               Editar cliente
             </button>
           ) : null}
+          {onVerTiquete ? (
+            <button
+              type="button"
+              onClick={onVerTiquete}
+              className="group/btn flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-primary-50 hover:text-primary-700"
+            >
+              <Receipt size={14} />
+              Ver tiquete
+            </button>
+          ) : null}
         </div>
 
         <div className="flex items-center gap-2.5">
@@ -655,6 +761,192 @@ function OrdenCard({
         </div>
       </div>
     </Card>
+  )
+}
+
+// Tabla de servicios entregados hoy (M3) — mismo criterio visual que /admin/órdenes, para
+// poder reabrir/reimprimir el tiquete de cualquier orden ya terminada sin salir del dashboard.
+function EntregadosHoyTable({
+  entregadasHoy,
+  comboNombre,
+  lavadorNombre,
+  tipoNombre,
+  onVerTiquete,
+}: {
+  entregadasHoy: Orden[]
+  comboNombre: (id: string | undefined) => string
+  lavadorNombre: (id: string) => string
+  tipoNombre: (id: string) => string
+  onVerTiquete: (orden: Orden) => void
+}) {
+  const ordenadas = [...entregadasHoy].sort((a, b) => b.consecutivo - a.consecutivo)
+  return (
+    <Card className="p-0">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
+            <th className="px-5 py-3">#</th>
+            <th className="px-5 py-3">Placa</th>
+            <th className="px-5 py-3">Cliente</th>
+            <th className="px-5 py-3">Tipo</th>
+            <th className="px-5 py-3">Combo</th>
+            <th className="px-5 py-3">Lavador</th>
+            <th className="px-5 py-3">Precio</th>
+            <th className="px-5 py-3">Pago</th>
+            <th className="px-5 py-3 text-right">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ordenadas.map((orden) => (
+            <tr key={orden.id} className="border-b border-neutral-100 transition-colors last:border-0 hover:bg-primary-50/40">
+              <td className="px-5 py-3 text-neutral-500">#{orden.consecutivo}</td>
+              <td className="px-5 py-3 font-mono font-medium text-neutral-900">{orden.placa}</td>
+              <td className="px-5 py-3 text-neutral-700">{orden.clienteNombre}</td>
+              <td className="px-5 py-3 text-neutral-700">{tipoNombre(orden.tipoVehiculoId)}</td>
+              <td className="px-5 py-3 text-neutral-700">{comboNombre(orden.comboId)}</td>
+              <td className="px-5 py-3 text-neutral-700">{lavadorNombre(orden.lavadorId)}</td>
+              <td className="px-5 py-3 font-medium text-neutral-900">{COP.format(orden.precio)}</td>
+              <td className="px-5 py-3 capitalize text-neutral-700">{orden.metodoPago ?? '—'}</td>
+              <td className="px-5 py-3">
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => onVerTiquete(orden)}
+                    className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-primary-100 hover:text-primary-700"
+                  >
+                    <Receipt size={14} />
+                    Ver tiquete
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+          {ordenadas.length === 0 ? (
+            <tr>
+              <td className="px-5 py-8 text-center text-neutral-400" colSpan={9}>
+                Todavía no se ha entregado nada hoy.
+              </td>
+            </tr>
+          ) : null}
+        </tbody>
+      </table>
+    </Card>
+  )
+}
+
+const ESTADO_DETALLE_LABEL: Record<Orden['estado'], string> = {
+  en_proceso: 'En proceso',
+  listo: 'Listo para cobrar',
+  entregado: 'Entregado',
+  anulada: 'Anulada',
+}
+
+// Vista completa de una orden al tocar su tarjeta en el tablero de seguimiento — incluye
+// observaciones (no se mostraban en ningún lado antes) y todos los datos de contacto/servicio.
+function DetalleOrdenModal({
+  orden,
+  comboNombre,
+  lavadorNombre,
+  tipoVehiculoNombre,
+  onClose,
+  onVerTiquete,
+}: {
+  orden: Orden
+  comboNombre: string
+  lavadorNombre: string
+  tipoVehiculoNombre: string
+  onClose: () => void
+  onVerTiquete: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-20 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-[2px]">
+      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-card-hover">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h3 className="flex items-center gap-2 text-base font-semibold text-neutral-900">
+              <span className="font-mono">{orden.placa}</span>
+              <span className="text-xs font-normal text-neutral-400">#{orden.consecutivo}</span>
+            </h3>
+            <span
+              className={`mt-1 inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
+                orden.estado === 'en_proceso' ? 'bg-warning-50 text-warning-700' : 'bg-primary-50 text-primary-700'
+              }`}
+            >
+              {ESTADO_DETALLE_LABEL[orden.estado]}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-4 text-sm">
+          <div>
+            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-neutral-400">Cliente</p>
+            <div className="flex flex-col gap-1 rounded-lg bg-neutral-50 p-3">
+              <DetalleFila label="Nombre" valor={orden.clienteNombre} />
+              <DetalleFila label="Teléfono" valor={orden.clienteTelefono ?? 'Sin registrar'} />
+              <DetalleFila label="Correo" valor={orden.clienteCorreo ?? 'Sin registrar'} />
+            </div>
+          </div>
+
+          <div>
+            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-neutral-400">Servicio</p>
+            <div className="flex flex-col gap-1 rounded-lg bg-neutral-50 p-3">
+              <DetalleFila label="Tipo de vehículo" valor={tipoVehiculoNombre} />
+              <DetalleFila label="Combo" valor={comboNombre} />
+              {orden.serviciosAdicionales.length > 0 ? (
+                <DetalleFila label="Adicionales" valor={orden.serviciosAdicionales.map((s) => s.nombre).join(', ')} />
+              ) : null}
+              <DetalleFila label="Lavador" valor={lavadorNombre} />
+              <DetalleFila label="Precio" valor={COP.format(orden.precio)} />
+            </div>
+          </div>
+
+          <div>
+            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-neutral-400">Observaciones</p>
+            <p
+              className={`rounded-lg p-3 ${
+                orden.observaciones ? 'bg-warning-50 text-warning-900' : 'bg-neutral-50 text-neutral-400 italic'
+              }`}
+            >
+              {orden.observaciones ?? 'Sin observaciones.'}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 flex gap-2 border-t border-neutral-100 pt-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 rounded-lg px-4 py-2.5 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-100"
+          >
+            Cerrar
+          </button>
+          <button
+            type="button"
+            onClick={onVerTiquete}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700"
+          >
+            <Receipt size={15} />
+            Ver tiquete
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function DetalleFila({ label, valor }: { label: string; valor: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="shrink-0 text-neutral-500">{label}</span>
+      <span className="min-w-0 truncate text-right font-medium text-neutral-900">{valor}</span>
+    </div>
   )
 }
 
