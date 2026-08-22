@@ -3,6 +3,7 @@ import { createFileRoute, Outlet, redirect } from '@tanstack/react-router'
 import {
   LayoutDashboard,
   Car,
+  Wrench,
   Package,
   CircleParking,
   Users,
@@ -32,6 +33,7 @@ export const Route = createFileRoute('/admin')({
 const NAV_ITEMS: NavItem[] = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/admin/tipos-vehiculo', label: 'Tipos de vehículo', icon: Car },
+  { to: '/admin/servicios', label: 'Servicios', icon: Wrench },
   { to: '/admin/combos', label: 'Combos', icon: Package },
   { to: '/admin/parqueadero', label: 'Parqueadero', icon: CircleParking },
   { to: '/admin/lavadores', label: 'Lavadores', icon: Users },

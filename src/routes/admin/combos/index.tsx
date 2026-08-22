@@ -1,12 +1,17 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { Pencil, Plus, X, Tag } from 'lucide-react'
-import { fetchCombos, createCombo, updateCombo, setComboActivo } from '../../../data/combos'
-import { fetchPrecios, upsertPrecio, findPrecio } from '../../../data/precios'
+import { fetchCombos, createCombo, updateCombo, setComboActivo, precioComboCalculado } from '../../../data/combos'
+import { fetchComboServicios, setComboServicios, type ComboServicio } from '../../../data/comboServicios'
+import { fetchServicios } from '../../../data/servicios'
+import { fetchPreciosServicioCombo } from '../../../data/preciosServicioCombo'
+import { fetchPreciosComboFijo, upsertPrecioComboFijo } from '../../../data/preciosComboFijo'
 import { fetchTiposVehiculo } from '../../../data/tiposVehiculo'
 import { comboInputSchema, type Combo } from '../../../schemas/combo'
 import type { CategoriaVehiculo, TipoVehiculo } from '../../../schemas/tipoVehiculo'
-import type { Precio } from '../../../schemas/precio'
+import type { Servicio } from '../../../schemas/servicio'
+import type { PrecioServicio } from '../../../schemas/precioServicio'
+import type { PrecioCombo } from '../../../schemas/precioCombo'
 import { Card } from '../../../components/layout/Card'
 import { CustomSelect } from '../../../components/layout/CustomSelect'
 import { ConfirmModal } from '../../../components/layout/ConfirmModal'
@@ -20,8 +25,15 @@ const CATEGORIA_LABEL: Record<CategoriaVehiculo, string> = {
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 
 async function loadCombosPage() {
-  const [combos, tipos, precios] = await Promise.all([fetchCombos(), fetchTiposVehiculo(), fetchPrecios()])
-  return { combos, tipos, precios }
+  const [combos, tipos, servicios, preciosServicioCombo, preciosComboFijo, comboServicios] = await Promise.all([
+    fetchCombos(),
+    fetchTiposVehiculo(),
+    fetchServicios(),
+    fetchPreciosServicioCombo(),
+    fetchPreciosComboFijo(),
+    fetchComboServicios(),
+  ])
+  return { combos, tipos, servicios, preciosServicioCombo, preciosComboFijo, comboServicios }
 }
 
 export const Route = createFileRoute('/admin/combos/')({
@@ -34,15 +46,25 @@ function CombosPage() {
   const router = useRouter()
   const [combos, setCombos] = useState(initial.combos)
   const [tipos] = useState(initial.tipos)
-  const [precios, setPrecios] = useState(initial.precios)
+  const [servicios] = useState(initial.servicios)
+  const [preciosServicioCombo, setPreciosServicioCombo] = useState(initial.preciosServicioCombo)
+  const [preciosComboFijo, setPreciosComboFijo] = useState(initial.preciosComboFijo)
+  const [comboServicios, setComboServiciosState] = useState(initial.comboServicios)
   const [editing, setEditing] = useState<Combo | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [confirmando, setConfirmando] = useState<Combo | null>(null)
 
   async function refresh() {
-    const [nuevosCombos, nuevosPrecios] = await Promise.all([fetchCombos(), fetchPrecios()])
+    const [nuevosCombos, nuevosPreciosCombo, nuevosPreciosFijo, nuevaRelacion] = await Promise.all([
+      fetchCombos(),
+      fetchPreciosServicioCombo(),
+      fetchPreciosComboFijo(),
+      fetchComboServicios(),
+    ])
     setCombos(nuevosCombos)
-    setPrecios(nuevosPrecios)
+    setPreciosServicioCombo(nuevosPreciosCombo)
+    setPreciosComboFijo(nuevosPreciosFijo)
+    setComboServiciosState(nuevaRelacion)
     router.invalidate()
   }
 
@@ -61,13 +83,14 @@ function CombosPage() {
     setFormOpen(true)
   }
 
-  function preciosDeCombo(comboId: string) {
-    const tiposDeCategoria = (categoria: CategoriaVehiculo) => tipos.filter((t) => t.categoria === categoria)
-    const combo = combos.find((c) => c.id === comboId)
-    if (!combo) return []
-    return tiposDeCategoria(combo.categoria)
-      .map((t) => findPrecio(precios, comboId, t.id))
-      .filter((p): p is Precio => !!p)
+  function preciosDeCombo(combo: Combo) {
+    return tipos
+      .filter((t) => t.categoria === combo.categoria)
+      .map((tipo) => ({
+        tipo,
+        precio: precioComboCalculado(combo, tipo.id, comboServicios, preciosServicioCombo, preciosComboFijo),
+      }))
+      .filter((p): p is { tipo: TipoVehiculo; precio: number } => p.precio !== undefined)
   }
 
   return (
@@ -76,7 +99,8 @@ function CombosPage() {
         <div>
           <h2 className="text-base font-semibold text-neutral-900">Combos</h2>
           <p className="text-sm text-neutral-500">
-            Catálogo de combos de lavado, con su precio por tipo de vehículo — todo en un solo paso.
+            Catálogo de combos — el precio se calcula sumando los servicios que incluyen, o se fija a mano
+            para combos que funcionan distinto (ej. motos).
           </p>
         </div>
         <button
@@ -113,19 +137,26 @@ function CombosPage() {
                   <span className="inline-flex rounded-full bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary-700">
                     {CATEGORIA_LABEL[combo.categoria]}
                   </span>
+                  {combo.precioFijo ? (
+                    <span className="ml-1.5 inline-flex rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-600">
+                      Precio fijo
+                    </span>
+                  ) : null}
                 </td>
                 <td className="px-5 py-3">
                   <div className="flex flex-wrap gap-1">
-                    {preciosDeCombo(combo.id).length === 0 ? (
-                      <span className="text-xs text-neutral-400">Sin precios</span>
+                    {preciosDeCombo(combo).length === 0 ? (
+                      <span className="text-xs text-neutral-400">
+                        {combo.precioFijo ? 'Sin precios' : 'Sin servicios asignados'}
+                      </span>
                     ) : (
-                      preciosDeCombo(combo.id).map((p) => (
+                      preciosDeCombo(combo).map(({ tipo, precio }) => (
                         <span
-                          key={p.id}
+                          key={tipo.id}
                           className="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-600"
                         >
                           <Tag size={10} />
-                          {tipos.find((t) => t.id === p.tipoVehiculoId)?.nombre}: {COP.format(p.precio)}
+                          {tipo.nombre}: {COP.format(precio)}
                         </span>
                       ))
                     )}
@@ -176,7 +207,10 @@ function CombosPage() {
         <ComboForm
           combo={editing}
           tipos={tipos}
-          precios={precios}
+          servicios={servicios}
+          preciosServicioCombo={preciosServicioCombo}
+          preciosComboFijo={preciosComboFijo}
+          comboServicios={comboServicios}
           onClose={() => setFormOpen(false)}
           onSaved={async () => {
             setFormOpen(false)
@@ -209,40 +243,68 @@ function CombosPage() {
 function ComboForm({
   combo,
   tipos,
-  precios,
+  servicios,
+  preciosServicioCombo,
+  preciosComboFijo,
+  comboServicios,
   onClose,
   onSaved,
 }: {
   combo: Combo | null
   tipos: TipoVehiculo[]
-  precios: Precio[]
+  servicios: Servicio[]
+  preciosServicioCombo: PrecioServicio[]
+  preciosComboFijo: PrecioCombo[]
+  comboServicios: ComboServicio[]
   onClose: () => void
   onSaved: () => void
 }) {
   const [nombre, setNombre] = useState(combo?.nombre ?? '')
   const [descripcion, setDescripcion] = useState(combo?.descripcion ?? '')
   const [categoria, setCategoria] = useState<CategoriaVehiculo>(combo?.categoria ?? 'auto')
+  const [precioFijo, setPrecioFijo] = useState(combo?.precioFijo ?? false)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
-  const tiposDeCategoria = useMemo(
-    () => tipos.filter((t) => t.categoria === categoria && t.activo),
-    [tipos, categoria],
+  const [serviciosSeleccionados, setServiciosSeleccionados] = useState<string[]>(() =>
+    combo ? comboServicios.filter((cs) => cs.comboId === combo.id).map((cs) => cs.servicioId) : [],
   )
 
-  const [preciosPorTipo, setPreciosPorTipo] = useState<Record<string, string>>(() => {
+  const [precioFijoPorTipo, setPrecioFijoPorTipo] = useState<Record<string, string>>(() => {
     const inicial: Record<string, string> = {}
     if (combo) {
       for (const tipo of tipos) {
-        const existente = findPrecio(precios, combo.id, tipo.id)
+        const existente = preciosComboFijo.find((p) => p.comboId === combo.id && p.tipoVehiculoId === tipo.id)
         if (existente) inicial[tipo.id] = String(existente.precio)
       }
     }
     return inicial
   })
 
-  function updatePrecio(tipoId: string, value: string) {
-    setPreciosPorTipo((prev) => ({ ...prev, [tipoId]: value }))
+  const serviciosDeCategoria = useMemo(
+    () => servicios.filter((s) => s.categoria === categoria && s.activo),
+    [servicios, categoria],
+  )
+
+  const tiposDeCategoria = useMemo(
+    () => tipos.filter((t) => t.categoria === categoria && t.activo),
+    [tipos, categoria],
+  )
+
+  function toggleServicio(servicioId: string) {
+    setServiciosSeleccionados((prev) =>
+      prev.includes(servicioId) ? prev.filter((id) => id !== servicioId) : [...prev, servicioId],
+    )
+  }
+
+  function precioPreview(tipoId: string): number | undefined {
+    let total = 0
+    for (const servicioId of serviciosSeleccionados) {
+      const precio = preciosServicioCombo.find((p) => p.servicioId === servicioId && p.tipoVehiculoId === tipoId)
+      if (!precio) return undefined
+      total += precio.precio
+    }
+    return total
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -251,6 +313,7 @@ function ComboForm({
       nombre,
       categoria,
       descripcion: descripcion || undefined,
+      precioFijo,
     })
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Datos inválidos')
@@ -261,17 +324,20 @@ function ComboForm({
     try {
       const guardado = combo ? await updateCombo(combo.id, parsed.data) : await createCombo(parsed.data)
 
-      // Un solo paso: el combo y sus precios por tipo se guardan juntos.
-      const escrituras = tiposDeCategoria
-        .map((tipo) => {
-          const valor = preciosPorTipo[tipo.id]?.trim()
-          if (!valor) return null
-          const precio = Number(valor)
-          if (!Number.isFinite(precio) || precio <= 0) return null
-          return upsertPrecio(guardado.id, tipo.id, Math.round(precio))
-        })
-        .filter((p): p is Promise<Precio> => !!p)
-      await Promise.all(escrituras)
+      if (precioFijo) {
+        const escrituras = tiposDeCategoria
+          .map((tipo) => {
+            const valor = precioFijoPorTipo[tipo.id]?.trim()
+            if (!valor) return null
+            const precio = Number(valor)
+            if (!Number.isFinite(precio) || precio <= 0) return null
+            return upsertPrecioComboFijo(guardado.id, tipo.id, Math.round(precio))
+          })
+          .filter((p): p is Promise<PrecioCombo> => !!p)
+        await Promise.all(escrituras)
+      } else {
+        await setComboServicios(guardado.id, serviciosSeleccionados)
+      }
 
       onSaved()
     } finally {
@@ -287,7 +353,7 @@ function ComboForm({
             <h3 className="text-base font-semibold text-neutral-900">
               {combo ? 'Editar combo' : 'Nuevo combo'}
             </h3>
-            <p className="text-xs text-neutral-500">Nombre, descripción y precio por tipo de vehículo, todo aquí.</p>
+            <p className="text-xs text-neutral-500">Nombre, categoría y cómo se calcula su precio.</p>
           </div>
           <button
             type="button"
@@ -306,7 +372,7 @@ function ComboForm({
                 autoFocus
                 value={nombre}
                 onChange={(event) => setNombre(event.target.value)}
-                placeholder="p. ej. Combo 1 — Lavado y aspirado"
+                placeholder="p. ej. Combo 1"
                 className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
               />
             </label>
@@ -316,7 +382,10 @@ function ComboForm({
               <CustomSelect
                 size="sm"
                 value={categoria}
-                onChange={(value) => setCategoria(value as CategoriaVehiculo)}
+                onChange={(value) => {
+                  setCategoria(value as CategoriaVehiculo)
+                  setServiciosSeleccionados([])
+                }}
                 placeholder="Selecciona…"
                 options={[
                   { value: 'auto', label: 'Autos/camionetas' },
@@ -328,44 +397,117 @@ function ComboForm({
 
           <label className="flex flex-col gap-1.5 text-left text-sm">
             <span className="font-medium text-neutral-700">
-              Descripción <span className="font-normal text-neutral-400">(qué incluye)</span>
+              Descripción <span className="font-normal text-neutral-400">(opcional, texto libre)</span>
             </span>
             <textarea
               value={descripcion}
               onChange={(event) => setDescripcion(event.target.value)}
-              rows={3}
-              placeholder="p. ej. Lavado exterior, aspirado de cabina y baúl, secado a mano."
+              rows={2}
+              placeholder="p. ej. Nuestro combo más completo."
               className="resize-none rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
             />
           </label>
 
-          <div className="flex flex-col gap-2 rounded-lg border border-neutral-200 p-4">
-            <span className="flex items-center gap-1.5 text-sm font-medium text-neutral-700">
-              <Tag size={14} className="text-primary-500" />
-              Precios — {CATEGORIA_LABEL[categoria]}
-            </span>
-            <p className="text-xs text-neutral-400">
-              Déjalo vacío si todavía no tienes el precio para ese tipo — puedes completarlo después
-              desde Lista de precios.
-            </p>
-            <div className="mt-1 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {tiposDeCategoria.map((tipo) => (
-                <label key={tipo.id} className="flex flex-col gap-1.5 text-sm">
-                  <span className="font-medium text-neutral-700">{tipo.nombre}</span>
-                  <CurrencyInput
-                    size="sm"
-                    value={preciosPorTipo[tipo.id] ?? ''}
-                    onChange={(value) => updatePrecio(tipo.id, value)}
-                  />
-                </label>
+          <div className="flex flex-col gap-1.5 text-sm">
+            <span className="font-medium text-neutral-700">¿Cómo se calcula el precio?</span>
+            <div className="grid grid-cols-2 gap-2">
+              {(
+                [
+                  { value: false, label: 'Suma de servicios' },
+                  { value: true, label: 'Precio fijo' },
+                ] as const
+              ).map(({ value, label }) => (
+                <button
+                  key={String(value)}
+                  type="button"
+                  onClick={() => setPrecioFijo(value)}
+                  className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
+                    precioFijo === value
+                      ? 'border-primary-600 bg-primary-50 text-primary-700'
+                      : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
+                  }`}
+                >
+                  {label}
+                </button>
               ))}
-              {tiposDeCategoria.length === 0 ? (
-                <p className="text-xs text-warning-700">
-                  No hay tipos de vehículo activos en esta categoría todavía.
-                </p>
+            </div>
+            <p className="text-xs text-neutral-400">
+              {precioFijo
+                ? 'El precio se escribe a mano por tipo de vehículo — para combos que funcionan distinto (ej. motos), sin armarse a partir de servicios.'
+                : 'El precio se calcula solo, sumando los servicios que elijas abajo.'}
+            </p>
+          </div>
+
+          {precioFijo ? (
+            <div className="flex flex-col gap-2 rounded-lg border border-neutral-200 p-4">
+              <span className="flex items-center gap-1.5 text-sm font-medium text-neutral-700">
+                <Tag size={14} className="text-primary-500" />
+                Precio — {CATEGORIA_LABEL[categoria]}
+              </span>
+              <div className="mt-1 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {tiposDeCategoria.map((tipo) => (
+                  <label key={tipo.id} className="flex flex-col gap-1.5 text-sm">
+                    <span className="font-medium text-neutral-700">{tipo.nombre}</span>
+                    <CurrencyInput
+                      size="sm"
+                      value={precioFijoPorTipo[tipo.id] ?? ''}
+                      onChange={(value) => setPrecioFijoPorTipo((prev) => ({ ...prev, [tipo.id]: value }))}
+                    />
+                  </label>
+                ))}
+                {tiposDeCategoria.length === 0 ? (
+                  <p className="text-xs text-warning-700">
+                    No hay tipos de vehículo activos en esta categoría todavía.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2 rounded-lg border border-neutral-200 p-4">
+              <span className="flex items-center gap-1.5 text-sm font-medium text-neutral-700">
+                <Tag size={14} className="text-primary-500" />
+                Servicios que incluye — {CATEGORIA_LABEL[categoria]}
+              </span>
+              <p className="text-xs text-neutral-400">Elige los servicios de este combo. El precio se suma solo.</p>
+              <div className="mt-1 flex flex-col gap-1.5">
+                {serviciosDeCategoria.map((servicio) => (
+                  <label
+                    key={servicio.id}
+                    className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm transition-colors hover:bg-neutral-50"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={serviciosSeleccionados.includes(servicio.id)}
+                      onChange={() => toggleServicio(servicio.id)}
+                      className="size-4 rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
+                    />
+                    <span className="text-neutral-700">{servicio.nombre}</span>
+                  </label>
+                ))}
+                {serviciosDeCategoria.length === 0 ? (
+                  <p className="text-xs text-warning-700">
+                    No hay servicios activos en esta categoría todavía — créalos primero en Servicios.
+                  </p>
+                ) : null}
+              </div>
+
+              {serviciosSeleccionados.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-1.5 border-t border-neutral-100 pt-3">
+                  {tiposDeCategoria.map((tipo) => {
+                    const precio = precioPreview(tipo.id)
+                    return (
+                      <span
+                        key={tipo.id}
+                        className="inline-flex items-center gap-1 rounded-full bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary-700"
+                      >
+                        {tipo.nombre}: {precio !== undefined ? COP.format(precio) : 'falta precio de algún servicio'}
+                      </span>
+                    )
+                  })}
+                </div>
               ) : null}
             </div>
-          </div>
+          )}
 
           {error ? <p className="text-xs text-danger-600">{error}</p> : null}
 
@@ -382,7 +524,7 @@ function ComboForm({
               disabled={saving}
               className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
             >
-              {saving ? 'Guardando…' : 'Guardar combo y precios'}
+              {saving ? 'Guardando…' : 'Guardar combo'}
             </button>
           </div>
         </form>

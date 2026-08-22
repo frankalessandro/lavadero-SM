@@ -30,6 +30,7 @@ import { Route as AdminLavadoresIndexRouteImport } from './routes/admin/lavadore
 import { Route as AdminLiquidacionesIndexRouteImport } from './routes/admin/liquidaciones/index'
 import { Route as AdminOrdenesIndexRouteImport } from './routes/admin/ordenes/index'
 import { Route as AdminParqueaderoIndexRouteImport } from './routes/admin/parqueadero/index'
+import { Route as AdminServiciosIndexRouteImport } from './routes/admin/servicios/index'
 import { Route as AdminTiposVehiculoIndexRouteImport } from './routes/admin/tipos-vehiculo/index'
 import { Route as AdminTurnosIndexRouteImport } from './routes/admin/turnos/index'
 import { Route as AdminUsuariosIndexRouteImport } from './routes/admin/usuarios/index'
@@ -142,6 +143,11 @@ const AdminParqueaderoIndexRoute = AdminParqueaderoIndexRouteImport.update({
   path: '/parqueadero/',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const AdminServiciosIndexRoute = AdminServiciosIndexRouteImport.update({
+  id: '/servicios/',
+  path: '/servicios/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
 const AdminTiposVehiculoIndexRoute = AdminTiposVehiculoIndexRouteImport.update({
   id: '/tipos-vehiculo/',
   path: '/tipos-vehiculo/',
@@ -195,6 +201,7 @@ export interface FileRoutesByFullPath {
   '/admin/liquidaciones/': typeof AdminLiquidacionesIndexRoute
   '/admin/ordenes/': typeof AdminOrdenesIndexRoute
   '/admin/parqueadero/': typeof AdminParqueaderoIndexRoute
+  '/admin/servicios/': typeof AdminServiciosIndexRoute
   '/admin/tipos-vehiculo/': typeof AdminTiposVehiculoIndexRoute
   '/admin/turnos/': typeof AdminTurnosIndexRoute
   '/admin/usuarios/': typeof AdminUsuariosIndexRoute
@@ -220,6 +227,7 @@ export interface FileRoutesByTo {
   '/admin/liquidaciones': typeof AdminLiquidacionesIndexRoute
   '/admin/ordenes': typeof AdminOrdenesIndexRoute
   '/admin/parqueadero': typeof AdminParqueaderoIndexRoute
+  '/admin/servicios': typeof AdminServiciosIndexRoute
   '/admin/tipos-vehiculo': typeof AdminTiposVehiculoIndexRoute
   '/admin/turnos': typeof AdminTurnosIndexRoute
   '/admin/usuarios': typeof AdminUsuariosIndexRoute
@@ -250,6 +258,7 @@ export interface FileRoutesById {
   '/admin/liquidaciones/': typeof AdminLiquidacionesIndexRoute
   '/admin/ordenes/': typeof AdminOrdenesIndexRoute
   '/admin/parqueadero/': typeof AdminParqueaderoIndexRoute
+  '/admin/servicios/': typeof AdminServiciosIndexRoute
   '/admin/tipos-vehiculo/': typeof AdminTiposVehiculoIndexRoute
   '/admin/turnos/': typeof AdminTurnosIndexRoute
   '/admin/usuarios/': typeof AdminUsuariosIndexRoute
@@ -281,6 +290,7 @@ export interface FileRouteTypes {
     | '/admin/liquidaciones/'
     | '/admin/ordenes/'
     | '/admin/parqueadero/'
+    | '/admin/servicios/'
     | '/admin/tipos-vehiculo/'
     | '/admin/turnos/'
     | '/admin/usuarios/'
@@ -306,6 +316,7 @@ export interface FileRouteTypes {
     | '/admin/liquidaciones'
     | '/admin/ordenes'
     | '/admin/parqueadero'
+    | '/admin/servicios'
     | '/admin/tipos-vehiculo'
     | '/admin/turnos'
     | '/admin/usuarios'
@@ -335,6 +346,7 @@ export interface FileRouteTypes {
     | '/admin/liquidaciones/'
     | '/admin/ordenes/'
     | '/admin/parqueadero/'
+    | '/admin/servicios/'
     | '/admin/tipos-vehiculo/'
     | '/admin/turnos/'
     | '/admin/usuarios/'
@@ -503,6 +515,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminParqueaderoIndexRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/admin/servicios/': {
+      id: '/admin/servicios/'
+      path: '/servicios'
+      fullPath: '/admin/servicios/'
+      preLoaderRoute: typeof AdminServiciosIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/admin/tipos-vehiculo/': {
       id: '/admin/tipos-vehiculo/'
       path: '/tipos-vehiculo'
@@ -559,6 +578,7 @@ interface AdminRouteRouteChildren {
   AdminLiquidacionesIndexRoute: typeof AdminLiquidacionesIndexRoute
   AdminOrdenesIndexRoute: typeof AdminOrdenesIndexRoute
   AdminParqueaderoIndexRoute: typeof AdminParqueaderoIndexRoute
+  AdminServiciosIndexRoute: typeof AdminServiciosIndexRoute
   AdminTiposVehiculoIndexRoute: typeof AdminTiposVehiculoIndexRoute
   AdminTurnosIndexRoute: typeof AdminTurnosIndexRoute
   AdminUsuariosIndexRoute: typeof AdminUsuariosIndexRoute
@@ -575,6 +595,7 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminLiquidacionesIndexRoute: AdminLiquidacionesIndexRoute,
   AdminOrdenesIndexRoute: AdminOrdenesIndexRoute,
   AdminParqueaderoIndexRoute: AdminParqueaderoIndexRoute,
+  AdminServiciosIndexRoute: AdminServiciosIndexRoute,
   AdminTiposVehiculoIndexRoute: AdminTiposVehiculoIndexRoute,
   AdminTurnosIndexRoute: AdminTurnosIndexRoute,
   AdminUsuariosIndexRoute: AdminUsuariosIndexRoute,

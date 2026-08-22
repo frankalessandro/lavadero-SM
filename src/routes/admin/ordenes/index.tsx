@@ -137,7 +137,9 @@ function OrdenesPage() {
                   <td className="px-5 py-3 text-neutral-500">#{orden.consecutivo}</td>
                   <td className="px-5 py-3 font-medium text-neutral-900">{orden.placa}</td>
                   <td className="px-5 py-3 text-neutral-700">{orden.clienteNombre}</td>
-                  <td className="px-5 py-3 text-neutral-700">{combosPorId.get(orden.comboId) ?? '—'}</td>
+                  <td className="px-5 py-3 text-neutral-700">
+                    {orden.comboId ? combosPorId.get(orden.comboId) ?? '—' : 'Sin combo'}
+                  </td>
                   <td className="px-5 py-3 text-neutral-700">{lavadoresPorId.get(orden.lavadorId) ?? '—'}</td>
                   <td className="px-5 py-3 text-neutral-700">{COP.format(orden.precio)}</td>
                   <td className="px-5 py-3 text-neutral-700">

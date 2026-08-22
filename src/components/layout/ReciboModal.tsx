@@ -1,11 +1,13 @@
 import type { MetodoPago } from '../../schemas/orden'
 import logoMark from '../../assets/logo-mark.png'
+import { TiquetePrint } from './TiquetePrint'
 
 export interface ReciboData {
   consecutivo: number
   placa: string
   clienteNombre: string
   comboNombre: string
+  serviciosAdicionales?: string[]
   tipoNombre: string
   lavadorNombre: string
   precio: number
@@ -52,6 +54,9 @@ export function ReciboModal({
           <ReciboRow label="Cliente" value={recibo.clienteNombre} />
           <ReciboRow label="Tipo de vehículo" value={recibo.tipoNombre} />
           <ReciboRow label="Combo" value={recibo.comboNombre} />
+          {recibo.serviciosAdicionales && recibo.serviciosAdicionales.length > 0 ? (
+            <ReciboRow label="Adicionales" value={recibo.serviciosAdicionales.join(', ')} />
+          ) : null}
           <ReciboRow label="Lavador asignado" value={recibo.lavadorNombre} />
           {esPago && recibo.metodoPago ? (
             <ReciboRow label="Método de pago" value={recibo.metodoPago === 'efectivo' ? 'Efectivo' : 'Transferencia'} />
@@ -82,16 +87,26 @@ export function ReciboModal({
           </div>
           <button
             type="button"
+            onClick={() => window.print()}
+            className="w-full rounded-lg border border-neutral-200 py-3 text-sm font-semibold text-neutral-700 transition-colors hover:bg-neutral-50"
+          >
+            Imprimir tiquete
+          </button>
+          <button
+            type="button"
             onClick={onClose}
-            className={`w-full rounded-lg py-3.5 text-sm font-semibold text-white shadow-nav-active transition-colors ${
+            className={`mt-2.5 w-full rounded-lg py-3.5 text-sm font-semibold text-white shadow-nav-active transition-colors ${
               esPago ? 'bg-success-600 hover:bg-success-700' : 'bg-primary-600 hover:bg-primary-700'
             }`}
           >
             {closeLabel ?? (esPago ? 'Listo' : 'Registrar otro vehículo')}
           </button>
-          <p className="mt-2.5 text-center text-[11px] text-neutral-400">Comprobante interno — no es tiquete físico.</p>
+          <p className="mt-2.5 text-center text-[11px] text-neutral-400">
+            Impresión pensada para POS térmica de 58mm.
+          </p>
         </div>
       </div>
+      <TiquetePrint recibo={recibo} variant={variant} />
     </div>
   )
 }

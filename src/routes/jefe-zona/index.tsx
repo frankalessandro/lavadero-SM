@@ -140,7 +140,7 @@ function JefeZonaDashboard() {
     await refresh()
   }
 
-  const comboNombre = (id: string) => combos.find((c) => c.id === id)?.nombre ?? '—'
+  const comboNombre = (id: string | undefined) => (id ? combos.find((c) => c.id === id)?.nombre : undefined) ?? 'Sin combo'
   const lavadorNombre = (id: string) => lavadores.find((l) => l.id === id)?.nombre ?? '—'
   const tipoVehiculo = (id: string) => tiposVehiculo.find((t) => t.id === id)
 
@@ -196,10 +196,14 @@ function JefeZonaDashboard() {
     for (const orden of entregadasHoy) {
       if (orden.tiempoLavadoSegundos != null) {
         const minutos = orden.tiempoLavadoSegundos / 60
-        const combo = porCombo.get(orden.comboId) ?? { total: 0, cantidad: 0 }
-        combo.total += minutos
-        combo.cantidad += 1
-        porCombo.set(orden.comboId, combo)
+        // Órdenes sin combo (solo servicios individuales) no aportan a este promedio "por
+        // combo" — no hay combo que promediar.
+        if (orden.comboId) {
+          const combo = porCombo.get(orden.comboId) ?? { total: 0, cantidad: 0 }
+          combo.total += minutos
+          combo.cantidad += 1
+          porCombo.set(orden.comboId, combo)
+        }
         const lavador = porLavador.get(orden.lavadorId) ?? { total: 0, cantidad: 0 }
         lavador.total += minutos
         lavador.cantidad += 1

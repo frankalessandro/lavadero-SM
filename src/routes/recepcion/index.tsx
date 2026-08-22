@@ -1,34 +1,66 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { createFileRoute, Link, redirect, useRouter } from '@tanstack/react-router'
-import { Package, Car, Lock } from 'lucide-react'
+import { Package, Car, Lock, Sparkles } from 'lucide-react'
 import { SimpleTopbar } from '../../components/layout/SimpleTopbar'
 import { signOut } from '../../lib/auth'
 import { fetchTiposVehiculo } from '../../data/tiposVehiculo'
-import { fetchCombos } from '../../data/combos'
-import { fetchPrecios, findPrecio } from '../../data/precios'
+import { fetchCombos, precioComboCalculado } from '../../data/combos'
+import { fetchComboServicios, type ComboServicio } from '../../data/comboServicios'
+import { fetchServicios } from '../../data/servicios'
+import { fetchPreciosServicioCombo } from '../../data/preciosServicioCombo'
+import { fetchPreciosServicioIndividual, findPrecioServicioIndividual } from '../../data/preciosServicioIndividual'
+import { fetchPreciosComboFijo } from '../../data/preciosComboFijo'
 import { fetchLavadores, suggestNextLavador } from '../../data/lavadores'
 import { fetchOrdenesHoy, buscarPorPlaca, createOrden } from '../../data/ordenes'
 import { fetchTurnoAbierto } from '../../data/turnos'
 import { ordenInputSchema, type EstadoOrden, type Orden } from '../../schemas/orden'
-import type { TipoVehiculo } from '../../schemas/tipoVehiculo'
+import type { TipoVehiculo, CategoriaVehiculo } from '../../schemas/tipoVehiculo'
 import type { Combo } from '../../schemas/combo'
+import type { Servicio } from '../../schemas/servicio'
 import type { Lavador } from '../../schemas/lavador'
-import type { Precio } from '../../schemas/precio'
+import type { PrecioServicio } from '../../schemas/precioServicio'
+import type { PrecioCombo } from '../../schemas/precioCombo'
 import { Card } from '../../components/layout/Card'
 import { AccordionSection } from '../../components/layout/Accordion'
 import { CustomSelect } from '../../components/layout/CustomSelect'
 import { ReciboModal, type ReciboData } from '../../components/layout/ReciboModal'
 
 async function loadRecepcion() {
-  const [tipos, combos, precios, lavadores, ordenesHoy, turno] = await Promise.all([
+  const [
+    tipos,
+    combos,
+    servicios,
+    preciosServicioCombo,
+    preciosServicioIndividual,
+    preciosComboFijo,
+    comboServicios,
+    lavadores,
+    ordenesHoy,
+    turno,
+  ] = await Promise.all([
     fetchTiposVehiculo(),
     fetchCombos(),
-    fetchPrecios(),
+    fetchServicios(),
+    fetchPreciosServicioCombo(),
+    fetchPreciosServicioIndividual(),
+    fetchPreciosComboFijo(),
+    fetchComboServicios(),
     fetchLavadores(),
     fetchOrdenesHoy(),
     fetchTurnoAbierto('jefe_zona'),
   ])
-  return { tipos, combos, precios, lavadores, ordenesHoy, turno }
+  return {
+    tipos,
+    combos,
+    servicios,
+    preciosServicioCombo,
+    preciosServicioIndividual,
+    preciosComboFijo,
+    comboServicios,
+    lavadores,
+    ordenesHoy,
+    turno,
+  }
 }
 
 export const Route = createFileRoute('/recepcion/')({
@@ -64,7 +96,11 @@ function RecepcionPage() {
   const router = useRouter()
   const [tipos] = useState<TipoVehiculo[]>(data.tipos)
   const [combos] = useState<Combo[]>(data.combos)
-  const [precios] = useState<Precio[]>(data.precios)
+  const [servicios] = useState<Servicio[]>(data.servicios)
+  const [preciosServicioCombo] = useState<PrecioServicio[]>(data.preciosServicioCombo)
+  const [preciosServicioIndividual] = useState<PrecioServicio[]>(data.preciosServicioIndividual)
+  const [preciosComboFijo] = useState<PrecioCombo[]>(data.preciosComboFijo)
+  const [comboServicios] = useState<ComboServicio[]>(data.comboServicios)
   const [lavadores] = useState<Lavador[]>(data.lavadores)
   const [ordenesHoy, setOrdenesHoy] = useState<Orden[]>(data.ordenesHoy)
 
@@ -74,7 +110,7 @@ function RecepcionPage() {
   }
 
   const tipoNombre = (id: string) => tipos.find((t) => t.id === id)?.nombre ?? '—'
-  const comboNombre = (id: string) => combos.find((c) => c.id === id)?.nombre ?? '—'
+  const comboNombre = (id: string | undefined) => (id ? combos.find((c) => c.id === id)?.nombre : undefined) ?? 'Sin combo'
   const lavadorNombre = (id: string) => lavadores.find((l) => l.id === id)?.nombre ?? '—'
 
   return (
@@ -82,7 +118,17 @@ function RecepcionPage() {
       <SimpleTopbar title="Recepción" onLogout={signOut} />
       <div className="mx-auto flex max-w-2xl flex-col gap-6 pb-6">
       {data.turno ? (
-        <ReceptionForm tipos={tipos} combos={combos} precios={precios} lavadores={lavadores} onCreated={refresh} />
+        <ReceptionForm
+          tipos={tipos}
+          combos={combos}
+          servicios={servicios}
+          preciosServicioCombo={preciosServicioCombo}
+          preciosServicioIndividual={preciosServicioIndividual}
+          preciosComboFijo={preciosComboFijo}
+          comboServicios={comboServicios}
+          lavadores={lavadores}
+          onCreated={refresh}
+        />
       ) : (
         <Card className="flex flex-col items-center gap-3 py-10 text-center">
           <span className="flex size-12 items-center justify-center rounded-xl bg-warning-50 text-warning-700">
@@ -155,17 +201,31 @@ const emptyForm = {
 function ReceptionForm({
   tipos,
   combos,
-  precios,
+  servicios,
+  preciosServicioCombo,
+  preciosServicioIndividual,
+  preciosComboFijo,
+  comboServicios,
   lavadores,
   onCreated,
 }: {
   tipos: TipoVehiculo[]
   combos: Combo[]
-  precios: Precio[]
+  servicios: Servicio[]
+  preciosServicioCombo: PrecioServicio[]
+  preciosServicioIndividual: PrecioServicio[]
+  preciosComboFijo: PrecioCombo[]
+  comboServicios: ComboServicio[]
   lavadores: Lavador[]
   onCreated: () => void
 }) {
   const [form, setForm] = useState(emptyForm)
+  // Elegir "combo" o "servicios" es una decisión explícita del usuario, no un valor más dentro
+  // del selector de combo — en modo "combo" se puede además agregar servicios sueltos encima
+  // (el checklist de abajo sigue disponible); en modo "servicios" la orden es solo servicios,
+  // sin combo.
+  const [modo, setModo] = useState<'combo' | 'servicios'>('combo')
+  const [serviciosAdicionales, setServiciosAdicionales] = useState<string[]>([])
   const [openStep, setOpenStep] = useState(1)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -177,18 +237,66 @@ function ReceptionForm({
     })
   }, [])
 
+  const tipoSeleccionado = tipos.find((t) => t.id === form.tipoVehiculoId)
+
   const combosDisponibles = useMemo(
-    () => combos.filter((combo) => combo.activo && !!findPrecio(precios, combo.id, form.tipoVehiculoId)),
-    [combos, precios, form.tipoVehiculoId],
+    () =>
+      combos.filter(
+        (combo) =>
+          combo.activo &&
+          precioComboCalculado(combo, form.tipoVehiculoId, comboServicios, preciosServicioCombo, preciosComboFijo) !==
+            undefined,
+      ),
+    [combos, comboServicios, preciosServicioCombo, preciosComboFijo, form.tipoVehiculoId],
   )
 
   const comboSeleccionado = form.comboId ? combos.find((c) => c.id === form.comboId) : undefined
 
+  const precioCombo = comboSeleccionado
+    ? precioComboCalculado(comboSeleccionado, form.tipoVehiculoId, comboServicios, preciosServicioCombo, preciosComboFijo)
+    : undefined
+
+  // Servicios que ya vienen incluidos en el combo elegido no se ofrecen para agregar de nuevo
+  // (aparte, encima) — evita cobrar dos veces lo mismo.
+  const servicioIdsDelCombo = useMemo(
+    () => new Set(comboServicios.filter((cs) => cs.comboId === form.comboId).map((cs) => cs.servicioId)),
+    [comboServicios, form.comboId],
+  )
+
+  const serviciosDisponibles = useMemo(
+    () =>
+      servicios.filter(
+        (s) =>
+          s.activo &&
+          s.categoria === (tipoSeleccionado?.categoria as CategoriaVehiculo | undefined) &&
+          !servicioIdsDelCombo.has(s.id),
+      ),
+    [servicios, tipoSeleccionado, servicioIdsDelCombo],
+  )
+
+  // Servicios individuales (sea que la orden no lleve combo, o que se agreguen sueltos encima
+  // de uno) siempre se cobran al precio individual, no al precio de combo — regla de negocio
+  // confirmada: el recargo por venderse solo/suelto es real y no siempre es exactamente $5.000.
+  const precioServiciosIndividuales = serviciosAdicionales.reduce((suma, servicioId) => {
+    const precio = findPrecioServicioIndividual(preciosServicioIndividual, servicioId, form.tipoVehiculoId)?.precio
+    return suma + (precio ?? 0)
+  }, 0)
+
+  // Si hay combo elegido pero no se le pudo calcular precio (ej. le faltan servicios/precios
+  // configurados para este tipo de vehículo — como pasa hoy con las motos), el total NO está
+  // listo: mostrar $0 sería engañoso y dejaría enviar una orden que el servidor va a rechazar.
   const precio =
-    form.tipoVehiculoId && form.comboId ? findPrecio(precios, form.comboId, form.tipoVehiculoId)?.precio : undefined
+    form.comboId && precioCombo === undefined
+      ? undefined
+      : form.comboId || serviciosAdicionales.length > 0
+        ? (precioCombo ?? 0) + precioServiciosIndividuales
+        : undefined
 
   const paso1Completo = !!(form.placa && form.clienteNombre && form.tipoVehiculoId)
-  const paso2Completo = !!(form.comboId && form.lavadorId)
+  const paso2Completo = !!(
+    form.lavadorId &&
+    ((form.comboId && precioCombo !== undefined) || (!form.comboId && serviciosAdicionales.length > 0))
+  )
 
   function update<K extends keyof typeof emptyForm>(key: K, value: (typeof emptyForm)[K]) {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -201,27 +309,60 @@ function ReceptionForm({
   async function handlePlacaBlur() {
     const historial = await buscarPorPlaca(form.placa)
     if (!historial) return
+    // Solo restaurar el combo del histórico si hoy todavía tiene precio calculable para ese
+    // tipo de vehículo — si le faltan servicios/precios configurados, dejarlo vacío para que
+    // el usuario elija en vez de heredar un combo que no se puede cobrar.
+    const comboHistorial = historial.comboId ? combos.find((c) => c.id === historial.comboId) : undefined
+    const comboHistorialValido =
+      comboHistorial &&
+      precioComboCalculado(
+        comboHistorial,
+        historial.tipoVehiculoId,
+        comboServicios,
+        preciosServicioCombo,
+        preciosComboFijo,
+      ) !== undefined
     setForm((prev) => ({
       ...prev,
       clienteNombre: prev.clienteNombre || historial.clienteNombre,
       clienteTelefono: prev.clienteTelefono || historial.clienteTelefono || '',
       clienteCorreo: prev.clienteCorreo || historial.clienteCorreo || '',
       tipoVehiculoId: prev.tipoVehiculoId || historial.tipoVehiculoId,
-      comboId: prev.comboId || historial.comboId,
+      comboId: prev.comboId || (comboHistorialValido ? historial.comboId ?? '' : ''),
     }))
   }
 
   function handleTipoChange(tipoVehiculoId: string) {
     setForm((prev) => ({ ...prev, tipoVehiculoId, comboId: '' }))
+    setServiciosAdicionales([])
+  }
+
+  function handleComboChange(comboId: string) {
+    update('comboId', comboId)
+    setServiciosAdicionales([])
+  }
+
+  function handleModoChange(nuevoModo: 'combo' | 'servicios') {
+    setModo(nuevoModo)
+    update('comboId', '')
+    setServiciosAdicionales([])
+  }
+
+  function toggleServicioAdicional(servicioId: string) {
+    setServiciosAdicionales((prev) =>
+      prev.includes(servicioId) ? prev.filter((id) => id !== servicioId) : [...prev, servicioId],
+    )
   }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     const parsed = ordenInputSchema.safeParse({
       ...form,
+      comboId: form.comboId || undefined,
       clienteTelefono: form.clienteTelefono || undefined,
       clienteCorreo: form.clienteCorreo || undefined,
       observaciones: form.observaciones || undefined,
+      serviciosAdicionales,
     })
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Revisa los datos del formulario')
@@ -235,7 +376,8 @@ function ReceptionForm({
         consecutivo: orden.consecutivo,
         placa: orden.placa,
         clienteNombre: orden.clienteNombre,
-        comboNombre: combos.find((c) => c.id === orden.comboId)?.nombre ?? '—',
+        comboNombre: orden.comboId ? combos.find((c) => c.id === orden.comboId)?.nombre ?? '—' : 'Sin combo',
+        serviciosAdicionales: orden.serviciosAdicionales.map((s) => s.nombre),
         tipoNombre: tipos.find((t) => t.id === orden.tipoVehiculoId)?.nombre ?? '—',
         lavadorNombre: lavadores.find((l) => l.id === orden.lavadorId)?.nombre ?? '—',
         precio: orden.precio,
@@ -243,6 +385,7 @@ function ReceptionForm({
       })
       const siguienteLavador = await suggestNextLavador()
       setForm({ ...emptyForm, lavadorId: siguienteLavador ?? '' })
+      setServiciosAdicionales([])
       setOpenStep(1)
       onCreated()
     } catch (err) {
@@ -329,27 +472,80 @@ function ReceptionForm({
       <AccordionSection
         step={2}
         title="Servicio"
-        summary={form.comboId ? combos.find((c) => c.id === form.comboId)?.nombre : 'Combo y lavador'}
+        summary={form.comboId ? combos.find((c) => c.id === form.comboId)?.nombre : 'Servicios y lavador'}
         isOpen={openStep === 2}
         isComplete={paso2Completo}
         onToggle={() => toggleStep(2)}
       >
-        <label className="flex flex-col gap-1.5 text-sm">
-          <span className="flex items-center gap-1.5 font-medium text-neutral-700">
-            <Package size={14} className="text-primary-500" /> Combo
-          </span>
-          <CustomSelect
-            value={form.comboId}
-            onChange={(value) => update('comboId', value)}
-            disabled={!form.tipoVehiculoId}
-            placeholder={form.tipoVehiculoId ? 'Selecciona…' : 'Primero elige el tipo de vehículo'}
-            emptyLabel="No hay combos con precio para ese tipo"
-            options={combosDisponibles.map((c) => ({ value: c.id, label: c.nombre, description: c.descripcion }))}
-          />
-        </label>
+        <div className="flex flex-col gap-1.5 text-sm">
+          <span className="font-medium text-neutral-700">¿Qué se registra?</span>
+          <div className="grid grid-cols-2 gap-2">
+            {(
+              [
+                { value: 'combo' as const, label: 'Combo' },
+                { value: 'servicios' as const, label: 'Servicios sueltos' },
+              ]
+            ).map(({ value, label }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => handleModoChange(value)}
+                className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
+                  modo === value
+                    ? 'border-primary-600 bg-primary-50 text-primary-700'
+                    : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {modo === 'combo' ? (
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="flex items-center gap-1.5 font-medium text-neutral-700">
+              <Package size={14} className="text-primary-500" /> Combo
+            </span>
+            <CustomSelect
+              value={form.comboId}
+              onChange={handleComboChange}
+              disabled={!form.tipoVehiculoId}
+              placeholder={form.tipoVehiculoId ? 'Selecciona…' : 'Primero elige el tipo de vehículo'}
+              emptyLabel="No hay combos con precio para ese tipo"
+              options={combosDisponibles.map((c) => ({ value: c.id, label: c.nombre, description: c.descripcion }))}
+            />
+          </label>
+        ) : null}
 
         {comboSeleccionado?.descripcion ? (
           <p className="text-sm text-neutral-500">{comboSeleccionado.descripcion}</p>
+        ) : null}
+
+        {form.tipoVehiculoId && (modo === 'servicios' || serviciosDisponibles.length > 0) ? (
+          <div className="flex flex-col gap-1.5 rounded-lg border border-neutral-200 p-3">
+            <span className="flex items-center gap-1.5 text-sm font-medium text-neutral-700">
+              <Sparkles size={14} className="text-primary-500" />
+              {modo === 'combo' ? 'Servicios adicionales' : 'Servicios'}
+              <span className="font-normal text-neutral-400">
+                {modo === 'combo' ? '(opcional, fuera del combo)' : '(precio individual)'}
+              </span>
+            </span>
+            {serviciosDisponibles.map((servicio) => (
+              <label key={servicio.id} className="flex items-center gap-2.5 rounded-lg px-1 py-1 text-sm">
+                <input
+                  type="checkbox"
+                  checked={serviciosAdicionales.includes(servicio.id)}
+                  onChange={() => toggleServicioAdicional(servicio.id)}
+                  className="size-4 rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
+                />
+                <span className="text-neutral-700">{servicio.nombre}</span>
+                <span className="ml-auto text-xs text-neutral-400">
+                  {COP.format(findPrecioServicioIndividual(preciosServicioIndividual, servicio.id, form.tipoVehiculoId)?.precio ?? 0)}
+                </span>
+              </label>
+            ))}
+          </div>
         ) : null}
 
         {precio !== undefined ? (

@@ -23,6 +23,15 @@ const nullableSegundos = z
   .nullish()
   .transform((value) => value ?? undefined)
 
+// Servicio individual de la orden — sea porque no lleva combo, o porque se agregó suelto
+// encima de uno (ej. "Combo 2 + lavado de motor extra"). Precio snapshot al crear la orden,
+// igual criterio de inmutabilidad que `precio`/`comisionLavador`.
+export const ordenServicioAdicionalSchema = z.object({
+  servicioId: z.string(),
+  nombre: z.string(),
+  precio: z.number().int().nonnegative(),
+})
+
 export const ordenSchema = z.object({
   id: z.string(),
   consecutivo: z.number().int().positive(),
@@ -31,7 +40,8 @@ export const ordenSchema = z.object({
   clienteTelefono: nullableTrimmedString,
   clienteCorreo: nullableTrimmedString,
   tipoVehiculoId: z.string(),
-  comboId: z.string(),
+  // Ya no es obligatorio: una orden puede ser solo servicios individuales, sin combo.
+  comboId: nullableTrimmedString,
   lavadorId: z.string(),
   precio: z.number().int().positive(),
   comisionLavador: z.number().int().nonnegative(),
@@ -51,6 +61,7 @@ export const ordenSchema = z.object({
   motivoAnulacion: nullableTrimmedString,
   anuladaEn: nullableTimestamp,
   anuladaPor: nullableTrimmedString,
+  serviciosAdicionales: ordenServicioAdicionalSchema.array().default([]),
 })
 
 export const anularOrdenInputSchema = z.object({
@@ -59,17 +70,25 @@ export const anularOrdenInputSchema = z.object({
 })
 
 // Registro del vehículo — sin datos de pago, eso llega en el cobro (M2 real: se cobra al
-// entregar, no al recibir el vehículo).
-export const ordenInputSchema = z.object({
-  placa: z.string().trim().min(1, 'La placa es obligatoria').toUpperCase(),
-  clienteNombre: z.string().trim().min(1, 'El nombre del cliente es obligatorio'),
-  clienteTelefono: z.string().trim().optional(),
-  clienteCorreo: z.string().trim().email('Correo inválido').optional(),
-  tipoVehiculoId: z.string().min(1, 'Selecciona el tipo de vehículo'),
-  comboId: z.string().min(1, 'Selecciona el combo'),
-  lavadorId: z.string().min(1, 'Selecciona el lavador'),
-  observaciones: z.string().trim().optional(),
-})
+// entregar, no al recibir el vehículo). El combo ya no es obligatorio: la orden puede ser solo
+// servicios individuales (regla `.refine` abajo exige al menos uno de los dos).
+export const ordenInputSchema = z
+  .object({
+    placa: z.string().trim().min(1, 'La placa es obligatoria').toUpperCase(),
+    clienteNombre: z.string().trim().min(1, 'El nombre del cliente es obligatorio'),
+    clienteTelefono: z.string().trim().optional(),
+    clienteCorreo: z.string().trim().email('Correo inválido').optional(),
+    tipoVehiculoId: z.string().min(1, 'Selecciona el tipo de vehículo'),
+    comboId: z.string().trim().min(1).optional(),
+    lavadorId: z.string().min(1, 'Selecciona el lavador'),
+    observaciones: z.string().trim().optional(),
+    // Servicios individuales — sea que acompañen al combo o que sean todo lo que lleva la orden.
+    serviciosAdicionales: z.array(z.string()).optional().default([]),
+  })
+  .refine((data) => !!data.comboId || data.serviciosAdicionales.length > 0, {
+    message: 'Selecciona un combo o al menos un servicio individual',
+    path: ['comboId'],
+  })
 
 // Edición de datos de contacto del cliente mientras el vehículo sigue en_proceso o listo (antes
 // de cobrar/entregar) — placa/combo/tipo no se tocan aquí, esos definen el servicio ya registrado.
@@ -90,6 +109,7 @@ export const cobroInputSchema = z
     path: ['referenciaPago'],
   })
 
+export type OrdenServicioAdicional = z.infer<typeof ordenServicioAdicionalSchema>
 export type Orden = z.infer<typeof ordenSchema>
 export type OrdenInput = z.infer<typeof ordenInputSchema>
 export type CobroInput = z.infer<typeof cobroInputSchema>
