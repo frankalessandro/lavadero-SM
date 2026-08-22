@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import type { MetodoPago } from '../../schemas/orden'
 import logoMark from '../../assets/logo-mark.png'
 import { TiquetePrint } from './TiquetePrint'
@@ -26,13 +27,26 @@ export function ReciboModal({
   variant,
   onClose,
   closeLabel,
+  autoPrint,
 }: {
   recibo: ReciboData
   variant: 'ingreso' | 'pago'
   onClose: () => void
   closeLabel?: string
+  /** Dispara `window.print()` apenas se monta el modal — para no depender del clic manual en
+   * "Imprimir tiquete" (ej. al confirmar un cobro). El navegador igual muestra su diálogo de
+   * impresión salvo que Chrome corra con `--kiosk-printing` (impresión silenciosa a la
+   * impresora por defecto, configuración típica de un POS/tablet dedicado). */
+  autoPrint?: boolean
 }) {
   const esPago = variant === 'pago'
+
+  useEffect(() => {
+    if (autoPrint) window.print()
+    // Solo al montar — cada apertura del modal es una instancia nueva (recibo cambia de
+    // identidad), no queremos reimprimir si algo más en el componente cambia después.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-neutral-900/50 p-0 backdrop-blur-sm sm:items-center sm:p-6">

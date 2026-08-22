@@ -113,6 +113,9 @@ function JefeZonaDashboard() {
   const [editandoCliente, setEditandoCliente] = useState<Orden | null>(null)
   const [finalizando, setFinalizando] = useState<Orden | null>(null)
   const [recibo, setRecibo] = useState<ReciboData | null>(null)
+  // Solo se activa al cobrar (handleCobrado) — al reabrir un tiquete ya emitido (abrirTiquete)
+  // no queremos disparar la impresión sola cada vez que alguien solo quiere verlo.
+  const [reciboAutoPrint, setReciboAutoPrint] = useState(false)
   const [contactando, setContactando] = useState<Orden | null>(null)
   // Tablero de seguimiento (en proceso/listos) vs. tabla de entregados hoy — ambas vistas
   // permiten reabrir e imprimir el tiquete de cualquier orden, en cualquier estado.
@@ -248,6 +251,7 @@ function JefeZonaDashboard() {
       metodoPago,
       referenciaPago,
     })
+    setReciboAutoPrint(true)
     setCobrando(null)
     await refresh()
   }
@@ -269,6 +273,7 @@ function JefeZonaDashboard() {
       metodoPago: orden.metodoPago,
       referenciaPago: orden.referenciaPago,
     })
+    setReciboAutoPrint(false)
   }
 
   return (
@@ -562,7 +567,12 @@ function JefeZonaDashboard() {
       ) : null}
 
       {recibo ? (
-        <ReciboModal recibo={recibo} variant={recibo.metodoPago ? 'pago' : 'ingreso'} onClose={() => setRecibo(null)} />
+        <ReciboModal
+          recibo={recibo}
+          variant={recibo.metodoPago ? 'pago' : 'ingreso'}
+          autoPrint={reciboAutoPrint}
+          onClose={() => setRecibo(null)}
+        />
       ) : null}
 
       {viendoDetalle ? (
