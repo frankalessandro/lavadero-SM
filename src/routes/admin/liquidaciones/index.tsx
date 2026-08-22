@@ -76,7 +76,6 @@ function LiquidacionesPage() {
   const [confirmandoPago, setConfirmandoPago] = useState<Liquidacion | null>(null)
 
   const lavadoresPorId = new Map(lavadores.map((l) => [l.id, l] as const))
-  const lavadoresPagoDiario = lavadores.filter((l) => l.activo && l.pagoDiario)
 
   async function refresh() {
     const data = await loadData()
@@ -216,15 +215,6 @@ function LiquidacionesPage() {
           </div>
           </>
         )}
-
-        {lavadoresPagoDiario.length > 0 ? (
-          <p className="rounded-lg bg-warning-50 px-4 py-3 text-xs text-warning-700">
-            {lavadoresPagoDiario.map((l) => l.nombre).join(', ')}{' '}
-            {lavadoresPagoDiario.length === 1 ? 'tiene' : 'tienen'} activada la excepción de pago
-            diario (regla de negocio 4) — no {lavadoresPagoDiario.length === 1 ? 'entra' : 'entran'} en
-            este flujo de liquidación {periodicidadLabel}.
-          </p>
-        ) : null}
       </section>
 
       <section className="flex flex-col gap-3">

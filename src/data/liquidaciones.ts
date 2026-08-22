@@ -22,11 +22,13 @@ export interface ComisionPendiente {
   cantidadOrdenes: number
 }
 
-// Regla de negocio 4: liquidación semanal sobre el acumulado, excepto lavadores con
-// pagoDiario=true (excepción parametrizable) — esos se muestran aparte, no entran aquí.
+// Regla de negocio 4: liquidación sobre el acumulado, sin descuentos al lavador. Admin elige
+// diaria o semanal por lavador en cada generación (ver generarLiquidacion) — no hace falta una
+// excepción parametrizada de antemano por lavador, cualquiera puede liquidarse en el periodo que
+// el negocio decida.
 export async function fetchComisionesPendientes(): Promise<ComisionPendiente[]> {
   const lavadores = await fetchLavadores()
-  const elegibles = lavadores.filter((l) => l.activo && !l.pagoDiario)
+  const elegibles = lavadores.filter((l) => l.activo)
   if (elegibles.length === 0) return []
 
   // Solo entregadas: la comisión se vuelve pagable cuando el servicio se cobró de verdad,

@@ -3,7 +3,7 @@ import { lavadorInputSchema, lavadorSchema, type Lavador, type LavadorInput } fr
 import { fetchAsistenciasDelDia, fetchDiasDescanso } from './asistenciaLavadores'
 
 const LAVADOR_SELECT =
-  'id, nombre, telefono, fechaIngreso:fecha_ingreso, fechaCumpleanos:fecha_cumpleanos, activo, pagoDiario:pago_diario, ultimaAsignacion:ultima_asignacion'
+  'id, nombre, telefono, fechaIngreso:fecha_ingreso, fechaCumpleanos:fecha_cumpleanos, activo, ultimaAsignacion:ultima_asignacion'
 
 export async function fetchLavadores(): Promise<Lavador[]> {
   const { data, error } = await db
@@ -24,7 +24,6 @@ export async function createLavador(input: LavadorInput): Promise<Lavador> {
       telefono: parsed.telefono,
       fecha_ingreso: parsed.fechaIngreso,
       fecha_cumpleanos: parsed.fechaCumpleanos,
-      pago_diario: parsed.pagoDiario,
     })
     .select(LAVADOR_SELECT)
     .single()
@@ -41,7 +40,6 @@ export async function updateLavador(id: string, input: LavadorInput): Promise<La
       telefono: parsed.telefono,
       fecha_ingreso: parsed.fechaIngreso,
       fecha_cumpleanos: parsed.fechaCumpleanos,
-      pago_diario: parsed.pagoDiario,
     })
     .eq('id', id)
     .select(LAVADOR_SELECT)

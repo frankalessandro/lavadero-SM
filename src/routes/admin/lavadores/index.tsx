@@ -72,7 +72,6 @@ function LavadoresPage() {
               <th className="px-5 py-3">Contacto</th>
               <th className="px-5 py-3">Ingreso</th>
               <th className="px-5 py-3">Estado</th>
-              <th className="px-5 py-3">Modalidad de pago</th>
               <th className="px-5 py-3 text-right">Acciones</th>
             </tr>
           </thead>
@@ -97,15 +96,6 @@ function LavadoresPage() {
                   </span>
                 </td>
                 <td className="px-5 py-3">
-                  {lavador.pagoDiario ? (
-                    <span className="inline-flex rounded-full bg-warning-50 px-2.5 py-1 text-xs font-medium text-warning-700">
-                      Pago diario
-                    </span>
-                  ) : (
-                    <span className="text-xs text-neutral-400">Liquidación semanal</span>
-                  )}
-                </td>
-                <td className="px-5 py-3">
                   <div className="flex justify-end gap-2">
                     <button
                       type="button"
@@ -128,7 +118,7 @@ function LavadoresPage() {
             ))}
             {lavadores.length === 0 ? (
               <tr>
-                <td className="px-5 py-6 text-center text-neutral-400" colSpan={6}>
+                <td className="px-5 py-6 text-center text-neutral-400" colSpan={5}>
                   No hay lavadores registrados.
                 </td>
               </tr>
@@ -184,7 +174,6 @@ function LavadorForm({
     lavador?.fechaIngreso ?? new Date().toISOString().slice(0, 10),
   )
   const [fechaCumpleanos, setFechaCumpleanos] = useState(lavador?.fechaCumpleanos ?? '')
-  const [pagoDiario, setPagoDiario] = useState(lavador?.pagoDiario ?? false)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -195,7 +184,6 @@ function LavadorForm({
       telefono: telefono || undefined,
       fechaIngreso,
       fechaCumpleanos: fechaCumpleanos || undefined,
-      pagoDiario,
     })
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Datos inválidos')
@@ -283,23 +271,6 @@ function LavadorForm({
               />
             </label>
           </div>
-
-          <label className="flex items-start gap-2.5 rounded-lg border border-neutral-200 p-3.5 text-left text-sm">
-            <input
-              type="checkbox"
-              checked={pagoDiario}
-              onChange={(event) => setPagoDiario(event.target.checked)}
-              className="mt-0.5 size-4 rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
-            />
-            <span>
-              <span className="font-medium text-neutral-700">Pago diario, en periodo de inicio</span>
-              <br />
-              <span className="text-xs text-neutral-500">
-                Excepción parametrizable — este lavador queda fuera de la liquidación semanal
-                general.
-              </span>
-            </span>
-          </label>
 
           {error ? <p className="text-xs text-danger-600">{error}</p> : null}
 
