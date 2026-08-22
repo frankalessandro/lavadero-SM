@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import {
   Droplets,
@@ -23,14 +23,20 @@ import {
   Pencil,
   Receipt,
   ClipboardCheck,
+  Search,
+  Bell,
+  BellRing,
+  Undo2,
 } from 'lucide-react'
 import {
   fetchOrdenesHoy,
   fetchOrdenesEntregadasHoy,
   marcarListo,
+  volverAProceso,
   cobrarYEntregarOrden,
   reasignarLavador,
   editarInfoCliente,
+  marcarNotificado,
 } from '../../data/ordenes'
 import { fetchLavadores } from '../../data/lavadores'
 import { fetchAsistenciasDelDia, fetchDiasDescanso } from '../../data/asistenciaLavadores'
@@ -98,6 +104,22 @@ function formatMinutos(minutos: number): string {
   return `${horas} h ${Math.round(minutos % 60)} min`
 }
 
+// Mensaje de WhatsApp para "Contactar" — con nombre cuando hay uno registrado (caso normal, el
+// formulario de recepción lo exige), y un mensaje genérico solo con placa como respaldo si algún
+// registro viejo/importado llegara sin nombre. Menciona "carro"/"moto" explícito (no solo el
+// emoji) porque es lo que pidió el negocio para que el cliente reconozca de inmediato cuál es.
+function construirMensajeWhatsapp(orden: Orden, esMoto: boolean): string {
+  const tipoPalabra = esMoto ? 'moto' : 'carro'
+  const emoji = esMoto ? '🏍️' : '🚘'
+  const nombre = orden.clienteNombre.trim()
+  const saludo = nombre ? `Hola ${nombre}, te hablamos de CarWash SM ✨.` : 'Hola, te hablamos de CarWash SM ✨.'
+  const cuerpo =
+    orden.estado === 'listo'
+      ? `Te informamos que tu ${tipoPalabra} ${orden.placa} ya está listo para recoger. ${emoji}`
+      : `Te contactamos sobre tu ${tipoPalabra} ${orden.placa}. ${emoji}`
+  return `${saludo}\n\n${cuerpo}`
+}
+
 function JefeZonaDashboard() {
   const data = Route.useLoaderData()
   const router = useRouter()
@@ -109,10 +131,18 @@ function JefeZonaDashboard() {
   const [combos] = useState(data.combos)
   const [tiposVehiculo] = useState(data.tiposVehiculo)
   const [turno, setTurno] = useState(data.turno)
-  const [cobrando, setCobrando] = useState<Orden | null>(null)
+  // `finalizarPrimero`: cuando se cobra directo desde una orden en_proceso (cliente esperando en
+  // sala, no hace falta esperar a que "venga por ella" — ver onCobrarDirecto en OrdenCard), el
+  // submit del modal marca listo (fija tiempo_lavado_segundos) y de inmediato cobra/entrega.
+  const [cobrando, setCobrando] = useState<{ orden: Orden; finalizarPrimero: boolean } | null>(null)
+  const [busquedaPlaca, setBusquedaPlaca] = useState('')
+  // 'todos' (default) | 'sin_asignar' | id de lavador.
+  const [lavadorFiltro, setLavadorFiltro] = useState('todos')
   const [reasignando, setReasignando] = useState<Orden | null>(null)
   const [editandoCliente, setEditandoCliente] = useState<Orden | null>(null)
   const [finalizando, setFinalizando] = useState<Orden | null>(null)
+  // Corrige un "Finalizar lavado" por equivocación — vuelve la orden a en_proceso.
+  const [volviendoAProceso, setVolviendoAProceso] = useState<Orden | null>(null)
   const [recibo, setRecibo] = useState<ReciboData | null>(null)
   // Solo se activa al cobrar (handleCobrado) — al reabrir un tiquete ya emitido (abrirTiquete)
   // no queremos disparar la impresión sola cada vez que alguien solo quiere verlo.
@@ -145,18 +175,60 @@ function JefeZonaDashboard() {
     router.invalidate()
   }
 
+  // Recepción/vigilante meten datos desde otros dispositivos (tablet, otro puesto) al mismo
+  // tiempo — sin esto, el jefe de zona solo veía vehículos/movimientos nuevos si recargaba con
+  // F5. Polling simple (no realtime): funciona igual contra Supabase que contra el sandbox local
+  // de PostgREST, que no tiene servidor de realtime. `enVueloRef` evita apilar refrescos si uno
+  // tarda más que el intervalo (ej. conexión lenta en el momento).
+  const enVueloRef = useRef(false)
+  useEffect(() => {
+    const id = setInterval(async () => {
+      if (enVueloRef.current) return
+      enVueloRef.current = true
+      try {
+        await refresh()
+      } finally {
+        enVueloRef.current = false
+      }
+    }, 12_000)
+    return () => clearInterval(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   async function handleMarcarListo(orden: Orden) {
     await marcarListo(orden.id)
     await refresh()
   }
 
+  async function handleToggleNotificado(orden: Orden) {
+    await marcarNotificado(orden.id, !orden.notificadoListo)
+    await refresh()
+  }
+
+  async function handleVolverAProceso(orden: Orden) {
+    await volverAProceso(orden.id)
+    await refresh()
+  }
+
   const comboNombre = (id: string | undefined) => (id ? combos.find((c) => c.id === id)?.nombre : undefined) ?? 'Sin combo'
-  const lavadorNombre = (id: string) => lavadores.find((l) => l.id === id)?.nombre ?? '—'
+  const lavadorNombre = (id: string | undefined) => (id ? lavadores.find((l) => l.id === id)?.nombre : undefined) ?? 'Sin asignar'
   const tipoVehiculo = (id: string) => tiposVehiculo.find((t) => t.id === id)
 
   const enProcesoLista = ordenesHoy.filter((o) => o.estado === 'en_proceso')
   const listoLista = ordenesHoy.filter((o) => o.estado === 'listo')
   const lavadoresActivos = lavadores.filter((l) => l.activo).length
+
+  // Buscador por placa + filtro por lavador (seguimiento y entregados hoy) — ambos se combinan.
+  // Coincidencia de placa parcial, sin distinguir mayúsculas/minúsculas. "Sin asignar" filtra las
+  // órdenes sin lavador (ver M2). Solo filtra lo que se muestra; las listas sin filtrar (arriba)
+  // siguen siendo la fuente para rotación/ocupados/cola.
+  const placaBuscada = busquedaPlaca.trim().toUpperCase()
+  const coincidePlaca = (orden: Orden) => !placaBuscada || orden.placa.toUpperCase().includes(placaBuscada)
+  const coincideLavador = (orden: Orden) =>
+    lavadorFiltro === 'todos' || (lavadorFiltro === 'sin_asignar' ? !orden.lavadorId : orden.lavadorId === lavadorFiltro)
+  const enProcesoFiltrada = enProcesoLista.filter(coincidePlaca).filter(coincideLavador)
+  const listoFiltrada = listoLista.filter(coincidePlaca).filter(coincideLavador)
+  const entregadasFiltradas = entregadasHoy.filter(coincidePlaca).filter(coincideLavador)
 
   // Misma regla de la cola de rotación que usa `suggestNextLavador` en /recepcion (regla de
   // negocio 9): NULL primero (nunca asignado), luego el que lleva más tiempo sin lavar; si
@@ -179,7 +251,7 @@ function JefeZonaDashboard() {
     })
   const presentesHoyIds = new Set(asistenciasHoy.map((a) => a.lavadorId))
   const descansaHoyId = descansosHoy[0]?.lavadorId
-  const ocupadosIds = new Set(enProcesoLista.map((o) => o.lavadorId))
+  const ocupadosIds = new Set(enProcesoLista.map((o) => o.lavadorId).filter((id): id is string => !!id))
   // Mismo criterio de elegibilidad que suggestNextLavador (M9 + regla de negocio 9): activo,
   // presente hoy, sin descanso asignado hoy, y no ocupado ahora mismo (con una orden en_proceso
   // a su cargo). No se ocultan los demás de la lista — se marcan, para que quede claro por qué se
@@ -214,10 +286,14 @@ function JefeZonaDashboard() {
           combo.cantidad += 1
           porCombo.set(orden.comboId, combo)
         }
-        const lavador = porLavador.get(orden.lavadorId) ?? { total: 0, cantidad: 0 }
-        lavador.total += minutos
-        lavador.cantidad += 1
-        porLavador.set(orden.lavadorId, lavador)
+        // Una orden entregada siempre tiene lavador asignado (no se puede cobrar/entregar sin
+        // asignar primero) — el guard es solo para que TS acepte `lavadorId` opcional en el tipo.
+        if (orden.lavadorId) {
+          const lavador = porLavador.get(orden.lavadorId) ?? { total: 0, cantidad: 0 }
+          lavador.total += minutos
+          lavador.cantidad += 1
+          porLavador.set(orden.lavadorId, lavador)
+        }
       }
       if (orden.tiempoEsperaEntregaSegundos != null) {
         esperaTotal += orden.tiempoEsperaEntregaSegundos / 60
@@ -438,6 +514,31 @@ function JefeZonaDashboard() {
         </Card>
       ) : null}
 
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <label className="relative flex items-center">
+          <Search size={16} className="pointer-events-none absolute left-3 text-neutral-400" />
+          <input
+            value={busquedaPlaca}
+            onChange={(e) => setBusquedaPlaca(e.target.value)}
+            placeholder="Buscar por placa…"
+            className="w-full rounded-lg border border-neutral-300 py-2.5 pl-9 pr-3 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500 sm:max-w-xs"
+          />
+        </label>
+        <div className="sm:max-w-56">
+          <CustomSelect
+            size="sm"
+            value={lavadorFiltro}
+            onChange={setLavadorFiltro}
+            placeholder="Todos los lavadores"
+            options={[
+              { value: 'todos', label: 'Todos los lavadores' },
+              { value: 'sin_asignar', label: 'Sin asignar' },
+              ...lavadores.map((l) => ({ value: l.id, label: l.nombre })),
+            ]}
+          />
+        </div>
+      </div>
+
       {/* Seguimiento (M3) vs. entregados hoy — ambas vistas permiten reabrir/imprimir el
           tiquete de cualquier orden, sin importar el estado. */}
       <div className="flex gap-2">
@@ -472,10 +573,10 @@ function JefeZonaDashboard() {
           <div>
             <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-neutral-900">
               <SprayCan size={15} className="text-warning-600" />
-              En proceso ({enProcesoLista.length})
+              En proceso ({enProcesoFiltrada.length})
             </h2>
             <div className="flex flex-col gap-3">
-              {enProcesoLista.map((orden) => (
+              {enProcesoFiltrada.map((orden) => (
                 <OrdenCard
                   key={orden.id}
                   orden={orden}
@@ -485,6 +586,7 @@ function JefeZonaDashboard() {
                   esMoto={tipoVehiculo(orden.tipoVehiculoId)?.categoria === 'moto'}
                   tiempoTexto={tiempoTranscurrido(orden.creadoEn, ahora)}
                   onFinalizar={() => setFinalizando(orden)}
+                  onCobrarDirecto={() => setCobrando({ orden, finalizarPrimero: true })}
                   onReasignar={() => setReasignando(orden)}
                   onContactar={() => setContactando(orden)}
                   onEditarCliente={() => setEditandoCliente(orden)}
@@ -492,8 +594,10 @@ function JefeZonaDashboard() {
                   onVerDetalle={() => setViendoDetalle(orden)}
                 />
               ))}
-              {enProcesoLista.length === 0 ? (
-                <Card className="py-8 text-center text-sm text-neutral-400">Nada en proceso ahora mismo.</Card>
+              {enProcesoFiltrada.length === 0 ? (
+                <Card className="py-8 text-center text-sm text-neutral-400">
+                  {placaBuscada ? 'Ninguna en proceso coincide con la búsqueda.' : 'Nada en proceso ahora mismo.'}
+                </Card>
               ) : null}
             </div>
           </div>
@@ -501,10 +605,10 @@ function JefeZonaDashboard() {
           <div>
             <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-neutral-900">
               <CheckCircle2 size={15} className="text-primary-600" />
-              Listos para cobrar ({listoLista.length})
+              Listos para cobrar ({listoFiltrada.length})
             </h2>
             <div className="flex flex-col gap-3">
-              {listoLista.map((orden) => (
+              {listoFiltrada.map((orden) => (
                 <OrdenCard
                   key={orden.id}
                   orden={orden}
@@ -513,7 +617,9 @@ function JefeZonaDashboard() {
                   tipoVehiculoNombre={tipoVehiculo(orden.tipoVehiculoId)?.nombre ?? '—'}
                   esMoto={tipoVehiculo(orden.tipoVehiculoId)?.categoria === 'moto'}
                   tiempoTexto={tiempoTranscurrido(orden.listaEn ?? orden.creadoEn, ahora)}
-                  onCobrar={() => setCobrando(orden)}
+                  onCobrar={() => setCobrando({ orden, finalizarPrimero: false })}
+                  onToggleNotificado={() => handleToggleNotificado(orden)}
+                  onVolverAProceso={() => setVolviendoAProceso(orden)}
                   onReasignar={() => setReasignando(orden)}
                   onContactar={() => setContactando(orden)}
                   onEditarCliente={() => setEditandoCliente(orden)}
@@ -521,15 +627,17 @@ function JefeZonaDashboard() {
                   onVerDetalle={() => setViendoDetalle(orden)}
                 />
               ))}
-              {listoLista.length === 0 ? (
-                <Card className="py-8 text-center text-sm text-neutral-400">Nada listo para cobrar todavía.</Card>
+              {listoFiltrada.length === 0 ? (
+                <Card className="py-8 text-center text-sm text-neutral-400">
+                  {placaBuscada ? 'Ninguna lista para cobrar coincide con la búsqueda.' : 'Nada listo para cobrar todavía.'}
+                </Card>
               ) : null}
             </div>
           </div>
         </div>
       ) : (
         <EntregadosHoyTable
-          entregadasHoy={entregadasHoy}
+          entregadasHoy={entregadasFiltradas}
           comboNombre={comboNombre}
           lavadorNombre={lavadorNombre}
           tipoNombre={(id) => tipoVehiculo(id)?.nombre ?? '—'}
@@ -539,9 +647,10 @@ function JefeZonaDashboard() {
 
       {cobrando ? (
         <CobroModal
-          orden={cobrando}
+          orden={cobrando.orden}
+          finalizarPrimero={cobrando.finalizarPrimero}
           onClose={() => setCobrando(null)}
-          onCobrado={(metodoPago, referenciaPago) => handleCobrado(cobrando, metodoPago, referenciaPago)}
+          onCobrado={(metodoPago, referenciaPago) => handleCobrado(cobrando.orden, metodoPago, referenciaPago)}
         />
       ) : null}
 
@@ -597,11 +706,10 @@ function JefeZonaDashboard() {
           placa={contactando.placa}
           telefono={contactando.clienteTelefono}
           correo={contactando.clienteCorreo}
-          mensajeWhatsapp={
-            contactando.estado === 'listo'
-              ? `Hola ${contactando.clienteNombre}, tu vehículo ${contactando.placa} ya está listo para recoger.`
-              : `Hola ${contactando.clienteNombre}, te contactamos sobre tu vehículo ${contactando.placa}.`
-          }
+          mensajeWhatsapp={construirMensajeWhatsapp(
+            contactando,
+            tipoVehiculo(contactando.tipoVehiculoId)?.categoria === 'moto',
+          )}
           onClose={() => setContactando(null)}
         />
       ) : null}
@@ -619,6 +727,20 @@ function JefeZonaDashboard() {
           onCancel={() => setFinalizando(null)}
         />
       ) : null}
+
+      {volviendoAProceso ? (
+        <ConfirmModal
+          title={`¿Volver ${volviendoAProceso.placa} a "En proceso"?`}
+          message="Para cuando se marcó Listo por equivocación — vuelve a la columna En proceso y se puede finalizar de nuevo cuando corresponda."
+          confirmLabel="Volver a proceso"
+          variant="primary"
+          onConfirm={async () => {
+            await handleVolverAProceso(volviendoAProceso)
+            setVolviendoAProceso(null)
+          }}
+          onCancel={() => setVolviendoAProceso(null)}
+        />
+      ) : null}
     </div>
   )
 }
@@ -632,6 +754,9 @@ function OrdenCard({
   tiempoTexto,
   onFinalizar,
   onCobrar,
+  onCobrarDirecto,
+  onToggleNotificado,
+  onVolverAProceso,
   onReasignar,
   onContactar,
   onEditarCliente,
@@ -646,6 +771,13 @@ function OrdenCard({
   tiempoTexto: string
   onFinalizar?: () => void
   onCobrar?: () => void
+  /** Solo en tarjetas "en proceso" — cliente esperando en sala, no hace falta pasar primero por
+   * "Listo para cobrar": marca el lavado terminado y abre el cobro en el mismo paso. */
+  onCobrarDirecto?: () => void
+  /** Solo en tarjetas "listo" — check manual para saber si ya se le avisó al cliente. */
+  onToggleNotificado?: () => void
+  /** Solo en tarjetas "listo" — corrige un "Finalizar lavado" hecho por equivocación. */
+  onVolverAProceso?: () => void
   onReasignar?: () => void
   onContactar?: () => void
   onEditarCliente?: () => void
@@ -653,11 +785,19 @@ function OrdenCard({
   onVerDetalle?: () => void
 }) {
   const enProceso = orden.estado === 'en_proceso'
+  // Registrada sin lavador (todos ocupados al recibirla, cliente hace cola) — necesita
+  // asignación antes de poder finalizar/cobrar, así que se marca distinto del resto de "en
+  // proceso" y no se ofrecen esas acciones todavía.
+  const sinAsignar = enProceso && !orden.lavadorId
   const VehiculoIcon = esMoto ? Motorbike : Car
   return (
     <Card
       className={`group border-l-4 p-0 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-card-hover ${
-        enProceso ? 'border-l-warning-600 bg-warning-50/40' : 'border-l-primary-500 bg-primary-50/40 shadow-nav-active'
+        sinAsignar
+          ? 'border-l-danger-500 bg-danger-50/40'
+          : enProceso
+            ? 'border-l-warning-600 bg-warning-50/40'
+            : 'border-l-primary-500 bg-primary-50/40 shadow-nav-active'
       }`}
     >
       <div
@@ -696,9 +836,31 @@ function OrdenCard({
         </div>
 
         {/* Protagonista pero a la medida del bloque de texto — no un banner aparte. Solo mientras
-            está en proceso; "listo para cobrar" se queda con el ícono de tipo de vehículo de arriba. */}
-        {enProceso ? (
+            está en proceso y ya tiene lavador; "listo para cobrar" usa ese mismo espacio para el
+            check de "ya avisé", "sin asignar" para el aviso de que hace cola. */}
+        {enProceso && !sinAsignar ? (
           <LavadoAnimation tipo={esMoto ? 'moto' : 'auto'} className="h-20 w-28 shrink-0 sm:h-24 sm:w-32" />
+        ) : sinAsignar ? (
+          <span className="flex shrink-0 items-center gap-1 rounded-full bg-danger-50 px-2.5 py-1 text-xs font-semibold text-danger-700">
+            <Clock size={12} /> En cola
+          </span>
+        ) : onToggleNotificado ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onToggleNotificado()
+            }}
+            title={orden.notificadoListo ? 'Ya se le avisó al cliente — tocar para desmarcar' : 'Marcar que ya se le avisó al cliente'}
+            className={`flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium transition-colors ${
+              orden.notificadoListo
+                ? 'bg-success-50 text-success-700 hover:bg-success-100'
+                : 'border border-neutral-200 text-neutral-500 hover:bg-neutral-50'
+            }`}
+          >
+            {orden.notificadoListo ? <BellRing size={14} /> : <Bell size={14} />}
+            {orden.notificadoListo ? 'Avisado' : 'Avisar'}
+          </button>
         ) : null}
       </div>
 
@@ -714,7 +876,7 @@ function OrdenCard({
               Contactar
             </button>
           ) : null}
-          {onReasignar ? (
+          {onReasignar && !sinAsignar ? (
             <button
               type="button"
               onClick={onReasignar}
@@ -734,6 +896,17 @@ function OrdenCard({
               Editar cliente
             </button>
           ) : null}
+          {onVolverAProceso ? (
+            <button
+              type="button"
+              onClick={onVolverAProceso}
+              title="Se marcó Listo por equivocación — vuelve a En proceso"
+              className="group/btn flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-warning-50 hover:text-warning-700"
+            >
+              <Undo2 size={14} />
+              Volver a proceso
+            </button>
+          ) : null}
           {onVerTiquete ? (
             <button
               type="button"
@@ -750,7 +923,17 @@ function OrdenCard({
           <span className="rounded-md bg-success-50 px-2 py-1 text-sm font-bold text-success-700">
             {COP.format(orden.precio)}
           </span>
-          {onFinalizar ? (
+          {sinAsignar && onReasignar ? (
+            <button
+              type="button"
+              onClick={onReasignar}
+              className="flex items-center gap-1.5 rounded-lg bg-danger-600 px-3 py-2 text-xs font-semibold text-white shadow-card transition-all hover:-translate-y-0.5 hover:bg-danger-700 hover:shadow-card-hover"
+            >
+              <Users size={14} />
+              Asignar lavador
+            </button>
+          ) : null}
+          {onFinalizar && !sinAsignar ? (
             <button
               type="button"
               onClick={onFinalizar}
@@ -758,6 +941,17 @@ function OrdenCard({
             >
               <SprayCan size={14} />
               Finalizar lavado
+            </button>
+          ) : null}
+          {onCobrarDirecto && !sinAsignar ? (
+            <button
+              type="button"
+              onClick={onCobrarDirecto}
+              title="El cliente espera en sala — finaliza el lavado y cobra en un solo paso"
+              className="flex items-center gap-1.5 rounded-lg bg-success-600 px-3 py-2 text-xs font-semibold text-white shadow-nav-active transition-all hover:-translate-y-0.5 hover:bg-success-700 hover:shadow-card-hover"
+            >
+              <Banknote size={14} />
+              Finalizar y cobrar
             </button>
           ) : null}
           {onCobrar ? (
@@ -787,7 +981,7 @@ function EntregadosHoyTable({
 }: {
   entregadasHoy: Orden[]
   comboNombre: (id: string | undefined) => string
-  lavadorNombre: (id: string) => string
+  lavadorNombre: (id: string | undefined) => string
   tipoNombre: (id: string) => string
   onVerTiquete: (orden: Orden) => void
 }) {
@@ -962,6 +1156,8 @@ function DetalleFila({ label, valor }: { label: string; valor: string }) {
   )
 }
 
+const SIN_ASIGNAR = '__sin_asignar__'
+
 function ReasignarModal({
   orden,
   lavadores,
@@ -973,17 +1169,23 @@ function ReasignarModal({
   onClose: () => void
   onReasignado: () => Promise<void>
 }) {
-  const [lavadorId, setLavadorId] = useState(orden.lavadorId)
+  // Sin lavador previo (orden registrada sin asignar, todos ocupados al recibirla): este mismo
+  // modal sirve para asignar por primera vez, no solo para reasignar. `SIN_ASIGNAR` es un
+  // sentinel propio (no ''), para distinguir "elegí explícitamente quitar la asignación" de
+  // "todavía no elegí nada" — eso último sigue dejando el submit deshabilitado.
+  const esAsignacion = !orden.lavadorId
+  const [lavadorId, setLavadorId] = useState(orden.lavadorId ?? '')
   const [saving, setSaving] = useState(false)
 
   async function handleConfirmar() {
-    if (lavadorId === orden.lavadorId) {
+    const nuevoValor = lavadorId === SIN_ASIGNAR ? null : lavadorId
+    if (!lavadorId || nuevoValor === (orden.lavadorId ?? null)) {
       onClose()
       return
     }
     setSaving(true)
     try {
-      await reasignarLavador(orden.id, lavadorId)
+      await reasignarLavador(orden.id, nuevoValor)
       await onReasignado()
     } finally {
       setSaving(false)
@@ -994,7 +1196,9 @@ function ReasignarModal({
     <div className="fixed inset-0 z-20 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-[2px]">
       <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-card-hover">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-neutral-900">Reasignar lavador</h3>
+          <h3 className="text-base font-semibold text-neutral-900">
+            {esAsignacion ? 'Asignar lavador' : 'Reasignar lavador'}
+          </h3>
           <button
             type="button"
             onClick={onClose}
@@ -1013,16 +1217,25 @@ function ReasignarModal({
             value={lavadorId}
             onChange={setLavadorId}
             placeholder="Selecciona…"
-            options={lavadores.map((l) => ({ value: l.id, label: l.nombre }))}
+            options={[
+              ...(esAsignacion ? [] : [{ value: SIN_ASIGNAR, label: 'Sin asignar' }]),
+              ...lavadores.map((l) => ({ value: l.id, label: l.nombre })),
+            ]}
           />
         </label>
         <button
           type="button"
           onClick={handleConfirmar}
-          disabled={saving}
+          disabled={saving || !lavadorId}
           className="mt-5 w-full rounded-lg bg-primary-600 py-2.5 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
         >
-          {saving ? 'Guardando…' : 'Confirmar reasignación'}
+          {saving
+            ? 'Guardando…'
+            : lavadorId === SIN_ASIGNAR
+              ? 'Quitar asignación'
+              : esAsignacion
+                ? 'Confirmar asignación'
+                : 'Confirmar reasignación'}
         </button>
       </div>
     </div>
@@ -1135,10 +1348,14 @@ function EditarClienteModal({
 
 function CobroModal({
   orden,
+  finalizarPrimero,
   onClose,
   onCobrado,
 }: {
   orden: Orden
+  /** Orden todavía en_proceso (cliente esperando en sala) — marca el lavado terminado antes de
+   * cobrar, en el mismo submit, para no obligar a pasar primero por "Listo para cobrar". */
+  finalizarPrimero?: boolean
   onClose: () => void
   onCobrado: (metodoPago: MetodoPago, referenciaPago?: string) => void
 }) {
@@ -1164,6 +1381,9 @@ function CobroModal({
     setError(null)
     setSaving(true)
     try {
+      if (finalizarPrimero) {
+        await marcarListo(orden.id)
+      }
       await cobrarYEntregarOrden(orden.id, parsed.data)
       onCobrado(parsed.data.metodoPago, parsed.data.referenciaPago)
     } catch (err) {
@@ -1182,6 +1402,11 @@ function CobroModal({
             <p className="text-xs text-neutral-500">
               {orden.placa} · #{orden.consecutivo}
             </p>
+            {finalizarPrimero ? (
+              <p className="mt-1 text-xs font-medium text-primary-700">
+                También marca el lavado como terminado — cliente esperando en sala.
+              </p>
+            ) : null}
           </div>
           <button
             type="button"

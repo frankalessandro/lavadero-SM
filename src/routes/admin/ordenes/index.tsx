@@ -140,7 +140,9 @@ function OrdenesPage() {
                   <td className="px-5 py-3 text-neutral-700">
                     {orden.comboId ? combosPorId.get(orden.comboId) ?? '—' : 'Sin combo'}
                   </td>
-                  <td className="px-5 py-3 text-neutral-700">{lavadoresPorId.get(orden.lavadorId) ?? '—'}</td>
+                  <td className="px-5 py-3 text-neutral-700">
+                    {orden.lavadorId ? lavadoresPorId.get(orden.lavadorId) ?? '—' : 'Sin asignar'}
+                  </td>
                   <td className="px-5 py-3 text-neutral-700">{COP.format(orden.precio)}</td>
                   <td className="px-5 py-3 text-neutral-700">
                     {orden.metodoPago === 'efectivo'

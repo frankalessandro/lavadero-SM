@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import type { MetodoPago } from '../../schemas/orden'
 import logoMark from '../../assets/logo-mark.png'
 import { TiquetePrint } from './TiquetePrint'
@@ -41,8 +41,17 @@ export function ReciboModal({
 }) {
   const esPago = variant === 'pago'
 
+  // Guarda contra el doble-invoke de efectos de StrictMode en desarrollo (monta→limpia→monta):
+  // sin esto, `window.print()` se disparaba dos veces seguidas cada vez que se abría el recibo
+  // con autoPrint. El ref persiste entre ese doble ciclo porque es la misma instancia del
+  // componente, así que solo la primera invocación imprime.
+  const impresoRef = useRef(false)
+
   useEffect(() => {
-    if (autoPrint) window.print()
+    if (autoPrint && !impresoRef.current) {
+      impresoRef.current = true
+      window.print()
+    }
     // Solo al montar — cada apertura del modal es una instancia nueva (recibo cambia de
     // identidad), no queremos reimprimir si algo más en el componente cambia después.
     // eslint-disable-next-line react-hooks/exhaustive-deps

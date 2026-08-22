@@ -2,7 +2,7 @@ import { db } from '../lib/db'
 import { configuracionSchema, type Configuracion } from '../schemas/configuracion'
 
 const CONFIG_SELECT =
-  'comisionLavadorPorcentaje:comision_lavador_porcentaje, comisionBase:comision_base, periodicidadLiquidacion:periodicidad_liquidacion'
+  'comisionLavadorPorcentaje:comision_lavador_porcentaje, comisionBase:comision_base, periodicidadLiquidacion:periodicidad_liquidacion, recargoAltoCilindraje:recargo_alto_cilindraje'
 
 export async function fetchConfiguracion(): Promise<Configuracion> {
   const { data, error } = await db.from('configuracion').select(CONFIG_SELECT).single()
@@ -18,6 +18,7 @@ export async function updateConfiguracion(input: Configuracion): Promise<Configu
       comision_lavador_porcentaje: parsed.comisionLavadorPorcentaje,
       comision_base: parsed.comisionBase,
       periodicidad_liquidacion: parsed.periodicidadLiquidacion,
+      recargo_alto_cilindraje: parsed.recargoAltoCilindraje,
     })
     .eq('id', true)
     .select(CONFIG_SELECT)

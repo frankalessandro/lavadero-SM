@@ -18,7 +18,7 @@ import { fetchTurnoAbierto } from './turnos'
 // orden_servicios embebido vía FK de PostgREST (mismo patrón que `categorias_gasto(nombre)`
 // en `src/data/gastos.ts`): trae los add-ons de cada orden en la misma consulta.
 const ORDEN_SELECT =
-  'id, consecutivo, placa, clienteNombre:cliente_nombre, clienteTelefono:cliente_telefono, clienteCorreo:cliente_correo, tipoVehiculoId:tipo_vehiculo_id, comboId:combo_id, lavadorId:lavador_id, precio, comisionLavador:comision_lavador, comisionNegocio:comision_negocio, metodoPago:metodo_pago, referenciaPago:referencia_pago, observaciones, estado, creadoEn:creado_en, listaEn:lista_en, entregadaEn:entregada_en, tiempoLavadoSegundos:tiempo_lavado_segundos, tiempoEsperaEntregaSegundos:tiempo_espera_entrega_segundos, liquidacionId:liquidacion_id, motivoAnulacion:motivo_anulacion, anuladaEn:anulada_en, anuladaPor:anulada_por, serviciosAdicionales:orden_servicios(servicioId:servicio_id, precio, servicios(nombre))'
+  'id, consecutivo, placa, clienteNombre:cliente_nombre, clienteTelefono:cliente_telefono, clienteCorreo:cliente_correo, tipoVehiculoId:tipo_vehiculo_id, comboId:combo_id, lavadorId:lavador_id, precio, altoCilindraje:alto_cilindraje, comisionLavador:comision_lavador, comisionNegocio:comision_negocio, metodoPago:metodo_pago, referenciaPago:referencia_pago, observaciones, estado, creadoEn:creado_en, listaEn:lista_en, entregadaEn:entregada_en, tiempoLavadoSegundos:tiempo_lavado_segundos, tiempoEsperaEntregaSegundos:tiempo_espera_entrega_segundos, notificadoListo:notificado_listo, liquidacionId:liquidacion_id, motivoAnulacion:motivo_anulacion, anuladaEn:anulada_en, anuladaPor:anulada_por, serviciosAdicionales:orden_servicios(servicioId:servicio_id, precio, servicios(nombre))'
 
 interface OrdenServicioAdicionalRaw {
   servicioId: string
@@ -115,6 +115,26 @@ export async function buscarPorPlaca(placa: string): Promise<HistorialPlaca | un
   }
 }
 
+// Alerta de doble registro (M2): ¿esta placa ya tiene una orden en_proceso ahora mismo? Se usa en
+// recepción al escribir la placa de una moto, para avisar antes de registrar dos veces el mismo
+// vehículo por error (ej. lo escribieron con espacios/otra vez sin darse cuenta de que ya estaba
+// en cola). Solo `en_proceso` — una vez listo/entregado ya no hay riesgo de "doble lavado".
+export async function fetchOrdenEnProcesoPorPlaca(placa: string): Promise<Orden | undefined> {
+  const normalizada = placa.trim().toUpperCase()
+  if (!normalizada) return undefined
+
+  const { data, error } = await db
+    .from('ordenes')
+    .select(ORDEN_SELECT)
+    .eq('placa', normalizada)
+    .eq('estado', 'en_proceso')
+    .order('consecutivo', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  return data ? mapOrdenRow(data as unknown as Record<string, unknown>) : undefined
+}
+
 // Precio del combo — dos caminos según `combos.precio_fijo` (ver 0022_combo_precio_fijo.sql):
 // - false (default, autos/camionetas): suma del precio "de combo" de cada servicio que lo
 //   compone. Si al combo le falta el precio de algún servicio para ese tipo, `undefined`
@@ -207,7 +227,8 @@ export async function createOrden(input: OrdenInput): Promise<Orden> {
     throw new Error('No existe un precio configurado para ese combo y tipo de vehículo')
   }
 
-  const total = (precioCombo ?? 0) + addons.reduce((suma, addon) => suma + addon.precio, 0)
+  const recargo = parsed.altoCilindraje ? configuracion.recargoAltoCilindraje : 0
+  const total = (precioCombo ?? 0) + addons.reduce((suma, addon) => suma + addon.precio, 0) + recargo
   const comisionLavador = Math.round(total * configuracion.comisionLavadorPorcentaje)
   const comisionNegocio = total - comisionLavador
 
@@ -220,8 +241,9 @@ export async function createOrden(input: OrdenInput): Promise<Orden> {
       cliente_correo: parsed.clienteCorreo,
       tipo_vehiculo_id: parsed.tipoVehiculoId,
       combo_id: parsed.comboId,
-      lavador_id: parsed.lavadorId,
+      lavador_id: parsed.lavadorId ?? null,
       precio: total,
+      alto_cilindraje: parsed.altoCilindraje,
       comision_lavador: comisionLavador,
       comision_negocio: comisionNegocio,
       observaciones: parsed.observaciones,
@@ -251,7 +273,9 @@ export async function createOrden(input: OrdenInput): Promise<Orden> {
     }
   }
 
-  await registrarAsignacion(parsed.lavadorId)
+  if (parsed.lavadorId) {
+    await registrarAsignacion(parsed.lavadorId)
+  }
   return { ...orden, serviciosAdicionales: addons.map(({ servicioId, nombre, precio }) => ({ servicioId, nombre, precio })) }
 }
 
@@ -287,10 +311,29 @@ export async function marcarListo(id: string): Promise<Orden> {
   return mapOrdenRow(data as unknown as Record<string, unknown>)
 }
 
-// M3: reasignar lavador si el asignado se ausenta o queda ocupado a mitad de un lavado. No
-// recalcula precio/comisión (dependen del combo, no de quién lo hace) — solo cambia quién lo hace
-// y actualiza la cola de rotación a favor del nuevo lavador (regla de negocio 3: un vehículo, un lavador).
-export async function reasignarLavador(id: string, nuevoLavadorId: string): Promise<Orden> {
+// M3: corrige un "Finalizar lavado" hecho por equivocación (se pudo pasar de columna sin
+// querer) — vuelve la orden a en_proceso y limpia lo que había fijado marcarListo (lista_en,
+// tiempo_lavado_segundos) para que, si se vuelve a finalizar más adelante, esos valores salgan
+// frescos y no queden datos de la vuelta anterior. También limpia el check de "ya avisé al
+// cliente" (notificado_listo) — ya no aplica mientras el vehículo no esté listo otra vez.
+export async function volverAProceso(id: string): Promise<Orden> {
+  const { data, error } = await db
+    .from('ordenes')
+    .update({ estado: 'en_proceso', lista_en: null, tiempo_lavado_segundos: null, notificado_listo: false })
+    .eq('id', id)
+    .select(ORDEN_SELECT)
+    .single()
+  if (error) throw new Error(error.message)
+  return mapOrdenRow(data as unknown as Record<string, unknown>)
+}
+
+// M3: reasignar lavador si el asignado se ausenta o queda ocupado a mitad de un lavado — también
+// sirve para ASIGNAR por primera vez una orden que se registró sin lavador (todos ocupados al
+// recibirla, ver createOrden), y para QUITAR la asignación y dejarla "sin asignar" otra vez
+// (`nuevoLavadorId: null` — típicamente porque se asignó mal). No recalcula precio/comisión
+// (dependen del combo, no de quién lo hace) — solo cambia quién lo hace y, si hay lavador nuevo,
+// actualiza la cola de rotación a su favor (regla de negocio 3: un vehículo, un solo lavador).
+export async function reasignarLavador(id: string, nuevoLavadorId: string | null): Promise<Orden> {
   const { data, error } = await db
     .from('ordenes')
     .update({ lavador_id: nuevoLavadorId })
@@ -298,7 +341,23 @@ export async function reasignarLavador(id: string, nuevoLavadorId: string): Prom
     .select(ORDEN_SELECT)
     .single()
   if (error) throw new Error(error.message)
+  if (!nuevoLavadorId) {
+    return mapOrdenRow(data as unknown as Record<string, unknown>)
+  }
   await registrarAsignacion(nuevoLavadorId)
+  return mapOrdenRow(data as unknown as Record<string, unknown>)
+}
+
+// Marca manual de "ya le avisamos al cliente que su vehículo está listo" — control operativo del
+// tablero de seguimiento, no dispara ningún efecto de negocio (no cobra, no cambia estado).
+export async function marcarNotificado(id: string, notificado: boolean): Promise<Orden> {
+  const { data, error } = await db
+    .from('ordenes')
+    .update({ notificado_listo: notificado })
+    .eq('id', id)
+    .select(ORDEN_SELECT)
+    .single()
+  if (error) throw new Error(error.message)
   return mapOrdenRow(data as unknown as Record<string, unknown>)
 }
 

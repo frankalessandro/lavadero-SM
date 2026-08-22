@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { createFileRoute, Link, redirect, useRouter } from '@tanstack/react-router'
-import { Package, Car, Lock, Sparkles } from 'lucide-react'
+import { Package, Car, Lock, Sparkles, AlertTriangle } from 'lucide-react'
 import { SimpleTopbar } from '../../components/layout/SimpleTopbar'
 import { signOut } from '../../lib/auth'
 import { fetchTiposVehiculo } from '../../data/tiposVehiculo'
@@ -11,8 +11,9 @@ import { fetchPreciosServicioCombo } from '../../data/preciosServicioCombo'
 import { fetchPreciosServicioIndividual, findPrecioServicioIndividual } from '../../data/preciosServicioIndividual'
 import { fetchPreciosComboFijo } from '../../data/preciosComboFijo'
 import { fetchLavadores, suggestNextLavador } from '../../data/lavadores'
-import { fetchOrdenesHoy, buscarPorPlaca, createOrden } from '../../data/ordenes'
+import { fetchOrdenesHoy, buscarPorPlaca, createOrden, fetchOrdenEnProcesoPorPlaca } from '../../data/ordenes'
 import { fetchTurnoAbierto } from '../../data/turnos'
+import { fetchConfiguracion } from '../../data/configuracion'
 import { ordenInputSchema, type EstadoOrden, type Orden } from '../../schemas/orden'
 import type { TipoVehiculo, CategoriaVehiculo } from '../../schemas/tipoVehiculo'
 import type { Combo } from '../../schemas/combo'
@@ -20,6 +21,7 @@ import type { Servicio } from '../../schemas/servicio'
 import type { Lavador } from '../../schemas/lavador'
 import type { PrecioServicio } from '../../schemas/precioServicio'
 import type { PrecioCombo } from '../../schemas/precioCombo'
+import type { Configuracion } from '../../schemas/configuracion'
 import { Card } from '../../components/layout/Card'
 import { AccordionSection } from '../../components/layout/Accordion'
 import { CustomSelect } from '../../components/layout/CustomSelect'
@@ -37,6 +39,7 @@ async function loadRecepcion() {
     lavadores,
     ordenesHoy,
     turno,
+    configuracion,
   ] = await Promise.all([
     fetchTiposVehiculo(),
     fetchCombos(),
@@ -48,6 +51,7 @@ async function loadRecepcion() {
     fetchLavadores(),
     fetchOrdenesHoy(),
     fetchTurnoAbierto('jefe_zona'),
+    fetchConfiguracion(),
   ])
   return {
     tipos,
@@ -60,6 +64,7 @@ async function loadRecepcion() {
     lavadores,
     ordenesHoy,
     turno,
+    configuracion,
   }
 }
 
@@ -111,7 +116,7 @@ function RecepcionPage() {
 
   const tipoNombre = (id: string) => tipos.find((t) => t.id === id)?.nombre ?? '—'
   const comboNombre = (id: string | undefined) => (id ? combos.find((c) => c.id === id)?.nombre : undefined) ?? 'Sin combo'
-  const lavadorNombre = (id: string) => lavadores.find((l) => l.id === id)?.nombre ?? '—'
+  const lavadorNombre = (id: string | undefined) => (id ? lavadores.find((l) => l.id === id)?.nombre : undefined) ?? 'Sin asignar'
 
   return (
     <>
@@ -127,6 +132,7 @@ function RecepcionPage() {
           preciosComboFijo={preciosComboFijo}
           comboServicios={comboServicios}
           lavadores={lavadores}
+          configuracion={data.configuracion}
           onCreated={refresh}
         />
       ) : (
@@ -196,6 +202,7 @@ const emptyForm = {
   comboId: '',
   lavadorId: '',
   observaciones: '',
+  altoCilindraje: false,
 }
 
 function ReceptionForm({
@@ -207,6 +214,7 @@ function ReceptionForm({
   preciosComboFijo,
   comboServicios,
   lavadores,
+  configuracion,
   onCreated,
 }: {
   tipos: TipoVehiculo[]
@@ -217,6 +225,7 @@ function ReceptionForm({
   preciosComboFijo: PrecioCombo[]
   comboServicios: ComboServicio[]
   lavadores: Lavador[]
+  configuracion: Configuracion
   onCreated: () => void
 }) {
   const [form, setForm] = useState(emptyForm)
@@ -230,6 +239,10 @@ function ReceptionForm({
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [recibo, setRecibo] = useState<ReciboData | null>(null)
+  // Alerta de doble registro (M2) — solo para motos: si la placa ya tiene una orden en_proceso,
+  // avisa antes de registrar otra vez el mismo vehículo por error. No bloquea el envío, solo
+  // advierte — puede haber casos legítimos raros de re-ingreso.
+  const [motoDuplicada, setMotoDuplicada] = useState<Orden | undefined>(undefined)
 
   useEffect(() => {
     suggestNextLavador().then((id) => {
@@ -282,6 +295,11 @@ function ReceptionForm({
     return suma + (precio ?? 0)
   }, 0)
 
+  // Recargo fijo de moto alto cilindraje (configurable en Admin > Configuración) — solo aplica
+  // si el tipo elegido es de categoría moto, aunque el checkbox ya se oculta en ese caso.
+  const recargoAltoCilindraje =
+    form.altoCilindraje && tipoSeleccionado?.categoria === 'moto' ? configuracion.recargoAltoCilindraje : 0
+
   // Si hay combo elegido pero no se le pudo calcular precio (ej. le faltan servicios/precios
   // configurados para este tipo de vehículo — como pasa hoy con las motos), el total NO está
   // listo: mostrar $0 sería engañoso y dejaría enviar una orden que el servidor va a rechazar.
@@ -289,13 +307,14 @@ function ReceptionForm({
     form.comboId && precioCombo === undefined
       ? undefined
       : form.comboId || serviciosAdicionales.length > 0
-        ? (precioCombo ?? 0) + precioServiciosIndividuales
+        ? (precioCombo ?? 0) + precioServiciosIndividuales + recargoAltoCilindraje
         : undefined
 
   const paso1Completo = !!(form.placa && form.clienteNombre && form.tipoVehiculoId)
+  // El lavador es opcional: si los 4 están ocupados y hay cola, se registra sin asignar y se
+  // asigna después desde el tablero de seguimiento (jefe de zona).
   const paso2Completo = !!(
-    form.lavadorId &&
-    ((form.comboId && precioCombo !== undefined) || (!form.comboId && serviciosAdicionales.length > 0))
+    (form.comboId && precioCombo !== undefined) || (!form.comboId && serviciosAdicionales.length > 0)
   )
 
   function update<K extends keyof typeof emptyForm>(key: K, value: (typeof emptyForm)[K]) {
@@ -306,7 +325,20 @@ function ReceptionForm({
     setOpenStep((prev) => (prev === step ? 0 : step))
   }
 
+  // Solo se dispara con moto ya seleccionada (o recién elegida en handleTipoChange) — se pasa el
+  // tipo explícito en vez de leer `form.tipoVehiculoId` porque handleTipoChange lo llama ANTES de
+  // que el estado se actualice.
+  async function checkMotoDuplicada(placa: string, tipoVehiculoId: string) {
+    const tipo = tipos.find((t) => t.id === tipoVehiculoId)
+    if (tipo?.categoria !== 'moto' || !placa.trim()) {
+      setMotoDuplicada(undefined)
+      return
+    }
+    setMotoDuplicada(await fetchOrdenEnProcesoPorPlaca(placa))
+  }
+
   async function handlePlacaBlur() {
+    checkMotoDuplicada(form.placa, form.tipoVehiculoId)
     const historial = await buscarPorPlaca(form.placa)
     if (!historial) return
     // Solo restaurar el combo del histórico si hoy todavía tiene precio calculable para ese
@@ -333,8 +365,9 @@ function ReceptionForm({
   }
 
   function handleTipoChange(tipoVehiculoId: string) {
-    setForm((prev) => ({ ...prev, tipoVehiculoId, comboId: '' }))
+    setForm((prev) => ({ ...prev, tipoVehiculoId, comboId: '', altoCilindraje: false }))
     setServiciosAdicionales([])
+    checkMotoDuplicada(form.placa, tipoVehiculoId)
   }
 
   function handleComboChange(comboId: string) {
@@ -359,6 +392,7 @@ function ReceptionForm({
     const parsed = ordenInputSchema.safeParse({
       ...form,
       comboId: form.comboId || undefined,
+      lavadorId: form.lavadorId || undefined,
       clienteTelefono: form.clienteTelefono || undefined,
       clienteCorreo: form.clienteCorreo || undefined,
       observaciones: form.observaciones || undefined,
@@ -379,13 +413,14 @@ function ReceptionForm({
         comboNombre: orden.comboId ? combos.find((c) => c.id === orden.comboId)?.nombre ?? '—' : 'Sin combo',
         serviciosAdicionales: orden.serviciosAdicionales.map((s) => s.nombre),
         tipoNombre: tipos.find((t) => t.id === orden.tipoVehiculoId)?.nombre ?? '—',
-        lavadorNombre: lavadores.find((l) => l.id === orden.lavadorId)?.nombre ?? '—',
+        lavadorNombre: orden.lavadorId ? lavadores.find((l) => l.id === orden.lavadorId)?.nombre ?? '—' : 'Sin asignar',
         precio: orden.precio,
         fecha: orden.creadoEn,
       })
       const siguienteLavador = await suggestNextLavador()
       setForm({ ...emptyForm, lavadorId: siguienteLavador ?? '' })
       setServiciosAdicionales([])
+      setMotoDuplicada(undefined)
       setOpenStep(1)
       onCreated()
     } catch (err) {
@@ -410,7 +445,10 @@ function ReceptionForm({
           <input
             autoFocus
             value={form.placa}
-            onChange={(e) => update('placa', e.target.value.toUpperCase())}
+            onChange={(e) => {
+              update('placa', e.target.value.toUpperCase())
+              setMotoDuplicada(undefined)
+            }}
             onBlur={handlePlacaBlur}
             placeholder="AB123CD"
             className="rounded-lg border border-neutral-300 px-3 py-3 font-mono text-base uppercase outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
@@ -426,6 +464,20 @@ function ReceptionForm({
             options={tipos.filter((t) => t.activo).map((t) => ({ value: t.id, label: t.nombre }))}
           />
         </label>
+
+        {motoDuplicada ? (
+          <div className="flex items-start gap-2.5 rounded-lg border border-warning-300 bg-warning-50 px-3 py-2.5 text-sm text-warning-800">
+            <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+            <span>
+              Esta moto ya está registrada y en proceso — orden #{motoDuplicada.consecutivo},{' '}
+              {motoDuplicada.clienteNombre}
+              {motoDuplicada.lavadorId
+                ? ` con ${lavadores.find((l) => l.id === motoDuplicada.lavadorId)?.nombre ?? 'un lavador'}`
+                : ', sin lavador asignado'}
+              . Verifica que no sea un duplicado antes de continuar.
+            </span>
+          </div>
+        ) : null}
 
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="font-medium text-neutral-700">Cliente</span>
@@ -548,6 +600,21 @@ function ReceptionForm({
           </div>
         ) : null}
 
+        {tipoSeleccionado?.categoria === 'moto' ? (
+          <label className="flex items-center gap-2.5 rounded-lg border border-neutral-200 px-3 py-3 text-sm">
+            <input
+              type="checkbox"
+              checked={form.altoCilindraje}
+              onChange={(e) => update('altoCilindraje', e.target.checked)}
+              className="size-4 rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
+            />
+            <span className="text-neutral-700">
+              Alto cilindraje
+              <span className="ml-1 text-xs text-neutral-400">(+{COP.format(configuracion.recargoAltoCilindraje)})</span>
+            </span>
+          </label>
+        ) : null}
+
         {precio !== undefined ? (
           <div className="flex items-center justify-between rounded-lg bg-primary-50 px-3 py-2.5 text-sm">
             <span className="font-medium text-primary-900">Precio: {COP.format(precio)}</span>
@@ -560,14 +627,18 @@ function ReceptionForm({
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="flex items-center gap-1.5 font-medium text-neutral-700">
             <Car size={14} className="text-primary-500" /> Lavador asignado
+            <span className="font-normal text-neutral-400">(opcional)</span>
           </span>
           <CustomSelect
             value={form.lavadorId}
             onChange={(value) => update('lavadorId', value)}
-            placeholder="Selecciona…"
+            placeholder="Sin asignar — se asigna después"
             options={lavadores.filter((l) => l.activo).map((l) => ({ value: l.id, label: l.nombre }))}
           />
-          <span className="text-xs text-neutral-400">Sugerido por la cola de rotación — puedes cambiarlo.</span>
+          <span className="text-xs text-neutral-400">
+            Sugerido por la cola de rotación — si todos están ocupados, déjalo sin asignar y hazlo
+            después desde el tablero de seguimiento.
+          </span>
         </label>
 
         <label className="flex flex-col gap-1.5 text-sm">

@@ -36,7 +36,7 @@ function LiquidacionesJefeZona() {
   const [lavadorFiltro, setLavadorFiltro] = useState<string>('todos')
   const [recibo, setRecibo] = useState<ReciboData | null>(null)
 
-  const lavadorNombre = (id: string) => lavadores.find((l) => l.id === id)?.nombre ?? '—'
+  const lavadorNombre = (id: string | undefined) => (id ? lavadores.find((l) => l.id === id)?.nombre : undefined) ?? 'Sin asignar'
   const comboNombre = (id: string | undefined) => (id ? combos.find((c) => c.id === id)?.nombre : undefined) ?? 'Sin combo'
   const tipoNombre = (id: string) => tiposVehiculo.find((t) => t.id === id)?.nombre ?? '—'
 
@@ -56,6 +56,9 @@ function LiquidacionesJefeZona() {
   const porLavador = useMemo(() => {
     const mapa = new Map<string, { cantidad: number; monto: number }>()
     for (const orden of entregadasHoy) {
+      // Una orden entregada siempre tiene lavador asignado (no se puede cobrar/entregar sin
+      // asignar primero) — el guard es solo para que TS acepte `lavadorId` opcional en el tipo.
+      if (!orden.lavadorId) continue
       const actual = mapa.get(orden.lavadorId) ?? { cantidad: 0, monto: 0 }
       actual.cantidad += 1
       actual.monto += orden.comisionLavador

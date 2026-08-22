@@ -3,6 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { fetchConfiguracion, updateConfiguracion } from '../../../data/configuracion'
 import { configuracionSchema, type Configuracion } from '../../../schemas/configuracion'
 import { Card } from '../../../components/layout/Card'
+import { CurrencyInput } from '../../../components/layout/CurrencyInput'
 
 export const Route = createFileRoute('/admin/configuracion/')({
   loader: fetchConfiguracion,
@@ -42,6 +43,7 @@ function ConfiguracionPage() {
   const [periodicidadLiquidacion, setPeriodicidadLiquidacion] = useState<Configuracion['periodicidadLiquidacion']>(
     initial.periodicidadLiquidacion,
   )
+  const [recargoAltoCilindraje, setRecargoAltoCilindraje] = useState(String(initial.recargoAltoCilindraje))
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -57,6 +59,7 @@ function ConfiguracionPage() {
       comisionLavadorPorcentaje: numero / 100,
       comisionBase,
       periodicidadLiquidacion,
+      recargoAltoCilindraje: Number(recargoAltoCilindraje) || 0,
     })
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Datos inválidos')
@@ -167,6 +170,24 @@ function ConfiguracionPage() {
               ))}
             </div>
           </div>
+
+          <label className="flex flex-col gap-1.5 text-left text-sm">
+            <span className="font-medium text-neutral-700">Recargo moto alto cilindraje</span>
+            <p className="text-xs text-neutral-500">
+              Se suma al precio cuando en recepción se marca el checkbox "Alto cilindraje" para una moto —
+              mismo monto sin importar el combo.
+            </p>
+            <div className="mt-1 w-40">
+              <CurrencyInput
+                size="sm"
+                value={recargoAltoCilindraje}
+                onChange={(value) => {
+                  setRecargoAltoCilindraje(value)
+                  setSaved(false)
+                }}
+              />
+            </div>
+          </label>
 
           {error ? <p className="text-xs text-danger-600">{error}</p> : null}
           {saved ? <p className="text-xs text-success-700">Configuración guardada.</p> : null}

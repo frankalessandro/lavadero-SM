@@ -42,14 +42,22 @@ export const ordenSchema = z.object({
   tipoVehiculoId: z.string(),
   // Ya no es obligatorio: una orden puede ser solo servicios individuales, sin combo.
   comboId: nullableTrimmedString,
-  lavadorId: z.string(),
+  // Puede quedar sin asignar al registrar (todos los lavadores ocupados, cliente hace cola) —
+  // se asigna después desde el tablero de seguimiento con la misma acción de reasignar.
+  lavadorId: nullableTrimmedString,
   precio: z.number().int().positive(),
+  // Recargo fijo de moto alto cilindraje ya sumado a `precio` — se guarda aparte solo para poder
+  // mostrarlo/auditarlo, no se resta ni se recalcula desde acá.
+  altoCilindraje: z.boolean(),
   comisionLavador: z.number().int().nonnegative(),
   comisionNegocio: z.number().int().nonnegative(),
   // Se conoce recién al cobrar/entregar, no al registrar el vehículo.
   metodoPago: metodoPagoSchema.nullish().transform((value) => value ?? undefined),
   referenciaPago: nullableTrimmedString,
   observaciones: nullableTrimmedString,
+  // Marca manual de "ya le avisamos que está listo" — puro control operativo del jefe de zona,
+  // no afecta cobro/entrega ni ninguna regla de negocio.
+  notificadoListo: z.boolean(),
   estado: estadoOrdenSchema,
   creadoEn: z.string(),
   listaEn: nullableTimestamp,
@@ -80,7 +88,12 @@ export const ordenInputSchema = z
     clienteCorreo: z.string().trim().email('Correo inválido').optional(),
     tipoVehiculoId: z.string().min(1, 'Selecciona el tipo de vehículo'),
     comboId: z.string().trim().min(1).optional(),
-    lavadorId: z.string().min(1, 'Selecciona el lavador'),
+    // Opcional: si todos los lavadores están ocupados y hay cola, se puede registrar el
+    // vehículo sin asignar todavía y hacerlo después desde el tablero de seguimiento.
+    lavadorId: z.string().trim().min(1).optional(),
+    // Solo aplica a motos — recepción muestra el checkbox únicamente cuando el tipo elegido es
+    // de categoría moto, pero el default acá evita que quede undefined si no se toca el campo.
+    altoCilindraje: z.boolean().optional().default(false),
     observaciones: z.string().trim().optional(),
     // Servicios individuales — sea que acompañen al combo o que sean todo lo que lleva la orden.
     serviciosAdicionales: z.array(z.string()).optional().default([]),
