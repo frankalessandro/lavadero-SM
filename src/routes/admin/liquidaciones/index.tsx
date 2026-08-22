@@ -4,8 +4,10 @@ import { Wallet, CheckCircle2 } from 'lucide-react'
 import {
   fetchComisionesPendientes,
   fetchLiquidaciones,
+  fetchMontoPeriodo,
   generarLiquidacion,
   marcarLiquidacionPagada,
+  type MontoPeriodo,
 } from '../../../data/liquidaciones'
 import { fetchLavadores } from '../../../data/lavadores'
 import { fetchConfiguracion } from '../../../data/configuracion'
@@ -35,10 +37,13 @@ async function loadData() {
   return { pendientes, historico, lavadores, configuracion }
 }
 
-// Rango que propone "Generar liquidación" según la periodicidad normal configurada (regla de
-// negocio 4, parametrizable) — diaria = solo hoy, semanal = últimos 7 días (comportamiento
-// previo). Generar liquidación sigue siendo manual/opcional, esto solo fija el default.
-function rangoPorPeriodicidad(periodicidad: Configuracion['periodicidadLiquidacion']): [string, string] {
+// Admin puede generar liquidación diaria (solo hoy) o semanal (últimos 7 días) para cualquier
+// lavador, sin importar la periodicidad "normal" configurada — esa configuración (Configuración
+// > periodicidad de liquidación) solo decide cuál de las dos se resalta como default en esta
+// pantalla, ambas siguen disponibles siempre.
+type Periodicidad = Configuracion['periodicidadLiquidacion']
+
+function rangoPorPeriodicidad(periodicidad: Periodicidad): [string, string] {
   return periodicidad === 'diaria' ? [hoyISO(), hoyISO()] : [hoyISO(-7), hoyISO()]
 }
 
@@ -56,9 +61,18 @@ function LiquidacionesPage() {
   const [configuracion, setConfiguracion] = useState(initial.configuracion)
   const periodicidadLabel = configuracion.periodicidadLiquidacion === 'diaria' ? 'diaria' : 'semanal'
   const [generando, setGenerando] = useState<string | null>(null)
+  // Clave `${lavadorId}:${periodicidad}` mientras se calcula el monto real del rango antes de
+  // mostrar el confirm (ver fetchMontoPeriodo) — es lo que deshabilita el botón que se tocó.
+  const [calculando, setCalculando] = useState<string | null>(null)
   const [pagando, setPagando] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [confirmandoGenerar, setConfirmandoGenerar] = useState<ComisionPendiente | null>(null)
+  const [confirmandoGenerar, setConfirmandoGenerar] = useState<{
+    comision: ComisionPendiente
+    periodicidad: Periodicidad
+    periodoInicio: string
+    periodoFin: string
+    preview: MontoPeriodo
+  } | null>(null)
   const [confirmandoPago, setConfirmandoPago] = useState<Liquidacion | null>(null)
 
   const lavadoresPorId = new Map(lavadores.map((l) => [l.id, l] as const))
@@ -73,17 +87,44 @@ function LiquidacionesPage() {
     router.invalidate()
   }
 
-  async function handleGenerar(comision: ComisionPendiente) {
+  // El monto de la tarjeta (`comision.montoPendiente`) es el acumulado TOTAL sin liquidar, no lo
+  // que cae dentro de "hoy" o "últimos 7 días" — por eso se calcula el monto real del rango
+  // elegido antes de confirmar, en vez de mostrar esa cifra como si fuera lo que se va a generar.
+  async function handleElegirPeriodicidad(comision: ComisionPendiente, periodicidad: Periodicidad) {
+    setError(null)
+    setCalculando(`${comision.lavadorId}:${periodicidad}`)
+    try {
+      const [periodoInicio, periodoFin] = rangoPorPeriodicidad(periodicidad)
+      const preview = await fetchMontoPeriodo(comision.lavadorId, periodoInicio, periodoFin)
+      if (preview.cantidadOrdenes === 0) {
+        setError(
+          `${comision.lavadorNombre} no tiene órdenes entregadas sin liquidar en ${
+            periodicidad === 'diaria' ? 'el día de hoy' : 'los últimos 7 días'
+          } — nada que generar en ese rango.`,
+        )
+        return
+      }
+      setConfirmandoGenerar({ comision, periodicidad, periodoInicio, periodoFin, preview })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo calcular el monto del periodo')
+    } finally {
+      setCalculando(null)
+    }
+  }
+
+  async function handleGenerar() {
+    if (!confirmandoGenerar) return
+    const { comision, periodoInicio, periodoFin } = confirmandoGenerar
     setError(null)
     setGenerando(comision.lavadorId)
     try {
-      const [periodoInicio, periodoFin] = rangoPorPeriodicidad(configuracion.periodicidadLiquidacion)
       await generarLiquidacion(comision.lavadorId, periodoInicio, periodoFin)
       await refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo generar la liquidación')
     } finally {
       setGenerando(null)
+      setConfirmandoGenerar(null)
     }
   }
 
@@ -102,8 +143,9 @@ function LiquidacionesPage() {
       <div>
         <h2 className="text-base font-semibold text-neutral-900">Liquidaciones</h2>
         <p className="text-sm text-neutral-500">
-          Liquidación {periodicidadLabel} sobre el acumulado, sin descuentos al lavador (regla de negocio 4) —
-          periodicidad configurable en <span className="font-medium text-neutral-700">Configuración</span>.
+          Sobre el acumulado, sin descuentos al lavador (regla de negocio 4) — genera diaria o semanal para
+          cualquier lavador; la periodicidad marcada como default ({periodicidadLabel}) se define en{' '}
+          <span className="font-medium text-neutral-700">Configuración</span>.
         </p>
       </div>
 
@@ -147,14 +189,28 @@ function LiquidacionesPage() {
                   </div>
                 </div>
                 <p className="text-xl font-semibold text-neutral-900">{COP.format(comision.montoPendiente)}</p>
-                <button
-                  type="button"
-                  disabled={comision.montoPendiente === 0 || generando === comision.lavadorId}
-                  onClick={() => setConfirmandoGenerar(comision)}
-                  className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {generando === comision.lavadorId ? 'Generando…' : `Generar liquidación ${periodicidadLabel}`}
-                </button>
+                <p className="-mt-2 text-xs text-neutral-400">Acumulado total sin liquidar — no es lo que cae en cada rango de abajo.</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {(['diaria', 'semanal'] as const).map((periodicidad) => {
+                    const key = `${comision.lavadorId}:${periodicidad}`
+                    const esDefault = periodicidad === configuracion.periodicidadLiquidacion
+                    return (
+                      <button
+                        key={periodicidad}
+                        type="button"
+                        disabled={comision.montoPendiente === 0 || calculando === key || generando === comision.lavadorId}
+                        onClick={() => handleElegirPeriodicidad(comision, periodicidad)}
+                        className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                          esDefault
+                            ? 'bg-primary-600 text-white shadow-nav-active hover:bg-primary-700'
+                            : 'border border-neutral-200 text-neutral-600 hover:bg-neutral-50'
+                        }`}
+                      >
+                        {calculando === key ? 'Calculando…' : `Generar ${periodicidad}`}
+                      </button>
+                    )
+                  })}
+                </div>
               </Card>
             ))}
           </div>
@@ -208,16 +264,17 @@ function LiquidacionesPage() {
 
       {confirmandoGenerar ? (
         <ConfirmModal
-          title={`Generar liquidación ${periodicidadLabel}`}
+          title={`Generar liquidación ${confirmandoGenerar.periodicidad}`}
           message={`¿Generar la liquidación ${
-            configuracion.periodicidadLiquidacion === 'diaria' ? 'de hoy' : 'de los últimos 7 días'
-          } para ${confirmandoGenerar.lavadorNombre} por ${COP.format(confirmandoGenerar.montoPendiente)}?`}
+            confirmandoGenerar.periodicidad === 'diaria' ? 'de hoy' : 'de los últimos 7 días'
+          } (${confirmandoGenerar.periodoInicio} → ${confirmandoGenerar.periodoFin}) para ${
+            confirmandoGenerar.comision.lavadorNombre
+          } por ${COP.format(confirmandoGenerar.preview.monto)} (${confirmandoGenerar.preview.cantidadOrdenes} orden${
+            confirmandoGenerar.preview.cantidadOrdenes === 1 ? '' : 'es'
+          })?`}
           confirmLabel="Generar liquidación"
           variant="primary"
-          onConfirm={async () => {
-            await handleGenerar(confirmandoGenerar)
-            setConfirmandoGenerar(null)
-          }}
+          onConfirm={handleGenerar}
           onCancel={() => setConfirmandoGenerar(null)}
         />
       ) : null}

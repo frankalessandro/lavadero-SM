@@ -37,6 +37,7 @@ import { Route as AdminUsuariosIndexRouteImport } from './routes/admin/usuarios/
 import { Route as JefeZonaAsistenciaIndexRouteImport } from './routes/jefe-zona/asistencia/index'
 import { Route as JefeZonaCajaIndexRouteImport } from './routes/jefe-zona/caja/index'
 import { Route as JefeZonaInventarioIndexRouteImport } from './routes/jefe-zona/inventario/index'
+import { Route as JefeZonaLiquidacionesIndexRouteImport } from './routes/jefe-zona/liquidaciones/index'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -178,6 +179,12 @@ const JefeZonaInventarioIndexRoute = JefeZonaInventarioIndexRouteImport.update({
   path: '/inventario/',
   getParentRoute: () => JefeZonaRouteRoute,
 } as any)
+const JefeZonaLiquidacionesIndexRoute =
+  JefeZonaLiquidacionesIndexRouteImport.update({
+    id: '/liquidaciones/',
+    path: '/liquidaciones/',
+    getParentRoute: () => JefeZonaRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -208,6 +215,7 @@ export interface FileRoutesByFullPath {
   '/jefe-zona/asistencia/': typeof JefeZonaAsistenciaIndexRoute
   '/jefe-zona/caja/': typeof JefeZonaCajaIndexRoute
   '/jefe-zona/inventario/': typeof JefeZonaInventarioIndexRoute
+  '/jefe-zona/liquidaciones/': typeof JefeZonaLiquidacionesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -234,6 +242,7 @@ export interface FileRoutesByTo {
   '/jefe-zona/asistencia': typeof JefeZonaAsistenciaIndexRoute
   '/jefe-zona/caja': typeof JefeZonaCajaIndexRoute
   '/jefe-zona/inventario': typeof JefeZonaInventarioIndexRoute
+  '/jefe-zona/liquidaciones': typeof JefeZonaLiquidacionesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -265,6 +274,7 @@ export interface FileRoutesById {
   '/jefe-zona/asistencia/': typeof JefeZonaAsistenciaIndexRoute
   '/jefe-zona/caja/': typeof JefeZonaCajaIndexRoute
   '/jefe-zona/inventario/': typeof JefeZonaInventarioIndexRoute
+  '/jefe-zona/liquidaciones/': typeof JefeZonaLiquidacionesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -297,6 +307,7 @@ export interface FileRouteTypes {
     | '/jefe-zona/asistencia/'
     | '/jefe-zona/caja/'
     | '/jefe-zona/inventario/'
+    | '/jefe-zona/liquidaciones/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -323,6 +334,7 @@ export interface FileRouteTypes {
     | '/jefe-zona/asistencia'
     | '/jefe-zona/caja'
     | '/jefe-zona/inventario'
+    | '/jefe-zona/liquidaciones'
   id:
     | '__root__'
     | '/'
@@ -353,6 +365,7 @@ export interface FileRouteTypes {
     | '/jefe-zona/asistencia/'
     | '/jefe-zona/caja/'
     | '/jefe-zona/inventario/'
+    | '/jefe-zona/liquidaciones/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -564,6 +577,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof JefeZonaInventarioIndexRouteImport
       parentRoute: typeof JefeZonaRouteRoute
     }
+    '/jefe-zona/liquidaciones/': {
+      id: '/jefe-zona/liquidaciones/'
+      path: '/liquidaciones'
+      fullPath: '/jefe-zona/liquidaciones/'
+      preLoaderRoute: typeof JefeZonaLiquidacionesIndexRouteImport
+      parentRoute: typeof JefeZonaRouteRoute
+    }
   }
 }
 
@@ -610,6 +630,7 @@ interface JefeZonaRouteRouteChildren {
   JefeZonaAsistenciaIndexRoute: typeof JefeZonaAsistenciaIndexRoute
   JefeZonaCajaIndexRoute: typeof JefeZonaCajaIndexRoute
   JefeZonaInventarioIndexRoute: typeof JefeZonaInventarioIndexRoute
+  JefeZonaLiquidacionesIndexRoute: typeof JefeZonaLiquidacionesIndexRoute
 }
 
 const JefeZonaRouteRouteChildren: JefeZonaRouteRouteChildren = {
@@ -617,6 +638,7 @@ const JefeZonaRouteRouteChildren: JefeZonaRouteRouteChildren = {
   JefeZonaAsistenciaIndexRoute: JefeZonaAsistenciaIndexRoute,
   JefeZonaCajaIndexRoute: JefeZonaCajaIndexRoute,
   JefeZonaInventarioIndexRoute: JefeZonaInventarioIndexRoute,
+  JefeZonaLiquidacionesIndexRoute: JefeZonaLiquidacionesIndexRoute,
 }
 
 const JefeZonaRouteRouteWithChildren = JefeZonaRouteRoute._addFileChildren(

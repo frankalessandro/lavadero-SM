@@ -57,6 +57,38 @@ export async function fetchComisionesPendientes(): Promise<ComisionPendiente[]> 
   })
 }
 
+// Órdenes que entrarían en una liquidación de este lavador para el rango [periodoInicio,
+// periodoFin] (fechas YYYY-MM-DD, ambas inclusivas) — mismo filtro que aplica `generarLiquidacion`
+// al momento de crearla, extraído aparte para poder mostrar un monto preciso ANTES de generar
+// (admin ahora puede elegir diaria o semanal por lavador, así que el monto ya no es siempre
+// "todo lo pendiente" — depende del rango elegido).
+async function ordenesElegibles(lavadorId: string, periodoInicio: string, periodoFin: string) {
+  // periodoFin es una fecha (YYYY-MM-DD) inclusiva para el usuario; fetchOrdenesEnRango usa
+  // límite superior exclusivo, así que se extiende un día para incluir todo el día de cierre.
+  const hastaExclusivoISO = new Date(`${periodoFin}T00:00:00.000Z`)
+  hastaExclusivoISO.setUTCDate(hastaExclusivoISO.getUTCDate() + 1)
+
+  return (
+    await fetchOrdenesEnRango(new Date(`${periodoInicio}T00:00:00.000Z`).toISOString(), hastaExclusivoISO.toISOString())
+  ).filter((orden) => orden.lavadorId === lavadorId && orden.liquidacionId === undefined && orden.estado === 'entregado')
+}
+
+export interface MontoPeriodo {
+  monto: number
+  cantidadOrdenes: number
+}
+
+// Preview del monto real que generaría una liquidación diaria o semanal para este lavador y
+// rango — se usa antes de confirmar, porque `montoPendiente` de fetchComisionesPendientes es el
+// acumulado TOTAL sin liquidar, no lo que cae dentro de un rango diario/semanal específico.
+export async function fetchMontoPeriodo(lavadorId: string, periodoInicio: string, periodoFin: string): Promise<MontoPeriodo> {
+  const ordenes = await ordenesElegibles(lavadorId, periodoInicio, periodoFin)
+  return {
+    monto: ordenes.reduce((suma, orden) => suma + orden.comisionLavador, 0),
+    cantidadOrdenes: ordenes.length,
+  }
+}
+
 // No hay transacciones multi-tabla vía PostgREST plano, así que se hace en dos pasos:
 // 1) inserta la liquidación con el monto calculado, 2) marca las órdenes correspondientes
 // con el id recién creado. Si el paso 2 falla se reporta explícitamente — la liquidación
@@ -66,14 +98,7 @@ export async function generarLiquidacion(
   periodoInicio: string,
   periodoFin: string,
 ): Promise<Liquidacion> {
-  // periodoFin es una fecha (YYYY-MM-DD) inclusiva para el usuario; fetchOrdenesEnRango usa
-  // límite superior exclusivo, así que se extiende un día para incluir todo el día de cierre.
-  const hastaExclusivoISO = new Date(`${periodoFin}T00:00:00.000Z`)
-  hastaExclusivoISO.setUTCDate(hastaExclusivoISO.getUTCDate() + 1)
-
-  const ordenes = (
-    await fetchOrdenesEnRango(new Date(`${periodoInicio}T00:00:00.000Z`).toISOString(), hastaExclusivoISO.toISOString())
-  ).filter((orden) => orden.lavadorId === lavadorId && orden.liquidacionId === undefined && orden.estado === 'entregado')
+  const ordenes = await ordenesElegibles(lavadorId, periodoInicio, periodoFin)
 
   const monto = ordenes.reduce((suma, orden) => suma + orden.comisionLavador, 0)
 
