@@ -6,6 +6,13 @@ export interface NavItem {
   to: string
   label: string
   icon: ComponentType<{ size?: number; strokeWidth?: number }>
+  /**
+   * Por defecto un ítem solo se marca activo en su ruta exacta. Los ítems que son una SECCIÓN con
+   * pestañas adentro (Operación, Dinero, Catálogo, Personal en admin) necesitan `exact: false`
+   * para seguir resaltados mientras se navega entre sus pestañas hijas. `/admin` (Dashboard) debe
+   * quedarse en `true`, si no coincidiría con todas las rutas del panel.
+   */
+  exact?: boolean
 }
 
 interface SidebarProps {
@@ -34,11 +41,11 @@ function SidebarContent({
       </div>
 
       <nav className="flex flex-1 flex-col gap-1 px-3">
-        {navItems.map(({ to, label, icon: Icon }) => (
+        {navItems.map(({ to, label, icon: Icon, exact = true }) => (
           <Link
             key={to}
             to={to}
-            activeOptions={{ exact: true }}
+            activeOptions={{ exact }}
             onClick={onNavigate}
             className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-neutral-500 transition-colors hover:bg-primary-50 hover:text-primary-700"
             activeProps={{ className: '!bg-primary-600 !text-white shadow-nav-active hover:!bg-primary-600' }}

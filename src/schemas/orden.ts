@@ -11,6 +11,18 @@ const nullableTrimmedString = z
   .nullish()
   .transform((value) => value ?? undefined)
 
+// Placa colombiana: carro = 3 letras + 3 números (ej. MAQ068), moto = 3 letras + 2 números + 1
+// letra (ej. ZCD24D) — mismo patrón para ambas categorías porque acá no se sabe todavía si el
+// tipo elegido es auto o moto (se valida antes de eso). Sin espacios/guiones/símbolos.
+export const placaSchema = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .regex(
+    /^[A-Z]{3}(?:[0-9]{3}|[0-9]{2}[A-Z])$/,
+    'Placa inválida — carro: 3 letras y 3 números (ej. MAQ068), moto: 3 letras, 2 números y 1 letra (ej. ZCD24D)',
+  )
+
 const nullableTimestamp = z
   .string()
   .nullish()
@@ -45,11 +57,20 @@ export const ordenSchema = z.object({
   // Puede quedar sin asignar al registrar (todos los lavadores ocupados, cliente hace cola) —
   // se asigna después desde el tablero de seguimiento con la misma acción de reasignar.
   lavadorId: nullableTrimmedString,
+  // Segundo lavador — "lavar entre 2" (a criterio de recepción/jefe de zona, caso a caso). Cuando
+  // está presente, la comisión total (`comisionLavador`) se reparte 50/50 entre lavadorId y
+  // lavadorId2 (ver comisionParaLavador en src/data/liquidaciones.ts) — comisionLavador acá sigue
+  // siendo el TOTAL de la orden, no la mitad de nadie.
+  lavadorId2: nullableTrimmedString,
   precio: z.number().int().positive(),
   // Recargo fijo de moto alto cilindraje ya sumado a `precio` — se guarda aparte solo para poder
   // mostrarlo/auditarlo, no se resta ni se recalcula desde acá.
   altoCilindraje: z.boolean(),
   comisionLavador: z.number().int().nonnegative(),
+  // Jefe de patio en turno al registrar el vehículo (comisión nueva, sobre el 100% igual que la
+  // del lavador) — comisionNegocio ya no es "el resto del lavador", es el resto de los dos.
+  comisionJefeZona: z.number().int().nonnegative(),
+  jefeZonaResponsable: nullableTrimmedString,
   comisionNegocio: z.number().int().nonnegative(),
   // Se conoce recién al cobrar/entregar, no al registrar el vehículo.
   metodoPago: metodoPagoSchema.nullish().transform((value) => value ?? undefined),
@@ -66,6 +87,13 @@ export const ordenSchema = z.object({
   tiempoLavadoSegundos: nullableSegundos,
   tiempoEsperaEntregaSegundos: nullableSegundos,
   liquidacionId: nullableTimestamp,
+  // Liquidación del segundo lavador — independiente de `liquidacionId` (del principal): cada
+  // mitad de la comisión se puede liquidar en un momento distinto (ver src/data/liquidaciones.ts).
+  liquidacionId2: nullableTimestamp,
+  // Liquidación de la comisión del jefe de patio — tabla/flujo aparte de liquidaciones de
+  // lavadores (ver src/data/liquidacionesJefeZona.ts), independiente por completo de
+  // liquidacionId/liquidacionId2.
+  liquidacionJefeZonaId: nullableTimestamp,
   motivoAnulacion: nullableTrimmedString,
   anuladaEn: nullableTimestamp,
   anuladaPor: nullableTrimmedString,
@@ -82,7 +110,7 @@ export const anularOrdenInputSchema = z.object({
 // servicios individuales (regla `.refine` abajo exige al menos uno de los dos).
 export const ordenInputSchema = z
   .object({
-    placa: z.string().trim().min(1, 'La placa es obligatoria').toUpperCase(),
+    placa: placaSchema,
     clienteNombre: z.string().trim().min(1, 'El nombre del cliente es obligatorio'),
     clienteTelefono: z.string().trim().optional(),
     clienteCorreo: z.string().trim().email('Correo inválido').optional(),
@@ -91,6 +119,9 @@ export const ordenInputSchema = z
     // Opcional: si todos los lavadores están ocupados y hay cola, se puede registrar el
     // vehículo sin asignar todavía y hacerlo después desde el tablero de seguimiento.
     lavadorId: z.string().trim().min(1).optional(),
+    // "Lavar entre 2" — a criterio de quien recibe, caso a caso. Opcional, y solo tiene sentido
+    // con lavadorId ya elegido (validado abajo).
+    lavadorId2: z.string().trim().min(1).optional(),
     // Solo aplica a motos — recepción muestra el checkbox únicamente cuando el tipo elegido es
     // de categoría moto, pero el default acá evita que quede undefined si no se toca el campo.
     altoCilindraje: z.boolean().optional().default(false),
@@ -102,6 +133,14 @@ export const ordenInputSchema = z
     message: 'Selecciona un combo o al menos un servicio individual',
     path: ['comboId'],
   })
+  .refine((data) => !data.lavadorId2 || !!data.lavadorId, {
+    message: 'Elige primero el lavador principal antes del segundo',
+    path: ['lavadorId2'],
+  })
+  .refine((data) => !data.lavadorId2 || data.lavadorId2 !== data.lavadorId, {
+    message: 'El segundo lavador debe ser distinto al principal',
+    path: ['lavadorId2'],
+  })
 
 // Edición de datos de contacto del cliente mientras el vehículo sigue en_proceso o listo (antes
 // de cobrar/entregar) — combo/tipo/lavador no se tocan aquí, esos definen el servicio ya
@@ -109,7 +148,7 @@ export const ordenInputSchema = z
 // puede haber tomado mal (typo, confusión con otro vehículo) y hay que poder corregirlo antes
 // de cobrar/entregar.
 export const clienteInfoInputSchema = z.object({
-  placa: z.string().trim().min(1, 'La placa es obligatoria').toUpperCase(),
+  placa: placaSchema,
   clienteNombre: z.string().trim().min(1, 'El nombre del cliente es obligatorio'),
   clienteTelefono: z.string().trim().optional(),
   clienteCorreo: z.string().trim().email('Correo inválido').optional(),

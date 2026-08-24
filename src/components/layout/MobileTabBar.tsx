@@ -6,11 +6,11 @@ import type { NavItem } from './Sidebar'
 export function MobileTabBar({ navItems }: { navItems: NavItem[] }) {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-10 flex overflow-x-auto border-t border-neutral-200 bg-white/95 backdrop-blur-sm md:hidden">
-      {navItems.map(({ to, label, icon: Icon }) => (
+      {navItems.map(({ to, label, icon: Icon, exact = true }) => (
         <Link
           key={to}
           to={to}
-          activeOptions={{ exact: true }}
+          activeOptions={{ exact }}
           className="flex min-w-16 flex-1 flex-col items-center gap-1 px-2 py-2.5 text-neutral-500 transition-colors"
           activeProps={{ className: '!text-primary-600' }}
         >

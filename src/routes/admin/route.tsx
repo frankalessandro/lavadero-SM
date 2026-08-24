@@ -1,21 +1,6 @@
 import { useState } from 'react'
 import { createFileRoute, Outlet, redirect } from '@tanstack/react-router'
-import {
-  LayoutDashboard,
-  Car,
-  Wrench,
-  Package,
-  CircleParking,
-  Users,
-  Settings,
-  Wallet,
-  Receipt,
-  ClipboardList,
-  ClipboardCheck,
-  Boxes,
-  UserCog,
-  BookUser,
-} from 'lucide-react'
+import { LayoutDashboard, ClipboardList, Coins, Package, Users, Settings } from 'lucide-react'
 import { Sidebar, type NavItem } from '../../components/layout/Sidebar'
 import { Topbar } from '../../components/layout/Topbar'
 import { signOut } from '../../lib/auth'
@@ -30,27 +15,27 @@ export const Route = createFileRoute('/admin')({
   component: AdminLayout,
 })
 
+// Seis secciones, una por pregunta de negocio — antes eran 14 destinos planos, uno por tabla de
+// base de datos, con la misma tarea repartida en varias pantallas (definir un precio obligaba a
+// pasar por Tipos de vehículo → Servicios → Combos) y la misma información repetida en varias
+// (anulaciones salían en el dashboard dos veces y otra vez en Órdenes). Cada sección de acá
+// agrupa sus pantallas en pestañas (ver SectionTabs); ninguna funcionalidad se eliminó al mover.
+//
+// `exact: false` en las secciones para que el ítem siga resaltado mientras se navega entre sus
+// pestañas hijas; Dashboard y Configuración se quedan en exacto (son ruta única).
 const NAV_ITEMS: NavItem[] = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/admin/tipos-vehiculo', label: 'Tipos de vehículo', icon: Car },
-  { to: '/admin/servicios', label: 'Servicios', icon: Wrench },
-  { to: '/admin/combos', label: 'Combos', icon: Package },
-  { to: '/admin/parqueadero', label: 'Parqueadero', icon: CircleParking },
-  { to: '/admin/lavadores', label: 'Lavadores', icon: Users },
-  { to: '/admin/liquidaciones', label: 'Liquidaciones', icon: Wallet },
-  { to: '/admin/gastos', label: 'Gastos', icon: Receipt },
-  { to: '/admin/inventario', label: 'Inventario', icon: Boxes },
-  { to: '/admin/ordenes', label: 'Órdenes', icon: ClipboardList },
-  { to: '/admin/clientes', label: 'Clientes', icon: BookUser },
-  { to: '/admin/turnos', label: 'Turnos', icon: ClipboardCheck },
-  { to: '/admin/usuarios', label: 'Usuarios', icon: UserCog },
+  { to: '/admin/operacion', label: 'Operación', icon: ClipboardList, exact: false },
+  { to: '/admin/dinero', label: 'Dinero', icon: Coins, exact: false },
+  { to: '/admin/catalogo', label: 'Catálogo y precios', icon: Package, exact: false },
+  { to: '/admin/personal', label: 'Personal', icon: Users, exact: false },
   { to: '/admin/configuracion', label: 'Configuración', icon: Settings },
 ]
 
 // `fixed inset-0` saca el panel del contenedor angosto (#root) del sitio público —
 // cada área por rol es su propia superficie, no hereda el layout de marketing.
-// Con 12 ítems de nav, un MobileTabBar horizontal-scroll deja de ser usable en celular —
-// por debajo de `md` la navegación vive en el drawer del hamburguesa del Topbar en su lugar.
+// La navegación por debajo de `md` vive en el drawer del hamburguesa del Topbar (no un
+// MobileTabBar): con secciones que tienen pestañas propias, dos barras compitiendo confunden.
 function AdminLayout() {
   const { auth } = Route.useRouteContext()
   const [menuOpen, setMenuOpen] = useState(false)

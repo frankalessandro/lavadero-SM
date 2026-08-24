@@ -11,6 +11,8 @@ export interface ReciboData {
   serviciosAdicionales?: string[]
   tipoNombre: string
   lavadorNombre: string
+  // "Lavar entre 2" — presente solo cuando la orden tiene segundo lavador.
+  lavadorNombre2?: string
   precio: number
   fecha: string
   metodoPago?: MetodoPago
@@ -80,7 +82,10 @@ export function ReciboModal({
           {recibo.serviciosAdicionales && recibo.serviciosAdicionales.length > 0 ? (
             <ReciboRow label="Adicionales" value={recibo.serviciosAdicionales.join(', ')} />
           ) : null}
-          <ReciboRow label="Lavador asignado" value={recibo.lavadorNombre} />
+          <ReciboRow
+            label={recibo.lavadorNombre2 ? 'Lavadores asignados' : 'Lavador asignado'}
+            value={recibo.lavadorNombre2 ? `${recibo.lavadorNombre} + ${recibo.lavadorNombre2}` : recibo.lavadorNombre}
+          />
           {esPago && recibo.metodoPago ? (
             <ReciboRow label="Método de pago" value={recibo.metodoPago === 'efectivo' ? 'Efectivo' : 'Transferencia'} />
           ) : null}

@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { X, CheckCircle2, ClipboardCheck } from 'lucide-react'
-import { fetchTurnoAbierto, fetchTurnos, calcularValorEsperado, cerrarTurno } from '../../../data/turnos'
+import { fetchTurnoAbierto, fetchTurnos, desgloseEsperado, cerrarTurno, type DesgloseEsperado } from '../../../data/turnos'
 import type { TurnoCaja } from '../../../schemas/turnoCaja'
 import { Card } from '../../../components/layout/Card'
 import { CurrencyInput } from '../../../components/layout/CurrencyInput'
@@ -147,6 +147,7 @@ function CerrarTurnoModal({
   const [paso, setPaso] = useState<'conteo' | 'revelado'>('conteo')
   const [conteoFisico, setConteoFisico] = useState('')
   const [valorEsperado, setValorEsperado] = useState<number | null>(null)
+  const [desglose, setDesglose] = useState<DesgloseEsperado | null>(null)
   const [justificacion, setJustificacion] = useState('')
   const [cerradoPor, setCerradoPor] = useState(turno.responsableActual)
   const [recibidoPor, setRecibidoPor] = useState('')
@@ -163,8 +164,9 @@ function CerrarTurnoModal({
     }
     setLoading(true)
     try {
-      const esperado = await calcularValorEsperado(turno)
-      setValorEsperado(esperado)
+      const detalle = await desgloseEsperado(turno)
+      setDesglose(detalle)
+      setValorEsperado(detalle.total)
       setPaso('revelado')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo calcular el valor esperado')
@@ -247,6 +249,27 @@ function CerrarTurnoModal({
           </form>
         ) : (
           <form onSubmit={handleCerrar} className="flex flex-col gap-4">
+            {desglose && turno.rol === 'jefe_zona' ? (
+              <div className="rounded-lg border border-neutral-200 p-3 text-xs text-neutral-600">
+                <p className="mb-1.5 font-medium text-neutral-500">Cómo se llega al esperado</p>
+                <div className="flex items-center justify-between">
+                  <span>Base inicial</span>
+                  <span className="font-medium text-neutral-900">{COP.format(desglose.base)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>+ Lavados en efectivo</span>
+                  <span className="font-medium text-neutral-900">{COP.format(desglose.ingresosLavados)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>+ Ventas de productos en efectivo</span>
+                  <span className="font-medium text-neutral-900">{COP.format(desglose.ingresosVentas)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>− Gastos de caja</span>
+                  <span className="font-medium text-neutral-900">{COP.format(desglose.gastos)}</span>
+                </div>
+              </div>
+            ) : null}
             <div
               className={`rounded-lg p-3 text-sm ${
                 hayDiferencia ? 'bg-danger-50 text-danger-700' : 'bg-success-50 text-success-700'

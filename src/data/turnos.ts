@@ -85,23 +85,46 @@ export async function fetchTraspasos(turnoId: string): Promise<TraspasoTurno[]> 
   return traspasoTurnoSchema.array().parse(data)
 }
 
+async function ingresosLavadosEfectivo(turnoId: string): Promise<number> {
+  const { data, error } = await db
+    .from('ordenes')
+    .select('precio')
+    .eq('turno_id', turnoId)
+    .eq('estado', 'entregado')
+    .eq('metodo_pago', 'efectivo')
+  if (error) throw new Error(error.message)
+  return (data ?? []).reduce((total, o) => total + (o.precio as number), 0)
+}
+
+// Ventas de productos de inventario (agua, cerveza, etc.) — se cuentan aparte de los lavados en
+// los indicadores del dashboard, pero suman igual al arqueo del turno de jefe_zona: es la misma
+// caja física. Solo 'activa' (una venta anulada nunca movió dinero real) y efectivo.
+async function ingresosVentasEfectivo(turnoId: string): Promise<number> {
+  const { data, error } = await db
+    .from('ventas')
+    .select('total')
+    .eq('turno_id', turnoId)
+    .eq('estado', 'activa')
+    .eq('metodo_pago', 'efectivo')
+  if (error) throw new Error(error.message)
+  return (data ?? []).reduce((total, v) => total + (v.total as number), 0)
+}
+
+async function gastosDeCaja(turnoId: string): Promise<number> {
+  const { data, error } = await db.from('gastos').select('monto').eq('turno_id', turnoId).eq('origen', 'caja')
+  if (error) throw new Error(error.message)
+  return (data ?? []).reduce((total, g) => total + (g.monto as number), 0)
+}
+
 // Solo la modalidad efectivo es dinero físico que se puede contar — transferencias no entran
 // al arqueo. Gastos en caja se asumen pagados en efectivo desde la misma caja.
 export async function calcularValorEsperado(turno: TurnoCaja): Promise<number> {
-  const gastosRes = await db.from('gastos').select('monto').eq('turno_id', turno.id).eq('origen', 'caja')
-  if (gastosRes.error) throw new Error(gastosRes.error.message)
-  const salidas = (gastosRes.data ?? []).reduce((total, g) => total + (g.monto as number), 0)
+  const salidas = await gastosDeCaja(turno.id)
 
   let ingresos: number
   if (turno.rol === 'jefe_zona') {
-    const ordenesRes = await db
-      .from('ordenes')
-      .select('precio')
-      .eq('turno_id', turno.id)
-      .eq('estado', 'entregado')
-      .eq('metodo_pago', 'efectivo')
-    if (ordenesRes.error) throw new Error(ordenesRes.error.message)
-    ingresos = (ordenesRes.data ?? []).reduce((total, o) => total + (o.precio as number), 0)
+    const [lavados, ventas] = await Promise.all([ingresosLavadosEfectivo(turno.id), ingresosVentasEfectivo(turno.id)])
+    ingresos = lavados + ventas
   } else {
     const estanciasRes = await db
       .from('estancias_parqueadero')
@@ -114,6 +137,25 @@ export async function calcularValorEsperado(turno: TurnoCaja): Promise<number> {
   }
 
   return turno.baseInicial + ingresos - salidas
+}
+
+export interface DesgloseEsperado {
+  base: number
+  ingresosLavados: number
+  ingresosVentas: number
+  gastos: number
+  total: number
+}
+
+// Mismas fuentes que calcularValorEsperado, pero separadas — solo para mostrar el detalle en el
+// paso 2 del cierre de turno (arqueo ciego). Ingresos por lavados y por ventas se ven aparte
+// (como pidió el negocio), pero ambos suman al mismo total esperado.
+export async function desgloseEsperado(turno: TurnoCaja): Promise<DesgloseEsperado> {
+  const gastos = await gastosDeCaja(turno.id)
+  const ingresosLavados = turno.rol === 'jefe_zona' ? await ingresosLavadosEfectivo(turno.id) : 0
+  const ingresosVentas = turno.rol === 'jefe_zona' ? await ingresosVentasEfectivo(turno.id) : 0
+  const total = turno.rol === 'jefe_zona' ? turno.baseInicial + ingresosLavados + ingresosVentas - gastos : await calcularValorEsperado(turno)
+  return { base: turno.baseInicial, ingresosLavados, ingresosVentas, gastos, total }
 }
 
 export async function cerrarTurno(

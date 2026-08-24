@@ -18,7 +18,7 @@ import { fetchTurnoAbierto } from './turnos'
 // orden_servicios embebido vía FK de PostgREST (mismo patrón que `categorias_gasto(nombre)`
 // en `src/data/gastos.ts`): trae los add-ons de cada orden en la misma consulta.
 const ORDEN_SELECT =
-  'id, consecutivo, placa, clienteNombre:cliente_nombre, clienteTelefono:cliente_telefono, clienteCorreo:cliente_correo, tipoVehiculoId:tipo_vehiculo_id, comboId:combo_id, lavadorId:lavador_id, precio, altoCilindraje:alto_cilindraje, comisionLavador:comision_lavador, comisionNegocio:comision_negocio, metodoPago:metodo_pago, referenciaPago:referencia_pago, observaciones, estado, creadoEn:creado_en, listaEn:lista_en, entregadaEn:entregada_en, tiempoLavadoSegundos:tiempo_lavado_segundos, tiempoEsperaEntregaSegundos:tiempo_espera_entrega_segundos, notificadoListo:notificado_listo, liquidacionId:liquidacion_id, motivoAnulacion:motivo_anulacion, anuladaEn:anulada_en, anuladaPor:anulada_por, serviciosAdicionales:orden_servicios(servicioId:servicio_id, precio, servicios(nombre))'
+  'id, consecutivo, placa, clienteNombre:cliente_nombre, clienteTelefono:cliente_telefono, clienteCorreo:cliente_correo, tipoVehiculoId:tipo_vehiculo_id, comboId:combo_id, lavadorId:lavador_id, lavadorId2:lavador_id_2, precio, altoCilindraje:alto_cilindraje, comisionLavador:comision_lavador, comisionJefeZona:comision_jefe_zona, jefeZonaResponsable:jefe_zona_responsable, comisionNegocio:comision_negocio, metodoPago:metodo_pago, referenciaPago:referencia_pago, observaciones, estado, creadoEn:creado_en, listaEn:lista_en, entregadaEn:entregada_en, tiempoLavadoSegundos:tiempo_lavado_segundos, tiempoEsperaEntregaSegundos:tiempo_espera_entrega_segundos, notificadoListo:notificado_listo, liquidacionId:liquidacion_id, liquidacionId2:liquidacion_id_2, liquidacionJefeZonaId:liquidacion_jefe_zona_id, motivoAnulacion:motivo_anulacion, anuladaEn:anulada_en, anuladaPor:anulada_por, serviciosAdicionales:orden_servicios(servicioId:servicio_id, precio, servicios(nombre))'
 
 interface OrdenServicioAdicionalRaw {
   servicioId: string
@@ -230,7 +230,11 @@ export async function createOrden(input: OrdenInput): Promise<Orden> {
   const recargo = parsed.altoCilindraje ? configuracion.recargoAltoCilindraje : 0
   const total = (precioCombo ?? 0) + addons.reduce((suma, addon) => suma + addon.precio, 0) + recargo
   const comisionLavador = Math.round(total * configuracion.comisionLavadorPorcentaje)
-  const comisionNegocio = total - comisionLavador
+  // Comisión del jefe de patio EN TURNO al registrar el vehículo — turno ya se exige arriba
+  // (turno abierto de jefe_zona), así que responsableActual siempre existe acá. El negocio se
+  // lleva lo que quede de las dos comisiones, no un porcentaje fijo aparte.
+  const comisionJefeZona = Math.round(total * configuracion.comisionJefeZonaPorcentaje)
+  const comisionNegocio = total - comisionLavador - comisionJefeZona
 
   const { data, error } = await db
     .from('ordenes')
@@ -242,9 +246,12 @@ export async function createOrden(input: OrdenInput): Promise<Orden> {
       tipo_vehiculo_id: parsed.tipoVehiculoId,
       combo_id: parsed.comboId,
       lavador_id: parsed.lavadorId ?? null,
+      lavador_id_2: parsed.lavadorId2 ?? null,
       precio: total,
       alto_cilindraje: parsed.altoCilindraje,
       comision_lavador: comisionLavador,
+      comision_jefe_zona: comisionJefeZona,
+      jefe_zona_responsable: turno.responsableActual,
       comision_negocio: comisionNegocio,
       observaciones: parsed.observaciones,
     })
@@ -273,8 +280,13 @@ export async function createOrden(input: OrdenInput): Promise<Orden> {
     }
   }
 
+  // Rotación (regla de negocio 9): si el vehículo se lava entre 2, cuenta como atendido para
+  // ambos — los dos avanzan en la cola, no solo el principal.
   if (parsed.lavadorId) {
     await registrarAsignacion(parsed.lavadorId)
+  }
+  if (parsed.lavadorId2) {
+    await registrarAsignacion(parsed.lavadorId2)
   }
   return { ...orden, serviciosAdicionales: addons.map(({ servicioId, nombre, precio }) => ({ servicioId, nombre, precio })) }
 }
@@ -333,10 +345,14 @@ export async function volverAProceso(id: string): Promise<Orden> {
 // (`nuevoLavadorId: null` — típicamente porque se asignó mal). No recalcula precio/comisión
 // (dependen del combo, no de quién lo hace) — solo cambia quién lo hace y, si hay lavador nuevo,
 // actualiza la cola de rotación a su favor (regla de negocio 3: un vehículo, un solo lavador).
-export async function reasignarLavador(id: string, nuevoLavadorId: string | null): Promise<Orden> {
+// `slot` distingue el lavador principal (1, columna `lavador_id`) del segundo lavador de un
+// "lavar entre 2" (2, columna `lavador_id_2`) — mismo modal/función sirve para asignar, cambiar o
+// quitar cualquiera de los dos desde el tablero de seguimiento.
+export async function reasignarLavador(id: string, nuevoLavadorId: string | null, slot: 1 | 2 = 1): Promise<Orden> {
+  const columna = slot === 1 ? 'lavador_id' : 'lavador_id_2'
   const { data, error } = await db
     .from('ordenes')
-    .update({ lavador_id: nuevoLavadorId })
+    .update({ [columna]: nuevoLavadorId })
     .eq('id', id)
     .select(ORDEN_SELECT)
     .single()

@@ -46,7 +46,10 @@ function LiquidacionesJefeZona() {
   const entregadasHoy = useMemo(() => ordenesHoy.filter((o) => o.estado === 'entregado'), [ordenesHoy])
 
   const filtradas = useMemo(
-    () => entregadasHoy.filter((o) => lavadorFiltro === 'todos' || o.lavadorId === lavadorFiltro),
+    () =>
+      entregadasHoy.filter(
+        (o) => lavadorFiltro === 'todos' || o.lavadorId === lavadorFiltro || o.lavadorId2 === lavadorFiltro,
+      ),
     [entregadasHoy, lavadorFiltro],
   )
 
@@ -59,10 +62,21 @@ function LiquidacionesJefeZona() {
       // Una orden entregada siempre tiene lavador asignado (no se puede cobrar/entregar sin
       // asignar primero) — el guard es solo para que TS acepte `lavadorId` opcional en el tipo.
       if (!orden.lavadorId) continue
+      // "Lavar entre 2": cada uno se lleva la mitad de la comisión, no el total cada uno —
+      // mismo criterio 50/50 que la liquidación real de Admin (src/data/liquidaciones.ts).
+      const tieneSegundo = !!orden.lavadorId2
+      const mitadPrincipal = tieneSegundo ? Math.ceil(orden.comisionLavador / 2) : orden.comisionLavador
       const actual = mapa.get(orden.lavadorId) ?? { cantidad: 0, monto: 0 }
       actual.cantidad += 1
-      actual.monto += orden.comisionLavador
+      actual.monto += mitadPrincipal
       mapa.set(orden.lavadorId, actual)
+      if (tieneSegundo && orden.lavadorId2) {
+        const mitadSegundo = orden.comisionLavador - mitadPrincipal
+        const actualSegundo = mapa.get(orden.lavadorId2) ?? { cantidad: 0, monto: 0 }
+        actualSegundo.cantidad += 1
+        actualSegundo.monto += mitadSegundo
+        mapa.set(orden.lavadorId2, actualSegundo)
+      }
     }
     return Array.from(mapa.entries())
       .map(([lavadorId, v]) => ({ lavadorId, lavadorNombre: lavadorNombre(lavadorId), ...v }))
@@ -81,6 +95,7 @@ function LiquidacionesJefeZona() {
       serviciosAdicionales: orden.serviciosAdicionales.map((s) => s.nombre),
       tipoNombre: tipoNombre(orden.tipoVehiculoId),
       lavadorNombre: lavadorNombre(orden.lavadorId),
+      lavadorNombre2: orden.lavadorId2 ? lavadorNombre(orden.lavadorId2) : undefined,
       precio: orden.precio,
       fecha: orden.entregadaEn ?? orden.creadoEn,
       metodoPago: orden.metodoPago,
@@ -167,9 +182,15 @@ function LiquidacionesJefeZona() {
                     <td className="px-5 py-3 text-neutral-700">{orden.clienteNombre}</td>
                     <td className="px-5 py-3 text-neutral-700">{tipoNombre(orden.tipoVehiculoId)}</td>
                     <td className="px-5 py-3 text-neutral-700">{comboNombre(orden.comboId)}</td>
-                    <td className="px-5 py-3 text-neutral-700">{lavadorNombre(orden.lavadorId)}</td>
+                    <td className="px-5 py-3 text-neutral-700">
+                      {lavadorNombre(orden.lavadorId)}
+                      {orden.lavadorId2 ? ` + ${lavadorNombre(orden.lavadorId2)}` : ''}
+                    </td>
                     <td className="px-5 py-3 font-medium text-neutral-900">{COP.format(orden.precio)}</td>
-                    <td className="px-5 py-3 text-success-700">{COP.format(orden.comisionLavador)}</td>
+                    <td className="px-5 py-3 text-success-700">
+                      {COP.format(orden.comisionLavador)}
+                      {orden.lavadorId2 ? <span className="ml-1 text-xs text-neutral-400">(entre 2)</span> : null}
+                    </td>
                     <td className="px-5 py-3 capitalize text-neutral-700">{orden.metodoPago ?? '—'}</td>
                     <td className="px-5 py-3">
                       <div className="flex justify-end">

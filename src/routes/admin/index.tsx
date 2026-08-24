@@ -1,10 +1,12 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { Droplets, Users, CircleParking, Wallet, TrendingUp, Receipt, HandCoins, Ban } from 'lucide-react'
+import { createFileRoute, Link } from '@tanstack/react-router'
+import { Droplets, Users, CircleParking, TrendingUp, HandCoins, Ban, ArrowRight } from 'lucide-react'
 import { fetchOrdenesHoy, fetchOrdenesEntregadasHoy } from '../../data/ordenes'
 import { fetchLavadores } from '../../data/lavadores'
 import { fetchResumenHoy } from '../../data/estanciasParqueadero'
 import { fetchGastos, fetchTotalGastosPorCategoria } from '../../data/gastos'
 import { fetchComisionesPendientes } from '../../data/liquidaciones'
+import { fetchComisionesPendientesJefeZona } from '../../data/liquidacionesJefeZona'
+import { fetchVentasHoy } from '../../data/ventas'
 import { StatCard } from '../../components/layout/StatCard'
 import { Card } from '../../components/layout/Card'
 import { BarChart } from '../../components/layout/BarChart'
@@ -15,17 +17,38 @@ function hoyISO(): string {
 
 async function loadDashboard() {
   const hoy = hoyISO()
-  const [ordenesHoy, entregadasHoy, lavadores, resumenParqueadero, gastosHoy, totalesPorCategoria, comisionesPendientes] =
-    await Promise.all([
-      fetchOrdenesHoy(),
-      fetchOrdenesEntregadasHoy(),
-      fetchLavadores(),
-      fetchResumenHoy(),
-      fetchGastos(hoy, hoy),
-      fetchTotalGastosPorCategoria(hoy, hoy),
-      fetchComisionesPendientes(),
-    ])
-  return { ordenesHoy, entregadasHoy, lavadores, resumenParqueadero, gastosHoy, totalesPorCategoria, comisionesPendientes }
+  const [
+    ordenesHoy,
+    entregadasHoy,
+    lavadores,
+    resumenParqueadero,
+    gastosHoy,
+    totalesPorCategoria,
+    comisionesPendientes,
+    comisionesPendientesJefeZona,
+    ventasHoy,
+  ] = await Promise.all([
+    fetchOrdenesHoy(),
+    fetchOrdenesEntregadasHoy(),
+    fetchLavadores(),
+    fetchResumenHoy(),
+    fetchGastos(hoy, hoy),
+    fetchTotalGastosPorCategoria(hoy, hoy),
+    fetchComisionesPendientes(),
+    fetchComisionesPendientesJefeZona(),
+    fetchVentasHoy(),
+  ])
+  return {
+    ordenesHoy,
+    entregadasHoy,
+    lavadores,
+    resumenParqueadero,
+    gastosHoy,
+    totalesPorCategoria,
+    comisionesPendientes,
+    comisionesPendientesJefeZona,
+    ventasHoy,
+  }
 }
 
 export const Route = createFileRoute('/admin/')({
@@ -36,17 +59,27 @@ export const Route = createFileRoute('/admin/')({
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 
 function AdminDashboard() {
-  const { ordenesHoy, entregadasHoy, lavadores, resumenParqueadero, gastosHoy, totalesPorCategoria, comisionesPendientes } =
-    Route.useLoaderData()
+  const {
+    ordenesHoy,
+    entregadasHoy,
+    lavadores,
+    resumenParqueadero,
+    gastosHoy,
+    totalesPorCategoria,
+    comisionesPendientes,
+    comisionesPendientesJefeZona,
+    ventasHoy,
+  } = Route.useLoaderData()
   const lavadoresActivos = lavadores.filter((l) => l.activo).length
   const anuladasHoy = ordenesHoy.filter((o) => o.estado === 'anulada')
+  const ventasActivasHoy = ventasHoy.filter((v) => v.estado === 'activa')
 
   // Solo lo cobrado hoy (estado entregado) cuenta como ingreso — un vehículo en proceso o
   // listo todavía no ha entrado dinero a caja por él, aunque ya tenga precio fijado.
   const ingresosLavadero = entregadasHoy.reduce((total, o) => total + o.precio, 0)
   const ingresosParqueadero = resumenParqueadero.dineroHoy
-  const ingresosTotales = ingresosLavadero + ingresosParqueadero
-  const cajaEsperada = ingresosTotales
+  const ingresosVentas = ventasActivasHoy.reduce((total, v) => total + v.total, 0)
+  const ingresosTotales = ingresosLavadero + ingresosParqueadero + ingresosVentas
 
   const ingresosPorMetodo = entregadasHoy.reduce(
     (acc, o) => {
@@ -56,131 +89,209 @@ function AdminDashboard() {
     { efectivo: 0, transferencia: 0 } as Record<'efectivo' | 'transferencia', number>,
   )
 
+  const ventasPorMetodo = ventasActivasHoy.reduce(
+    (acc, v) => {
+      acc[v.metodoPago] += v.total
+      return acc
+    },
+    { efectivo: 0, transferencia: 0 } as Record<'efectivo' | 'transferencia', number>,
+  )
+
   const totalGastosHoy = gastosHoy.reduce((total, g) => total + g.monto, 0)
   const comisionesHoy = entregadasHoy.reduce((total, o) => total + o.comisionLavador, 0)
-  const utilidadNetaHoy = ingresosTotales - comisionesHoy - totalGastosHoy
+  const comisionesJefeZonaHoy = entregadasHoy.reduce((total, o) => total + o.comisionJefeZona, 0)
+  const utilidadNetaHoy = ingresosTotales - comisionesHoy - comisionesJefeZonaHoy - totalGastosHoy
   const totalComisionesPendientes = comisionesPendientes.reduce((total, c) => total + c.montoPendiente, 0)
+  const totalComisionesPendientesJefeZona = comisionesPendientesJefeZona.reduce((total, c) => total + c.montoPendiente, 0)
+
+  // Una sola tabla línea × método reemplaza las dos tarjetas que había antes ("por método de
+  // pago" y "por línea de negocio"): eran el mismo total partido de dos formas, y ambas repetían
+  // la fila de parqueadero. Parqueadero no distingue método (fetchResumenHoy solo da el total),
+  // por eso va con "—" en esas columnas en vez de inventar un reparto.
+  const filasIngresos = [
+    { linea: 'Lavadero', efectivo: ingresosPorMetodo.efectivo, transferencia: ingresosPorMetodo.transferencia, total: ingresosLavadero },
+    { linea: 'Ventas de productos', efectivo: ventasPorMetodo.efectivo, transferencia: ventasPorMetodo.transferencia, total: ingresosVentas },
+    { linea: 'Parqueadero', efectivo: undefined, transferencia: undefined, total: ingresosParqueadero },
+  ]
+  const totalEfectivo = ingresosPorMetodo.efectivo + ventasPorMetodo.efectivo
+  const totalTransferencia = ingresosPorMetodo.transferencia + ventasPorMetodo.transferencia
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Lavados de hoy" value={String(ordenesHoy.filter((o) => o.estado !== 'anulada').length)} icon={Droplets} />
-        <StatCard label="Lavadores activos" value={String(lavadoresActivos)} icon={Users} />
-        <StatCard label="Ocupación parqueadero" value={String(resumenParqueadero.vehiculosAdentro)} icon={CircleParking} />
-        <StatCard label="Caja esperada" value={COP.format(cajaEsperada)} hint="Solo lo cobrado, sin arqueo (M5)" icon={Wallet} />
-      </div>
+    <div className="flex flex-col gap-8">
+      <section className="flex flex-col gap-3">
+        <h2 className="text-sm font-semibold text-neutral-900">Operación de hoy</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="Lavados de hoy"
+            value={String(ordenesHoy.filter((o) => o.estado !== 'anulada').length)}
+            icon={Droplets}
+          />
+          <StatCard label="Lavadores activos" value={String(lavadoresActivos)} icon={Users} />
+          <StatCard label="Ocupación parqueadero" value={String(resumenParqueadero.vehiculosAdentro)} icon={CircleParking} />
+          <StatCard
+            label="Anulaciones de hoy"
+            value={String(anuladasHoy.length)}
+            hint={anuladasHoy.length > 0 ? 'Ver motivo en Operación › Órdenes' : undefined}
+            icon={Ban}
+            info={{
+              title: 'Anulaciones de hoy',
+              description:
+                'Órdenes anuladas con motivo obligatorio (regla de negocio 13: nada se elimina). El detalle completo —motivo, quién anuló y cuándo— vive en Operación › Órdenes, junto con el histórico por rango de fechas.',
+            }}
+          />
+        </div>
+      </section>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card className="text-left">
-          <h2 className="mb-3 text-sm font-semibold text-neutral-900">Ingresos de hoy por método de pago</h2>
-          <dl className="flex flex-col gap-2 text-sm">
-            <div className="flex items-center justify-between">
-              <dt className="text-neutral-500">Efectivo (lavadero)</dt>
-              <dd className="font-medium text-neutral-900">{COP.format(ingresosPorMetodo.efectivo)}</dd>
+      <section className="flex flex-col gap-3">
+        <h2 className="text-sm font-semibold text-neutral-900">Dinero de hoy</h2>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <Card className="text-left">
+            <h3 className="mb-3 text-sm font-semibold text-neutral-900">Ingresos por línea y método</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-neutral-200 text-xs font-medium uppercase tracking-wide text-neutral-500">
+                    <th className="py-2 text-left">Línea</th>
+                    <th className="py-2 text-right">Efectivo</th>
+                    <th className="py-2 text-right">Transfer.</th>
+                    <th className="py-2 text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filasIngresos.map((fila) => (
+                    <tr key={fila.linea} className="border-b border-neutral-100 last:border-0">
+                      <td className="py-2 text-neutral-500">{fila.linea}</td>
+                      <td className="py-2 text-right text-neutral-700">
+                        {fila.efectivo === undefined ? <span className="text-neutral-300">—</span> : COP.format(fila.efectivo)}
+                      </td>
+                      <td className="py-2 text-right text-neutral-700">
+                        {fila.transferencia === undefined ? (
+                          <span className="text-neutral-300">—</span>
+                        ) : (
+                          COP.format(fila.transferencia)
+                        )}
+                      </td>
+                      <td className="py-2 text-right font-medium text-neutral-900">{COP.format(fila.total)}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-t-2 border-neutral-200">
+                    <td className="py-2 font-medium text-neutral-700">Total</td>
+                    <td className="py-2 text-right font-medium text-neutral-900">{COP.format(totalEfectivo)}</td>
+                    <td className="py-2 text-right font-medium text-neutral-900">{COP.format(totalTransferencia)}</td>
+                    <td className="py-2 text-right font-semibold text-neutral-900">{COP.format(ingresosTotales)}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
-            <div className="flex items-center justify-between">
-              <dt className="text-neutral-500">Transferencia (lavadero)</dt>
-              <dd className="font-medium text-neutral-900">{COP.format(ingresosPorMetodo.transferencia)}</dd>
-            </div>
-            <div className="flex items-center justify-between border-t border-neutral-100 pt-2">
-              <dt className="text-neutral-500">Parqueadero (método no distinguido)</dt>
-              <dd className="font-medium text-neutral-900">{COP.format(ingresosParqueadero)}</dd>
-            </div>
-          </dl>
-        </Card>
+            <p className="mt-3 text-xs text-neutral-400">
+              El parqueadero no registra método de pago todavía, por eso su valor solo aparece en la columna Total —
+              las columnas de efectivo y transferencia no lo incluyen.
+            </p>
+          </Card>
 
-        <Card className="text-left">
-          <h2 className="mb-3 text-sm font-semibold text-neutral-900">Ingresos de hoy por línea de negocio</h2>
-          <dl className="flex flex-col gap-2 text-sm">
-            <div className="flex items-center justify-between">
-              <dt className="text-neutral-500">Lavadero</dt>
-              <dd className="font-medium text-neutral-900">{COP.format(ingresosLavadero)}</dd>
-            </div>
-            <div className="flex items-center justify-between">
-              <dt className="text-neutral-500">Parqueadero</dt>
-              <dd className="font-medium text-neutral-900">{COP.format(ingresosParqueadero)}</dd>
-            </div>
-            <div className="flex items-center justify-between border-t border-neutral-100 pt-2">
-              <dt className="font-medium text-neutral-700">Total</dt>
-              <dd className="font-semibold text-neutral-900">{COP.format(ingresosTotales)}</dd>
-            </div>
-          </dl>
-        </Card>
-      </div>
+          <Card className="text-left">
+            <h3 className="mb-3 text-sm font-semibold text-neutral-900">Resultado del día (aprox.)</h3>
+            <dl className="flex flex-col gap-2 text-sm">
+              <div className="flex items-center justify-between">
+                <dt className="text-neutral-500">Ingresos totales</dt>
+                <dd className="font-medium text-neutral-900">{COP.format(ingresosTotales)}</dd>
+              </div>
+              <div className="flex items-center justify-between">
+                <dt className="text-neutral-500">− Comisión de lavadores</dt>
+                <dd className="font-medium text-danger-600">{COP.format(comisionesHoy)}</dd>
+              </div>
+              <div className="flex items-center justify-between">
+                <dt className="text-neutral-500">− Comisión de jefe de patio</dt>
+                <dd className="font-medium text-danger-600">{COP.format(comisionesJefeZonaHoy)}</dd>
+              </div>
+              <div className="flex items-center justify-between">
+                <dt className="text-neutral-500">− Gastos del día</dt>
+                <dd className="font-medium text-danger-600">{COP.format(totalGastosHoy)}</dd>
+              </div>
+              <div className="mt-1 flex items-center justify-between border-t-2 border-neutral-200 pt-2">
+                <dt className="flex items-center gap-1.5 font-medium text-neutral-700">
+                  <TrendingUp size={15} className="text-primary-500" />
+                  Utilidad neta
+                </dt>
+                <dd className="text-lg font-semibold text-neutral-900">{COP.format(utilidadNetaHoy)}</dd>
+              </div>
+            </dl>
+            <p className="mt-3 text-xs text-neutral-400">
+              Incluye las ventas de productos como ingreso, pero todavía no resta su costo de mercancía. Tampoco
+              descuenta el consumo de insumos de lavado ni refleja el arqueo real de caja.
+            </p>
+          </Card>
+        </div>
+      </section>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Gastos de hoy" value={COP.format(totalGastosHoy)} hint={`${gastosHoy.length} registro(s)`} icon={Receipt} />
-        <StatCard
-          label="Utilidad neta de hoy (aprox.)"
-          value={COP.format(utilidadNetaHoy)}
-          hint="No incluye consumo de inventario (M7 no implementado)"
-          icon={TrendingUp}
-        />
-        <StatCard
-          label="Comisiones de lavadores (hoy)"
-          value={COP.format(comisionesHoy)}
-          hint="Generadas hoy, aún sin liquidar"
-          icon={HandCoins}
-        />
-        <StatCard
-          label="Comisiones pendientes (total)"
-          value={COP.format(totalComisionesPendientes)}
-          hint="Acumulado sin liquidar, excluye pago diario"
-          icon={HandCoins}
-        />
-        <StatCard label="Anulaciones de hoy" value={String(anuladasHoy.length)} icon={Ban} />
-      </div>
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold text-neutral-900">Pendiente por pagar</h2>
+          <Link
+            to="/admin/dinero/liquidaciones"
+            className="flex items-center gap-1 text-xs font-medium text-primary-600 transition-colors hover:text-primary-700"
+          >
+            Ir a liquidaciones <ArrowRight size={13} />
+          </Link>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <StatCard
+            label="Comisiones de lavadores"
+            value={COP.format(totalComisionesPendientes)}
+            hint={`${COP.format(comisionesHoy)} generadas hoy`}
+            icon={HandCoins}
+            info={{
+              title: 'Comisiones de lavadores pendientes',
+              description:
+                'Acumulado total sin liquidar, sin importar de qué día venga. Cuenta el trabajo hecho aunque el lavado siga en curso o el cliente no haya pagado todavía, porque la comisión queda fija desde que se crea la orden. Solo se excluyen las órdenes anuladas.',
+            }}
+          />
+          <StatCard
+            label="Comisión de jefe de patio"
+            value={COP.format(totalComisionesPendientesJefeZona)}
+            hint={`${COP.format(comisionesJefeZonaHoy)} generadas hoy`}
+            icon={HandCoins}
+            info={{
+              title: 'Comisión de jefe de patio pendiente',
+              description:
+                'Porcentaje de cada orden para quien estaba a cargo del turno de recepción cuando se registró el vehículo. El porcentaje se ajusta en Configuración y se liquida aparte de la de los lavadores.',
+            }}
+          />
+        </div>
+      </section>
 
       {totalesPorCategoria.length > 0 ? (
-        <Card className="text-left">
-          <h2 className="mb-3 text-sm font-semibold text-neutral-900">Gastos de hoy por categoría</h2>
-          {totalesPorCategoria.length > 2 ? (
-            <BarChart
-              labels={totalesPorCategoria.map((t) => t.categoriaNombre)}
-              data={totalesPorCategoria.map((t) => t.total)}
-              valueFormatter={COP.format}
-              height={Math.max(120, totalesPorCategoria.length * 40)}
-            />
-          ) : (
-            <ul className="flex flex-col gap-2 text-sm">
-              {totalesPorCategoria.map((t) => (
-                <li key={t.categoriaId} className="flex items-center justify-between">
-                  <span className="text-neutral-500">{t.categoriaNombre}</span>
-                  <span className="font-medium text-neutral-900">{COP.format(t.total)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+        <section className="flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold text-neutral-900">Gastos de hoy por categoría</h2>
+            <Link
+              to="/admin/dinero/gastos"
+              className="flex items-center gap-1 text-xs font-medium text-primary-600 transition-colors hover:text-primary-700"
+            >
+              Ir a gastos <ArrowRight size={13} />
+            </Link>
+          </div>
+          <Card className="text-left">
+            {totalesPorCategoria.length > 2 ? (
+              <BarChart
+                labels={totalesPorCategoria.map((t) => t.categoriaNombre)}
+                data={totalesPorCategoria.map((t) => t.total)}
+                valueFormatter={COP.format}
+                height={Math.max(120, totalesPorCategoria.length * 40)}
+              />
+            ) : (
+              <ul className="flex flex-col gap-2 text-sm">
+                {totalesPorCategoria.map((t) => (
+                  <li key={t.categoriaId} className="flex items-center justify-between">
+                    <span className="text-neutral-500">{t.categoriaNombre}</span>
+                    <span className="font-medium text-neutral-900">{COP.format(t.total)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        </section>
       ) : null}
-
-      {anuladasHoy.length > 0 ? (
-        <Card className="text-left">
-          <h2 className="mb-3 text-sm font-semibold text-neutral-900">Anulaciones recientes (hoy)</h2>
-          <ul className="flex flex-col gap-3 text-sm">
-            {anuladasHoy.map((o) => (
-              <li key={o.id} className="border-b border-neutral-100 pb-2 last:border-0 last:pb-0">
-                <p className="font-medium text-neutral-900">
-                  #{o.consecutivo} · {o.placa}
-                </p>
-                <p className="text-neutral-500">
-                  Motivo: {o.motivoAnulacion ?? '—'} · Anuló: {o.anuladaPor ?? '—'}
-                  {o.anuladaEn ? ` · ${new Date(o.anuladaEn).toLocaleString('es-CO')}` : ''}
-                </p>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      ) : null}
-
-      <Card className="text-left">
-        <h2 className="mb-1 text-sm font-semibold text-neutral-900">Panel financiero (M11, primera iteración)</h2>
-        <p className="text-sm text-neutral-500">
-          Cifras aproximadas del día — sin arqueo de caja (M5) ni consumo de inventario (M7). Para histórico
-          por rango, anulaciones con motivo y detalle de cada orden, ve a{' '}
-          <span className="font-medium text-neutral-700">Órdenes</span> en el menú.
-        </p>
-      </Card>
     </div>
   )
 }

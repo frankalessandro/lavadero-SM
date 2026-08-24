@@ -24,6 +24,29 @@ export interface ComisionPendiente {
   cantidadOrdenes: number
 }
 
+// "Lavar entre 2" (a criterio de recepción/jefe de zona): reparte la comisión total de la orden
+// 50/50 entre lavadorId (principal) y lavadorId2. El principal se lleva el redondeo hacia arriba
+// cuando el monto es impar, para que las dos mitades siempre sumen exactamente comisionLavador
+// (nunca se pierde ni se inventa plata al repartir).
+function splitComision(comisionLavador: number, tieneSegundo: boolean): [number, number] {
+  if (!tieneSegundo) return [comisionLavador, 0]
+  const mitadPrincipal = Math.ceil(comisionLavador / 2)
+  return [mitadPrincipal, comisionLavador - mitadPrincipal]
+}
+
+// Cuánto de `orden.comisionLavador` (el TOTAL de la orden) le corresponde a este lavador
+// específico — la mitad si lavó entre 2, el total si fue el único. Se usa en cualquier lugar que
+// necesite el monto REAL de un lavador (liquidar, mostrar pendientes), nunca comisionLavador
+// directo cuando puede haber un segundo lavador de por medio.
+function comisionParaLavador(
+  orden: { comisionLavador: number; lavadorId?: string; lavadorId2?: string },
+  lavadorId: string,
+): number {
+  if (!orden.lavadorId2) return orden.comisionLavador
+  const [mitadPrincipal, mitadSegundo] = splitComision(orden.comisionLavador, true)
+  return orden.lavadorId === lavadorId ? mitadPrincipal : mitadSegundo
+}
+
 // Regla de negocio 4: liquidación sobre el acumulado, sin descuentos al lavador. Admin elige
 // diaria o semanal por lavador en cada generación (ver generarLiquidacion) — no hace falta una
 // excepción parametrizada de antemano por lavador, cualquiera puede liquidarse en el periodo que
@@ -36,20 +59,38 @@ export async function fetchComisionesPendientes(): Promise<ComisionPendiente[]> 
   // Cuenta en_proceso + listo + entregado (todo menos anuladas) — confirmado explícitamente con
   // el negocio: se le paga al lavador por el trabajo del día sin importar si el cliente ya pagó
   // o si el lavado sigue en curso, porque la comisión ya quedó fija desde que se creó la orden
-  // (regla 1), no depende de en qué estado esté.
+  // (regla 1), no depende de en qué estado esté. No se filtra por liquidacion_id/liquidacion_id_2
+  // en la query (a diferencia de antes) porque ahora son independientes entre sí — una orden con
+  // segundo lavador puede estar liquidada para uno y pendiente para el otro, se decide en JS
+  // abajo, por columna, cuál de los dos lavadores sigue pendiente.
   const { data, error } = await db
     .from('ordenes')
-    .select('lavador_id, comision_lavador')
-    .is('liquidacion_id', null)
+    .select('lavador_id, lavador_id_2, comision_lavador, liquidacion_id, liquidacion_id_2')
     .neq('estado', 'anulada')
   if (error) throw new Error(error.message)
 
   const acumulado = new Map<string, { monto: number; cantidad: number }>()
-  for (const fila of data as { lavador_id: string; comision_lavador: number }[]) {
-    const actual = acumulado.get(fila.lavador_id) ?? { monto: 0, cantidad: 0 }
-    actual.monto += fila.comision_lavador
+  function sumar(lavadorId: string, monto: number) {
+    const actual = acumulado.get(lavadorId) ?? { monto: 0, cantidad: 0 }
+    actual.monto += monto
     actual.cantidad += 1
-    acumulado.set(fila.lavador_id, actual)
+    acumulado.set(lavadorId, actual)
+  }
+  for (const fila of data as {
+    lavador_id: string | null
+    lavador_id_2: string | null
+    comision_lavador: number
+    liquidacion_id: string | null
+    liquidacion_id_2: string | null
+  }[]) {
+    const tieneSegundo = !!fila.lavador_id_2
+    const [mitadPrincipal, mitadSegundo] = splitComision(fila.comision_lavador, tieneSegundo)
+    if (fila.lavador_id && fila.liquidacion_id == null) {
+      sumar(fila.lavador_id, tieneSegundo ? mitadPrincipal : fila.comision_lavador)
+    }
+    if (fila.lavador_id_2 && fila.liquidacion_id_2 == null) {
+      sumar(fila.lavador_id_2, mitadSegundo)
+    }
   }
 
   return elegibles.map((lavador) => {
@@ -68,6 +109,9 @@ export async function fetchComisionesPendientes(): Promise<ComisionPendiente[]> 
 // al momento de crearla, extraído aparte para poder mostrar un monto preciso ANTES de generar
 // (admin ahora puede elegir diaria o semanal por lavador, así que el monto ya no es siempre
 // "todo lo pendiente" — depende del rango elegido).
+// Órdenes donde este lavador participó (principal o segundo) y todavía tiene esa mitad sin
+// liquidar — cada columna (liquidacionId/liquidacionId2) es independiente, así que una orden con
+// dos lavadores puede seguir "elegible" para uno aunque ya se haya liquidado para el otro.
 async function ordenesElegibles(lavadorId: string, periodoInicio: string, periodoFin: string) {
   // periodoFin es una fecha (YYYY-MM-DD) inclusiva para el usuario; fetchOrdenesEnRango usa
   // límite superior exclusivo, así que se extiende un día para incluir todo el día de cierre.
@@ -76,7 +120,12 @@ async function ordenesElegibles(lavadorId: string, periodoInicio: string, period
 
   return (
     await fetchOrdenesEnRango(new Date(`${periodoInicio}T00:00:00.000Z`).toISOString(), hastaExclusivoISO.toISOString())
-  ).filter((orden) => orden.lavadorId === lavadorId && orden.liquidacionId === undefined && orden.estado !== 'anulada')
+  ).filter((orden) => {
+    if (orden.estado === 'anulada') return false
+    if (orden.lavadorId === lavadorId && orden.liquidacionId === undefined) return true
+    if (orden.lavadorId2 === lavadorId && orden.liquidacionId2 === undefined) return true
+    return false
+  })
 }
 
 export interface DesgloseComboItem {
@@ -161,10 +210,16 @@ export async function fetchMontoPeriodo(
   combos: Pick<Combo, 'id' | 'nombre'>[],
 ): Promise<MontoPeriodo> {
   const ordenes = await ordenesElegibles(lavadorId, periodoInicio, periodoFin)
+  // El desglose y el monto deben ser la MITAD para este lavador cuando la orden se lavó entre 2,
+  // no el total de la orden — de ahí el map antes de pasarlo a desglosarPorCategoria.
+  const ordenesConSuMonto = ordenes.map((orden) => ({
+    ...orden,
+    comisionLavador: comisionParaLavador(orden, lavadorId),
+  }))
   return {
-    monto: ordenes.reduce((suma, orden) => suma + orden.comisionLavador, 0),
+    monto: ordenesConSuMonto.reduce((suma, orden) => suma + orden.comisionLavador, 0),
     cantidadOrdenes: ordenes.length,
-    desglose: desglosarPorCategoria(ordenes, tiposVehiculo, combos),
+    desglose: desglosarPorCategoria(ordenesConSuMonto, tiposVehiculo, combos),
   }
 }
 
@@ -177,14 +232,31 @@ export async function fetchDesgloseLiquidacion(
   tiposVehiculo: Pick<TipoVehiculo, 'id' | 'categoria'>[],
   combos: Pick<Combo, 'id' | 'nombre'>[],
 ): Promise<DesgloseVehiculos> {
+  // Una liquidación puede haber marcado la orden por cualquiera de las dos columnas (principal o
+  // segundo lavador, ver generarLiquidacion) — de ahí el `.or`. Cuál de las dos columnas coincide
+  // con este liquidacionId es justamente lo que dice si le toca la mitad de principal o de
+  // segundo (no hace falta volver a consultar quién es el lavador).
   const { data, error } = await db
     .from('ordenes')
-    .select('tipoVehiculoId:tipo_vehiculo_id, comboId:combo_id, comisionLavador:comision_lavador')
-    .eq('liquidacion_id', liquidacionId)
+    .select(
+      'tipoVehiculoId:tipo_vehiculo_id, comboId:combo_id, comisionLavador:comision_lavador, lavadorId2:lavador_id_2, liquidacionId:liquidacion_id',
+    )
+    .or(`liquidacion_id.eq.${liquidacionId},liquidacion_id_2.eq.${liquidacionId}`)
   if (error) throw new Error(error.message)
-  const filas = data as { tipoVehiculoId: string; comboId: string | null; comisionLavador: number }[]
+  const filas = data as {
+    tipoVehiculoId: string
+    comboId: string | null
+    comisionLavador: number
+    lavadorId2: string | null
+    liquidacionId: string | null
+  }[]
   return desglosarPorCategoria(
-    filas.map((f) => ({ tipoVehiculoId: f.tipoVehiculoId, comboId: f.comboId ?? undefined, comisionLavador: f.comisionLavador })),
+    filas.map((f) => {
+      const tieneSegundo = !!f.lavadorId2
+      const [mitadPrincipal, mitadSegundo] = splitComision(f.comisionLavador, tieneSegundo)
+      const comisionLavador = !tieneSegundo ? f.comisionLavador : f.liquidacionId === liquidacionId ? mitadPrincipal : mitadSegundo
+      return { tipoVehiculoId: f.tipoVehiculoId, comboId: f.comboId ?? undefined, comisionLavador }
+    }),
     tiposVehiculo,
     combos,
   )
@@ -201,7 +273,7 @@ export async function generarLiquidacion(
 ): Promise<Liquidacion> {
   const ordenes = await ordenesElegibles(lavadorId, periodoInicio, periodoFin)
 
-  const monto = ordenes.reduce((suma, orden) => suma + orden.comisionLavador, 0)
+  const monto = ordenes.reduce((suma, orden) => suma + comisionParaLavador(orden, lavadorId), 0)
 
   const { data: creada, error: errorInsert } = await db
     .from('liquidaciones')
@@ -218,13 +290,20 @@ export async function generarLiquidacion(
   const liquidacion = liquidacionSchema.parse(creada)
 
   if (ordenes.length > 0) {
-    const { error: errorUpdate } = await db
-      .from('ordenes')
-      .update({ liquidacion_id: liquidacion.id })
-      .in(
-        'id',
-        ordenes.map((orden) => orden.id),
-      )
+    // Cada orden se marca por la columna que corresponde a ESTE lavador — principal
+    // (liquidacion_id) o segundo (liquidacion_id_2) — para no tocar la liquidación pendiente del
+    // otro lavador cuando la orden se lavó entre 2.
+    const idsPrincipal = ordenes.filter((orden) => orden.lavadorId === lavadorId).map((orden) => orden.id)
+    const idsSegundo = ordenes.filter((orden) => orden.lavadorId2 === lavadorId).map((orden) => orden.id)
+    const resultados = await Promise.all([
+      idsPrincipal.length > 0
+        ? db.from('ordenes').update({ liquidacion_id: liquidacion.id }).in('id', idsPrincipal)
+        : Promise.resolve({ error: null }),
+      idsSegundo.length > 0
+        ? db.from('ordenes').update({ liquidacion_id_2: liquidacion.id }).in('id', idsSegundo)
+        : Promise.resolve({ error: null }),
+    ])
+    const errorUpdate = resultados.find((r) => r.error)?.error
     if (errorUpdate) {
       throw new Error(
         `La liquidación ${liquidacion.id} se creó por $${monto} pero no se pudo marcar ${ordenes.length} orden(es) como liquidadas: ${errorUpdate.message}. Revisar manualmente.`,

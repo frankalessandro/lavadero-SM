@@ -11,6 +11,7 @@ import { fetchPreciosServicioCombo } from '../../data/preciosServicioCombo'
 import { fetchPreciosServicioIndividual, findPrecioServicioIndividual } from '../../data/preciosServicioIndividual'
 import { fetchPreciosComboFijo } from '../../data/preciosComboFijo'
 import { fetchLavadores, suggestNextLavador } from '../../data/lavadores'
+import { fetchDiasDescanso, ensureDiasDescansoGenerados } from '../../data/asistenciaLavadores'
 import { fetchOrdenesHoy, buscarPorPlaca, createOrden, fetchOrdenEnProcesoPorPlaca } from '../../data/ordenes'
 import { fetchTurnoAbierto } from '../../data/turnos'
 import { fetchConfiguracion } from '../../data/configuracion'
@@ -19,6 +20,7 @@ import type { TipoVehiculo, CategoriaVehiculo } from '../../schemas/tipoVehiculo
 import type { Combo } from '../../schemas/combo'
 import type { Servicio } from '../../schemas/servicio'
 import type { Lavador } from '../../schemas/lavador'
+import type { DiaDescanso } from '../../schemas/asistencia'
 import type { PrecioServicio } from '../../schemas/precioServicio'
 import type { PrecioCombo } from '../../schemas/precioCombo'
 import type { Configuracion } from '../../schemas/configuracion'
@@ -27,7 +29,16 @@ import { AccordionSection } from '../../components/layout/Accordion'
 import { CustomSelect } from '../../components/layout/CustomSelect'
 import { ReciboModal, type ReciboData } from '../../components/layout/ReciboModal'
 
+function hoyISO(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
 async function loadRecepcion() {
+  // Genera (si hace falta) la fila de dias_descanso de hoy antes de leerla — si nadie visitó
+  // /jefe-zona/asistencia todavía hoy, esa tabla puede no tener fila para la fecha actual y
+  // ningún lavador quedaría marcado como "descansa hoy" en este selector (bug: Javier seguía
+  // apareciendo asignable estando de descanso). Idempotente (upsert con ignoreDuplicates).
+  await ensureDiasDescansoGenerados(hoyISO())
   const [
     tipos,
     combos,
@@ -40,6 +51,7 @@ async function loadRecepcion() {
     ordenesHoy,
     turno,
     configuracion,
+    descansosHoy,
   ] = await Promise.all([
     fetchTiposVehiculo(),
     fetchCombos(),
@@ -52,6 +64,7 @@ async function loadRecepcion() {
     fetchOrdenesHoy(),
     fetchTurnoAbierto('jefe_zona'),
     fetchConfiguracion(),
+    fetchDiasDescanso(hoyISO(), hoyISO()),
   ])
   return {
     tipos,
@@ -65,6 +78,7 @@ async function loadRecepcion() {
     ordenesHoy,
     turno,
     configuracion,
+    descansosHoy,
   }
 }
 
@@ -132,6 +146,8 @@ function RecepcionPage() {
           preciosComboFijo={preciosComboFijo}
           comboServicios={comboServicios}
           lavadores={lavadores}
+          ordenesHoy={ordenesHoy}
+          descansosHoy={data.descansosHoy}
           configuracion={data.configuracion}
           onCreated={refresh}
         />
@@ -170,6 +186,7 @@ function RecepcionPage() {
                 </div>
                 <p className="mt-0.5 truncate text-xs text-neutral-500">
                   {tipoNombre(orden.tipoVehiculoId)} · {comboNombre(orden.comboId)} · {lavadorNombre(orden.lavadorId)}
+                  {orden.lavadorId2 ? ` + ${lavadorNombre(orden.lavadorId2)}` : ''}
                 </p>
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1.5">
@@ -201,6 +218,7 @@ const emptyForm = {
   tipoVehiculoId: '',
   comboId: '',
   lavadorId: '',
+  lavadorId2: '',
   observaciones: '',
   altoCilindraje: false,
 }
@@ -214,6 +232,8 @@ function ReceptionForm({
   preciosComboFijo,
   comboServicios,
   lavadores,
+  ordenesHoy,
+  descansosHoy,
   configuracion,
   onCreated,
 }: {
@@ -225,6 +245,8 @@ function ReceptionForm({
   preciosComboFijo: PrecioCombo[]
   comboServicios: ComboServicio[]
   lavadores: Lavador[]
+  ordenesHoy: Orden[]
+  descansosHoy: DiaDescanso[]
   configuracion: Configuracion
   onCreated: () => void
 }) {
@@ -243,12 +265,61 @@ function ReceptionForm({
   // avisa antes de registrar otra vez el mismo vehículo por error. No bloquea el envío, solo
   // advierte — puede haber casos legítimos raros de re-ingreso.
   const [motoDuplicada, setMotoDuplicada] = useState<Orden | undefined>(undefined)
+  // "Lavar entre 2" — a criterio de quien recibe, caso a caso. Checkbox separado del selector del
+  // segundo lavador para que desmarcar limpie de una vez form.lavadorId2 (evita mandar un
+  // lavadorId2 residual si el usuario desmarca sin borrar la selección).
+  const [lavarEntreDos, setLavarEntreDos] = useState(false)
 
   useEffect(() => {
     suggestNextLavador().then((id) => {
       if (id) setForm((prev) => (prev.lavadorId ? prev : { ...prev, lavadorId: id }))
     })
   }, [])
+
+  // Si cambia el lavador principal y queda igual al segundo ya elegido, se limpia el segundo —
+  // regla de negocio: los dos lavadores de una orden deben ser distintos.
+  useEffect(() => {
+    if (form.lavadorId2 && form.lavadorId2 === form.lavadorId) {
+      update('lavadorId2', '')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.lavadorId])
+
+  // Mismo criterio de "ocupado" que /jefe-zona (regla de negocio 9): tiene una orden en_proceso
+  // a su cargo ahora mismo. No se oculta al lavador ocupado ni se bloquea seleccionarlo — algunos
+  // lavan dos vehículos a la vez — solo se marca para que quien recibe decida con esa información.
+  // El que descansa hoy (M9) sí se oculta del todo: no tiene sentido asignarle nada ese día.
+  const descansaHoyId = descansosHoy[0]?.lavadorId
+  const ocupadosIds = useMemo(
+    () =>
+      new Set(
+        ordenesHoy
+          .filter((o) => o.estado === 'en_proceso')
+          .flatMap((o) => [o.lavadorId, o.lavadorId2])
+          .filter((id): id is string => !!id),
+      ),
+    [ordenesHoy],
+  )
+  // "Sin asignar" siempre disponible como opción explícita del select, no solo como placeholder —
+  // por si las moscas (el lavador sugerido cambia de planes, resulta que sí está ocupado aunque
+  // no lo marque el sistema, etc.) se puede dejar sin asignar aunque NO estén todos ocupados, sin
+  // tener que borrar a mano lo que ya eligió `suggestNextLavador`.
+  const lavadorOptions = useMemo(() => {
+    const disponibles = lavadores.filter((l) => l.activo && l.id !== descansaHoyId)
+    return [
+      { value: '', label: 'Sin asignar', description: 'Se asigna después desde el tablero de seguimiento' },
+      ...[...disponibles]
+        .sort((a, b) => Number(ocupadosIds.has(a.id)) - Number(ocupadosIds.has(b.id)))
+        .map((l) => ({
+          value: l.id,
+          label: l.nombre,
+          description: ocupadosIds.has(l.id) ? 'Ocupado ahora mismo — igual se puede asignar' : undefined,
+        })),
+    ]
+  }, [lavadores, ocupadosIds, descansaHoyId])
+  // lavadorOptions[0] es siempre "Sin asignar" (value ''), no cuenta como lavador real acá.
+  const lavadoresReales = lavadorOptions.filter((o) => o.value !== '')
+  const todosOcupados = lavadoresReales.length > 0 && lavadoresReales.every((o) => ocupadosIds.has(o.value))
 
   const tipoSeleccionado = tipos.find((t) => t.id === form.tipoVehiculoId)
 
@@ -393,6 +464,7 @@ function ReceptionForm({
       ...form,
       comboId: form.comboId || undefined,
       lavadorId: form.lavadorId || undefined,
+      lavadorId2: lavarEntreDos ? form.lavadorId2 || undefined : undefined,
       clienteTelefono: form.clienteTelefono || undefined,
       clienteCorreo: form.clienteCorreo || undefined,
       observaciones: form.observaciones || undefined,
@@ -414,6 +486,7 @@ function ReceptionForm({
         serviciosAdicionales: orden.serviciosAdicionales.map((s) => s.nombre),
         tipoNombre: tipos.find((t) => t.id === orden.tipoVehiculoId)?.nombre ?? '—',
         lavadorNombre: orden.lavadorId ? lavadores.find((l) => l.id === orden.lavadorId)?.nombre ?? '—' : 'Sin asignar',
+        lavadorNombre2: orden.lavadorId2 ? lavadores.find((l) => l.id === orden.lavadorId2)?.nombre ?? '—' : undefined,
         precio: orden.precio,
         fecha: orden.creadoEn,
       })
@@ -421,6 +494,7 @@ function ReceptionForm({
       setForm({ ...emptyForm, lavadorId: siguienteLavador ?? '' })
       setServiciosAdicionales([])
       setMotoDuplicada(undefined)
+      setLavarEntreDos(false)
       setOpenStep(1)
       onCreated()
     } catch (err) {
@@ -446,11 +520,14 @@ function ReceptionForm({
             autoFocus
             value={form.placa}
             onChange={(e) => {
-              update('placa', e.target.value.toUpperCase())
+              // Placa colombiana: solo letras y números, máximo 6 caracteres (3+3 carro, 3+2+1
+              // moto) — se filtra al teclear, el formato exacto se valida al enviar (placaSchema).
+              update('placa', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))
               setMotoDuplicada(undefined)
             }}
             onBlur={handlePlacaBlur}
-            placeholder="AB123CD"
+            maxLength={6}
+            placeholder="MAQ068"
             className="rounded-lg border border-neutral-300 px-3 py-3 font-mono text-base uppercase outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
           />
         </label>
@@ -633,13 +710,44 @@ function ReceptionForm({
             value={form.lavadorId}
             onChange={(value) => update('lavadorId', value)}
             placeholder="Sin asignar — se asigna después"
-            options={lavadores.filter((l) => l.activo).map((l) => ({ value: l.id, label: l.nombre }))}
+            options={lavadorOptions}
           />
           <span className="text-xs text-neutral-400">
-            Sugerido por la cola de rotación — si todos están ocupados, déjalo sin asignar y hazlo
-            después desde el tablero de seguimiento.
+            {todosOcupados
+              ? 'Todos los lavadores están ocupados ahora mismo — se recomienda dejarlo sin asignar y hacerlo después desde el tablero de seguimiento, aunque igual puedes elegir uno si va a lavar dos a la vez.'
+              : 'Sugerido por la cola de rotación, pero se puede dejar "Sin asignar" aunque no todos estén ocupados — por si las moscas (el lavador cambia de plan, el sistema no se dio cuenta de que ya está ocupado, etc.) — y hacerlo después desde el tablero de seguimiento.'}
           </span>
         </label>
+
+        {form.lavadorId ? (
+          <label className="flex items-center gap-2.5 rounded-lg border border-neutral-200 px-3 py-3 text-sm">
+            <input
+              type="checkbox"
+              checked={lavarEntreDos}
+              onChange={(e) => {
+                setLavarEntreDos(e.target.checked)
+                if (!e.target.checked) update('lavadorId2', '')
+              }}
+              className="size-4 rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
+            />
+            <span className="text-neutral-700">Lavar entre 2 — la comisión se reparte entre los dos lavadores</span>
+          </label>
+        ) : null}
+
+        {lavarEntreDos && form.lavadorId ? (
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="flex items-center gap-1.5 font-medium text-neutral-700">
+              <Car size={14} className="text-primary-500" /> Segundo lavador
+            </span>
+            <CustomSelect
+              value={form.lavadorId2}
+              onChange={(value) => update('lavadorId2', value)}
+              placeholder="Selecciona…"
+              options={lavadorOptions.filter((o) => o.value !== form.lavadorId)}
+              emptyLabel="No hay otro lavador disponible"
+            />
+          </label>
+        ) : null}
 
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="font-medium text-neutral-700">Observaciones</span>

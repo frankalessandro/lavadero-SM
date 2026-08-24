@@ -39,7 +39,7 @@ import {
   marcarNotificado,
 } from '../../data/ordenes'
 import { fetchLavadores } from '../../data/lavadores'
-import { fetchAsistenciasDelDia, fetchDiasDescanso } from '../../data/asistenciaLavadores'
+import { fetchAsistenciasDelDia, fetchDiasDescanso, ensureDiasDescansoGenerados } from '../../data/asistenciaLavadores'
 import { fetchCombos } from '../../data/combos'
 import { fetchTiposVehiculo } from '../../data/tiposVehiculo'
 import { fetchTurnoAbierto } from '../../data/turnos'
@@ -60,6 +60,9 @@ function hoyISO(): string {
 
 async function loadDashboard() {
   const hoy = hoyISO()
+  // Mismo self-heal que /recepcion: sin esto, si nadie visitó /jefe-zona/asistencia hoy, la
+  // fila de dias_descanso de hoy no existe y nadie aparece marcado como "descansa hoy" acá.
+  await ensureDiasDescansoGenerados(hoy)
   const [ordenesHoy, entregadasHoy, lavadores, combos, tiposVehiculo, turno, asistenciasHoy, descansosHoy] =
     await Promise.all([
       fetchOrdenesHoy(),
@@ -216,6 +219,7 @@ function JefeZonaDashboard() {
 
   const enProcesoLista = ordenesHoy.filter((o) => o.estado === 'en_proceso')
   const listoLista = ordenesHoy.filter((o) => o.estado === 'listo')
+  const anuladasHoyLista = ordenesHoy.filter((o) => o.estado === 'anulada')
   const lavadoresActivos = lavadores.filter((l) => l.activo).length
 
   // Buscador por placa + filtro por lavador (seguimiento y entregados hoy) — ambos se combinan.
@@ -225,7 +229,8 @@ function JefeZonaDashboard() {
   const placaBuscada = busquedaPlaca.trim().toUpperCase()
   const coincidePlaca = (orden: Orden) => !placaBuscada || orden.placa.toUpperCase().includes(placaBuscada)
   const coincideLavador = (orden: Orden) =>
-    lavadorFiltro === 'todos' || (lavadorFiltro === 'sin_asignar' ? !orden.lavadorId : orden.lavadorId === lavadorFiltro)
+    lavadorFiltro === 'todos' ||
+    (lavadorFiltro === 'sin_asignar' ? !orden.lavadorId : orden.lavadorId === lavadorFiltro || orden.lavadorId2 === lavadorFiltro)
   const enProcesoFiltrada = enProcesoLista.filter(coincidePlaca).filter(coincideLavador)
   const listoFiltrada = listoLista.filter(coincidePlaca).filter(coincideLavador)
   const entregadasFiltradas = entregadasHoy.filter(coincidePlaca).filter(coincideLavador)
@@ -251,7 +256,9 @@ function JefeZonaDashboard() {
     })
   const presentesHoyIds = new Set(asistenciasHoy.map((a) => a.lavadorId))
   const descansaHoyId = descansosHoy[0]?.lavadorId
-  const ocupadosIds = new Set(enProcesoLista.map((o) => o.lavadorId).filter((id): id is string => !!id))
+  const ocupadosIds = new Set(
+    enProcesoLista.flatMap((o) => [o.lavadorId, o.lavadorId2]).filter((id): id is string => !!id),
+  )
   // Mismo criterio de elegibilidad que suggestNextLavador (M9 + regla de negocio 9): activo,
   // presente hoy, sin descanso asignado hoy, y no ocupado ahora mismo (con una orden en_proceso
   // a su cargo). No se ocultan los demás de la lista — se marcan, para que quede claro por qué se
@@ -288,11 +295,13 @@ function JefeZonaDashboard() {
         }
         // Una orden entregada siempre tiene lavador asignado (no se puede cobrar/entregar sin
         // asignar primero) — el guard es solo para que TS acepte `lavadorId` opcional en el tipo.
-        if (orden.lavadorId) {
-          const lavador = porLavador.get(orden.lavadorId) ?? { total: 0, cantidad: 0 }
+        // Si se lavó entre 2, el mismo tiempo cuenta para ambos (regla de negocio 16: mide
+        // vehículos atendidos, no reparte el tiempo — los dos lo atendieron completo).
+        for (const lavadorId of [orden.lavadorId, orden.lavadorId2].filter((id): id is string => !!id)) {
+          const lavador = porLavador.get(lavadorId) ?? { total: 0, cantidad: 0 }
           lavador.total += minutos
           lavador.cantidad += 1
-          porLavador.set(orden.lavadorId, lavador)
+          porLavador.set(lavadorId, lavador)
         }
       }
       if (orden.tiempoEsperaEntregaSegundos != null) {
@@ -323,6 +332,7 @@ function JefeZonaDashboard() {
       serviciosAdicionales: orden.serviciosAdicionales.map((s) => s.nombre),
       tipoNombre: tipoVehiculo(orden.tipoVehiculoId)?.nombre ?? '—',
       lavadorNombre: lavadorNombre(orden.lavadorId),
+      lavadorNombre2: orden.lavadorId2 ? lavadorNombre(orden.lavadorId2) : undefined,
       precio: orden.precio,
       fecha: new Date().toISOString(),
       metodoPago,
@@ -345,6 +355,7 @@ function JefeZonaDashboard() {
       serviciosAdicionales: orden.serviciosAdicionales.map((s) => s.nombre),
       tipoNombre: tipoVehiculo(orden.tipoVehiculoId)?.nombre ?? '—',
       lavadorNombre: lavadorNombre(orden.lavadorId),
+      lavadorNombre2: orden.lavadorId2 ? lavadorNombre(orden.lavadorId2) : undefined,
       precio: orden.precio,
       fecha: orden.estado === 'entregado' ? (orden.entregadaEn ?? orden.creadoEn) : orden.creadoEn,
       metodoPago: orden.metodoPago,
@@ -369,11 +380,42 @@ function JefeZonaDashboard() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Lavados de hoy" value={String(ordenesHoy.length)} icon={Droplets} />
+        <StatCard
+          label="Lavados de hoy"
+          value={String(ordenesHoy.filter((o) => o.estado !== 'anulada').length)}
+          hint={anuladasHoyLista.length > 0 ? `${anuladasHoyLista.length} anulada${anuladasHoyLista.length === 1 ? '' : 's'} — no cuenta aquí` : undefined}
+          icon={Droplets}
+        />
         <StatCard label="En proceso / listos" value={String(enProcesoLista.length + listoLista.length)} icon={ClipboardList} />
         <StatCard label="Lavadores activos" value={String(lavadoresActivos)} icon={Users} />
-        <StatCard label="Caja del día" value={COP.format(cajaDelDia)} hint="Solo lo cobrado — sin arqueo (M5)" icon={Wallet} />
+        <StatCard
+          label="Caja del día"
+          value={COP.format(cajaDelDia)}
+          hint="Solo lo cobrado — sin arqueo (M5)"
+          icon={Wallet}
+          info={{
+            title: 'Qué es "Caja del día"',
+            description:
+              'Suma el precio de todas las órdenes de lavado entregadas HOY (cobradas), sin importar el método de pago (efectivo o transferencia) — un vehículo registrado hoy pero que todavía no se entrega/cobra no cuenta acá.\n\nNo es el arqueo del turno: no resta gastos ni distingue efectivo de transferencia (eso solo importa para el conteo físico de caja, que se hace en /jefe-zona/caja al cerrar turno). Tampoco incluye parqueadero, que se cobra y se arquea aparte con el vigilante.',
+          }}
+        />
       </div>
+
+      {anuladasHoyLista.length > 0 ? (
+        <Card className="flex flex-col gap-2 border border-danger-100 bg-danger-50/40 text-left">
+          <h3 className="text-sm font-semibold text-danger-700">
+            {anuladasHoyLista.length} orden{anuladasHoyLista.length === 1 ? '' : 'es'} anulada{anuladasHoyLista.length === 1 ? '' : 's'} hoy
+          </h3>
+          <ul className="flex flex-col gap-1.5 text-xs text-neutral-600">
+            {anuladasHoyLista.map((o) => (
+              <li key={o.id}>
+                <span className="font-mono font-semibold text-neutral-800">{o.placa}</span> · #{o.consecutivo} — Motivo:{' '}
+                {o.motivoAnulacion ?? '—'} · Anuló: {o.anuladaPor ?? '—'}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Uso de escritorio: caja a la vista, sin salir del dashboard */}
@@ -582,6 +624,7 @@ function JefeZonaDashboard() {
                   orden={orden}
                   comboNombre={comboNombre(orden.comboId)}
                   lavadorNombre={lavadorNombre(orden.lavadorId)}
+                  lavadorNombre2={orden.lavadorId2 ? lavadorNombre(orden.lavadorId2) : undefined}
                   tipoVehiculoNombre={tipoVehiculo(orden.tipoVehiculoId)?.nombre ?? '—'}
                   esMoto={tipoVehiculo(orden.tipoVehiculoId)?.categoria === 'moto'}
                   tiempoTexto={tiempoTranscurrido(orden.creadoEn, ahora)}
@@ -614,6 +657,7 @@ function JefeZonaDashboard() {
                   orden={orden}
                   comboNombre={comboNombre(orden.comboId)}
                   lavadorNombre={lavadorNombre(orden.lavadorId)}
+                  lavadorNombre2={orden.lavadorId2 ? lavadorNombre(orden.lavadorId2) : undefined}
                   tipoVehiculoNombre={tipoVehiculo(orden.tipoVehiculoId)?.nombre ?? '—'}
                   esMoto={tipoVehiculo(orden.tipoVehiculoId)?.categoria === 'moto'}
                   tiempoTexto={tiempoTranscurrido(orden.listaEn ?? orden.creadoEn, ahora)}
@@ -691,6 +735,7 @@ function JefeZonaDashboard() {
           orden={viendoDetalle}
           comboNombre={comboNombre(viendoDetalle.comboId)}
           lavadorNombre={lavadorNombre(viendoDetalle.lavadorId)}
+          lavadorNombre2={viendoDetalle.lavadorId2 ? lavadorNombre(viendoDetalle.lavadorId2) : undefined}
           tipoVehiculoNombre={tipoVehiculo(viendoDetalle.tipoVehiculoId)?.nombre ?? '—'}
           onClose={() => setViendoDetalle(null)}
           onVerTiquete={() => {
@@ -749,6 +794,7 @@ function OrdenCard({
   orden,
   comboNombre,
   lavadorNombre,
+  lavadorNombre2,
   tipoVehiculoNombre,
   esMoto,
   tiempoTexto,
@@ -766,6 +812,8 @@ function OrdenCard({
   orden: Orden
   comboNombre: string
   lavadorNombre: string
+  /** Segundo lavador — solo cuando la orden se lava entre 2. */
+  lavadorNombre2?: string
   tipoVehiculoNombre: string
   esMoto: boolean
   tiempoTexto: string
@@ -828,6 +876,7 @@ function OrdenCard({
             </span>
             <span className="flex items-center gap-1">
               <Users size={13} className="text-primary-500" /> {lavadorNombre}
+              {lavadorNombre2 ? ` + ${lavadorNombre2}` : ''}
             </span>
             <span className="flex items-center gap-1 font-medium text-neutral-600">
               <Clock size={13} /> {tiempoTexto}
@@ -1010,7 +1059,10 @@ function EntregadosHoyTable({
               <td className="px-5 py-3 text-neutral-700">{orden.clienteNombre}</td>
               <td className="px-5 py-3 text-neutral-700">{tipoNombre(orden.tipoVehiculoId)}</td>
               <td className="px-5 py-3 text-neutral-700">{comboNombre(orden.comboId)}</td>
-              <td className="px-5 py-3 text-neutral-700">{lavadorNombre(orden.lavadorId)}</td>
+              <td className="px-5 py-3 text-neutral-700">
+                {lavadorNombre(orden.lavadorId)}
+                {orden.lavadorId2 ? ` + ${lavadorNombre(orden.lavadorId2)}` : ''}
+              </td>
               <td className="px-5 py-3 font-medium text-neutral-900">{COP.format(orden.precio)}</td>
               <td className="px-5 py-3 capitalize text-neutral-700">{orden.metodoPago ?? '—'}</td>
               <td className="px-5 py-3">
@@ -1053,6 +1105,7 @@ function DetalleOrdenModal({
   orden,
   comboNombre,
   lavadorNombre,
+  lavadorNombre2,
   tipoVehiculoNombre,
   onClose,
   onVerTiquete,
@@ -1060,6 +1113,7 @@ function DetalleOrdenModal({
   orden: Orden
   comboNombre: string
   lavadorNombre: string
+  lavadorNombre2?: string
   tipoVehiculoNombre: string
   onClose: () => void
   onVerTiquete: () => void
@@ -1108,7 +1162,7 @@ function DetalleOrdenModal({
               {orden.serviciosAdicionales.length > 0 ? (
                 <DetalleFila label="Adicionales" valor={orden.serviciosAdicionales.map((s) => s.nombre).join(', ')} />
               ) : null}
-              <DetalleFila label="Lavador" valor={lavadorNombre} />
+              <DetalleFila label={lavadorNombre2 ? 'Lavadores' : 'Lavador'} valor={lavadorNombre2 ? `${lavadorNombre} + ${lavadorNombre2}` : lavadorNombre} />
               <DetalleFila label="Precio" valor={COP.format(orden.precio)} />
             </div>
           </div>
@@ -1158,6 +1212,11 @@ function DetalleFila({ label, valor }: { label: string; valor: string }) {
 
 const SIN_ASIGNAR = '__sin_asignar__'
 
+const SIN_SEGUNDO = '__sin_segundo__'
+
+// Maneja el lavador principal y, si aplica, el segundo ("lavar entre 2") en un solo modal —
+// mismo lugar donde ya se asignaba/reasignaba el principal. Permite agregar un segundo lavador a
+// una orden que no lo tenía, cambiarlo, o quitarlo (dejarla con uno solo otra vez).
 function ReasignarModal({
   orden,
   lavadores,
@@ -1175,17 +1234,22 @@ function ReasignarModal({
   // "todavía no elegí nada" — eso último sigue dejando el submit deshabilitado.
   const esAsignacion = !orden.lavadorId
   const [lavadorId, setLavadorId] = useState(orden.lavadorId ?? '')
+  const [lavadorId2, setLavadorId2] = useState(orden.lavadorId2 ?? SIN_SEGUNDO)
   const [saving, setSaving] = useState(false)
 
   async function handleConfirmar() {
-    const nuevoValor = lavadorId === SIN_ASIGNAR ? null : lavadorId
-    if (!lavadorId || nuevoValor === (orden.lavadorId ?? null)) {
+    const nuevoPrincipal = lavadorId === SIN_ASIGNAR ? null : lavadorId
+    const nuevoSegundo = lavadorId2 === SIN_SEGUNDO ? null : lavadorId2
+    const cambioPrincipal = lavadorId && nuevoPrincipal !== (orden.lavadorId ?? null)
+    const cambioSegundo = nuevoSegundo !== (orden.lavadorId2 ?? null)
+    if (!lavadorId || (!cambioPrincipal && !cambioSegundo)) {
       onClose()
       return
     }
     setSaving(true)
     try {
-      await reasignarLavador(orden.id, nuevoValor)
+      if (cambioPrincipal) await reasignarLavador(orden.id, nuevoPrincipal, 1)
+      if (cambioSegundo) await reasignarLavador(orden.id, nuevoSegundo, 2)
       await onReasignado()
     } finally {
       setSaving(false)
@@ -1210,32 +1274,43 @@ function ReasignarModal({
         <p className="mb-4 text-xs text-neutral-500">
           {orden.placa} · #{orden.consecutivo}
         </p>
-        <label className="flex flex-col gap-1.5 text-sm">
-          <span className="font-medium text-neutral-700">Lavador</span>
-          <CustomSelect
-            size="sm"
-            value={lavadorId}
-            onChange={setLavadorId}
-            placeholder="Selecciona…"
-            options={[
-              ...(esAsignacion ? [] : [{ value: SIN_ASIGNAR, label: 'Sin asignar' }]),
-              ...lavadores.map((l) => ({ value: l.id, label: l.nombre })),
-            ]}
-          />
-        </label>
+        <div className="flex flex-col gap-3">
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="font-medium text-neutral-700">Lavador</span>
+            <CustomSelect
+              size="sm"
+              value={lavadorId}
+              onChange={setLavadorId}
+              placeholder="Selecciona…"
+              options={[
+                ...(esAsignacion ? [] : [{ value: SIN_ASIGNAR, label: 'Sin asignar' }]),
+                ...lavadores.map((l) => ({ value: l.id, label: l.nombre })),
+              ]}
+            />
+          </label>
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="font-medium text-neutral-700">
+              Segundo lavador <span className="font-normal text-neutral-400">(lavar entre 2, opcional)</span>
+            </span>
+            <CustomSelect
+              size="sm"
+              value={lavadorId2}
+              onChange={setLavadorId2}
+              placeholder="Ninguno…"
+              options={[
+                { value: SIN_SEGUNDO, label: 'Ninguno' },
+                ...lavadores.filter((l) => l.id !== lavadorId).map((l) => ({ value: l.id, label: l.nombre })),
+              ]}
+            />
+          </label>
+        </div>
         <button
           type="button"
           onClick={handleConfirmar}
           disabled={saving || !lavadorId}
           className="mt-5 w-full rounded-lg bg-primary-600 py-2.5 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
         >
-          {saving
-            ? 'Guardando…'
-            : lavadorId === SIN_ASIGNAR
-              ? 'Quitar asignación'
-              : esAsignacion
-                ? 'Confirmar asignación'
-                : 'Confirmar reasignación'}
+          {saving ? 'Guardando…' : esAsignacion ? 'Confirmar asignación' : 'Guardar cambios'}
         </button>
       </div>
     </div>
@@ -1303,7 +1378,10 @@ function EditarClienteModal({
             <span className="font-medium text-neutral-700">Placa</span>
             <input
               value={placa}
-              onChange={(event) => setPlaca(event.target.value.toUpperCase())}
+              onChange={(event) =>
+                setPlaca(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))
+              }
+              maxLength={6}
               className="rounded-lg border border-neutral-300 px-3 py-2.5 font-mono text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
             />
           </label>

@@ -37,7 +37,7 @@ function LoginPage() {
         await db.auth.signOut()
         throw new Error(
           !perfil || !perfil.rol
-            ? 'Tu cuenta todavía no tiene un rol asignado. Pídele al administrador que te lo asigne en /admin/usuarios.'
+            ? 'Tu cuenta todavía no tiene un rol asignado. Pídele al administrador que te lo asigne en Personal › Usuarios del sistema.'
             : 'Tu cuenta está inactiva. Contacta al administrador.',
         )
       }

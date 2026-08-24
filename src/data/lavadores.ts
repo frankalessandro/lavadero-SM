@@ -74,7 +74,7 @@ export async function suggestNextLavador(): Promise<string | undefined> {
   const [asistenciasHoy, descansosHoy, { data: ocupados, error: errorOcupados }, { data, error }] = await Promise.all([
     fetchAsistenciasDelDia(hoy),
     fetchDiasDescanso(hoy, hoy),
-    db.from('ordenes').select('lavador_id').eq('estado', 'en_proceso'),
+    db.from('ordenes').select('lavador_id, lavador_id_2').eq('estado', 'en_proceso'),
     db.from('lavadores').select('id, ultimaAsignacion:ultima_asignacion').eq('activo', true),
   ])
   if (errorOcupados) throw new Error(errorOcupados.message)
@@ -83,7 +83,11 @@ export async function suggestNextLavador(): Promise<string | undefined> {
   const presentesIds = new Set(asistenciasHoy.map((a) => a.lavadorId))
   const horaEntradaPorId = new Map(asistenciasHoy.map((a) => [a.lavadorId, a.horaEntrada]))
   const descansaHoyId = descansosHoy[0]?.lavadorId
-  const ocupadosIds = new Set((ocupados as { lavador_id: string }[]).map((o) => o.lavador_id))
+  const ocupadosIds = new Set(
+    (ocupados as { lavador_id: string | null; lavador_id_2: string | null }[]).flatMap((o) =>
+      [o.lavador_id, o.lavador_id_2].filter((id): id is string => !!id),
+    ),
+  )
 
   const elegibles = (data as { id: string; ultimaAsignacion: string | null }[]).filter(
     (l) => presentesIds.has(l.id) && l.id !== descansaHoyId && !ocupadosIds.has(l.id),

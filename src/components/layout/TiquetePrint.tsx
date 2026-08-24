@@ -46,7 +46,10 @@ export function TiquetePrint({ recibo, variant }: { recibo: ReciboData; variant:
       {recibo.serviciosAdicionales && recibo.serviciosAdicionales.length > 0 ? (
         <TiqueteFila label="Adicionales" valor={recibo.serviciosAdicionales.join(', ')} />
       ) : null}
-      <TiqueteFila label="Lavador" valor={recibo.lavadorNombre} />
+      <TiqueteFila
+        label={recibo.lavadorNombre2 ? 'Lavadores' : 'Lavador'}
+        valor={recibo.lavadorNombre2 ? `${recibo.lavadorNombre} + ${recibo.lavadorNombre2}` : recibo.lavadorNombre}
+      />
       {esPago && recibo.metodoPago ? (
         <TiqueteFila label="Pago" valor={recibo.metodoPago === 'efectivo' ? 'Efectivo' : 'Transferencia'} />
       ) : null}

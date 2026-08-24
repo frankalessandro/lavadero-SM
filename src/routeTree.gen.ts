@@ -15,29 +15,37 @@ import { Route as JefeZonaRouteRouteImport } from './routes/jefe-zona/route'
 import { Route as RecepcionRouteRouteImport } from './routes/recepcion/route'
 import { Route as VigilanteRouteRouteImport } from './routes/vigilante/route'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
+import { Route as AdminCatalogoRouteRouteImport } from './routes/admin/catalogo/route'
+import { Route as AdminDineroRouteRouteImport } from './routes/admin/dinero/route'
+import { Route as AdminOperacionRouteRouteImport } from './routes/admin/operacion/route'
+import { Route as AdminPersonalRouteRouteImport } from './routes/admin/personal/route'
 import { Route as JefeZonaIndexRouteImport } from './routes/jefe-zona/index'
 import { Route as LoginIndexRouteImport } from './routes/login/index'
 import { Route as RecepcionIndexRouteImport } from './routes/recepcion/index'
 import { Route as ServicesIndexRouteImport } from './routes/services/index'
 import { Route as ServicesServiceIdRouteImport } from './routes/services/$serviceId'
 import { Route as VigilanteIndexRouteImport } from './routes/vigilante/index'
-import { Route as AdminClientesIndexRouteImport } from './routes/admin/clientes/index'
-import { Route as AdminCombosIndexRouteImport } from './routes/admin/combos/index'
+import { Route as AdminCatalogoIndexRouteImport } from './routes/admin/catalogo/index'
 import { Route as AdminConfiguracionIndexRouteImport } from './routes/admin/configuracion/index'
-import { Route as AdminGastosIndexRouteImport } from './routes/admin/gastos/index'
-import { Route as AdminInventarioIndexRouteImport } from './routes/admin/inventario/index'
-import { Route as AdminLavadoresIndexRouteImport } from './routes/admin/lavadores/index'
-import { Route as AdminLiquidacionesIndexRouteImport } from './routes/admin/liquidaciones/index'
-import { Route as AdminOrdenesIndexRouteImport } from './routes/admin/ordenes/index'
-import { Route as AdminParqueaderoIndexRouteImport } from './routes/admin/parqueadero/index'
-import { Route as AdminServiciosIndexRouteImport } from './routes/admin/servicios/index'
-import { Route as AdminTiposVehiculoIndexRouteImport } from './routes/admin/tipos-vehiculo/index'
-import { Route as AdminTurnosIndexRouteImport } from './routes/admin/turnos/index'
-import { Route as AdminUsuariosIndexRouteImport } from './routes/admin/usuarios/index'
+import { Route as AdminDineroIndexRouteImport } from './routes/admin/dinero/index'
+import { Route as AdminOperacionIndexRouteImport } from './routes/admin/operacion/index'
+import { Route as AdminPersonalIndexRouteImport } from './routes/admin/personal/index'
 import { Route as JefeZonaAsistenciaIndexRouteImport } from './routes/jefe-zona/asistencia/index'
 import { Route as JefeZonaCajaIndexRouteImport } from './routes/jefe-zona/caja/index'
 import { Route as JefeZonaInventarioIndexRouteImport } from './routes/jefe-zona/inventario/index'
 import { Route as JefeZonaLiquidacionesIndexRouteImport } from './routes/jefe-zona/liquidaciones/index'
+import { Route as AdminCatalogoCombosIndexRouteImport } from './routes/admin/catalogo/combos/index'
+import { Route as AdminCatalogoParqueaderoIndexRouteImport } from './routes/admin/catalogo/parqueadero/index'
+import { Route as AdminCatalogoServiciosIndexRouteImport } from './routes/admin/catalogo/servicios/index'
+import { Route as AdminCatalogoTiposVehiculoIndexRouteImport } from './routes/admin/catalogo/tipos-vehiculo/index'
+import { Route as AdminDineroGastosIndexRouteImport } from './routes/admin/dinero/gastos/index'
+import { Route as AdminDineroInventarioIndexRouteImport } from './routes/admin/dinero/inventario/index'
+import { Route as AdminDineroLiquidacionesIndexRouteImport } from './routes/admin/dinero/liquidaciones/index'
+import { Route as AdminOperacionClientesIndexRouteImport } from './routes/admin/operacion/clientes/index'
+import { Route as AdminOperacionOrdenesIndexRouteImport } from './routes/admin/operacion/ordenes/index'
+import { Route as AdminOperacionTurnosIndexRouteImport } from './routes/admin/operacion/turnos/index'
+import { Route as AdminPersonalLavadoresIndexRouteImport } from './routes/admin/personal/lavadores/index'
+import { Route as AdminPersonalUsuariosIndexRouteImport } from './routes/admin/personal/usuarios/index'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -67,6 +75,26 @@ const VigilanteRouteRoute = VigilanteRouteRouteImport.update({
 const AdminIndexRoute = AdminIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminCatalogoRouteRoute = AdminCatalogoRouteRouteImport.update({
+  id: '/catalogo',
+  path: '/catalogo',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminDineroRouteRoute = AdminDineroRouteRouteImport.update({
+  id: '/dinero',
+  path: '/dinero',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminOperacionRouteRoute = AdminOperacionRouteRouteImport.update({
+  id: '/operacion',
+  path: '/operacion',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminPersonalRouteRoute = AdminPersonalRouteRouteImport.update({
+  id: '/personal',
+  path: '/personal',
   getParentRoute: () => AdminRouteRoute,
 } as any)
 const JefeZonaIndexRoute = JefeZonaIndexRouteImport.update({
@@ -99,70 +127,30 @@ const VigilanteIndexRoute = VigilanteIndexRouteImport.update({
   path: '/',
   getParentRoute: () => VigilanteRouteRoute,
 } as any)
-const AdminClientesIndexRoute = AdminClientesIndexRouteImport.update({
-  id: '/clientes/',
-  path: '/clientes/',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminCombosIndexRoute = AdminCombosIndexRouteImport.update({
-  id: '/combos/',
-  path: '/combos/',
-  getParentRoute: () => AdminRouteRoute,
+const AdminCatalogoIndexRoute = AdminCatalogoIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminCatalogoRouteRoute,
 } as any)
 const AdminConfiguracionIndexRoute = AdminConfiguracionIndexRouteImport.update({
   id: '/configuracion/',
   path: '/configuracion/',
   getParentRoute: () => AdminRouteRoute,
 } as any)
-const AdminGastosIndexRoute = AdminGastosIndexRouteImport.update({
-  id: '/gastos/',
-  path: '/gastos/',
-  getParentRoute: () => AdminRouteRoute,
+const AdminDineroIndexRoute = AdminDineroIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminDineroRouteRoute,
 } as any)
-const AdminInventarioIndexRoute = AdminInventarioIndexRouteImport.update({
-  id: '/inventario/',
-  path: '/inventario/',
-  getParentRoute: () => AdminRouteRoute,
+const AdminOperacionIndexRoute = AdminOperacionIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminOperacionRouteRoute,
 } as any)
-const AdminLavadoresIndexRoute = AdminLavadoresIndexRouteImport.update({
-  id: '/lavadores/',
-  path: '/lavadores/',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminLiquidacionesIndexRoute = AdminLiquidacionesIndexRouteImport.update({
-  id: '/liquidaciones/',
-  path: '/liquidaciones/',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminOrdenesIndexRoute = AdminOrdenesIndexRouteImport.update({
-  id: '/ordenes/',
-  path: '/ordenes/',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminParqueaderoIndexRoute = AdminParqueaderoIndexRouteImport.update({
-  id: '/parqueadero/',
-  path: '/parqueadero/',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminServiciosIndexRoute = AdminServiciosIndexRouteImport.update({
-  id: '/servicios/',
-  path: '/servicios/',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminTiposVehiculoIndexRoute = AdminTiposVehiculoIndexRouteImport.update({
-  id: '/tipos-vehiculo/',
-  path: '/tipos-vehiculo/',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminTurnosIndexRoute = AdminTurnosIndexRouteImport.update({
-  id: '/turnos/',
-  path: '/turnos/',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminUsuariosIndexRoute = AdminUsuariosIndexRouteImport.update({
-  id: '/usuarios/',
-  path: '/usuarios/',
-  getParentRoute: () => AdminRouteRoute,
+const AdminPersonalIndexRoute = AdminPersonalIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminPersonalRouteRoute,
 } as any)
 const JefeZonaAsistenciaIndexRoute = JefeZonaAsistenciaIndexRouteImport.update({
   id: '/asistencia/',
@@ -185,6 +173,77 @@ const JefeZonaLiquidacionesIndexRoute =
     path: '/liquidaciones/',
     getParentRoute: () => JefeZonaRouteRoute,
   } as any)
+const AdminCatalogoCombosIndexRoute =
+  AdminCatalogoCombosIndexRouteImport.update({
+    id: '/combos/',
+    path: '/combos/',
+    getParentRoute: () => AdminCatalogoRouteRoute,
+  } as any)
+const AdminCatalogoParqueaderoIndexRoute =
+  AdminCatalogoParqueaderoIndexRouteImport.update({
+    id: '/parqueadero/',
+    path: '/parqueadero/',
+    getParentRoute: () => AdminCatalogoRouteRoute,
+  } as any)
+const AdminCatalogoServiciosIndexRoute =
+  AdminCatalogoServiciosIndexRouteImport.update({
+    id: '/servicios/',
+    path: '/servicios/',
+    getParentRoute: () => AdminCatalogoRouteRoute,
+  } as any)
+const AdminCatalogoTiposVehiculoIndexRoute =
+  AdminCatalogoTiposVehiculoIndexRouteImport.update({
+    id: '/tipos-vehiculo/',
+    path: '/tipos-vehiculo/',
+    getParentRoute: () => AdminCatalogoRouteRoute,
+  } as any)
+const AdminDineroGastosIndexRoute = AdminDineroGastosIndexRouteImport.update({
+  id: '/gastos/',
+  path: '/gastos/',
+  getParentRoute: () => AdminDineroRouteRoute,
+} as any)
+const AdminDineroInventarioIndexRoute =
+  AdminDineroInventarioIndexRouteImport.update({
+    id: '/inventario/',
+    path: '/inventario/',
+    getParentRoute: () => AdminDineroRouteRoute,
+  } as any)
+const AdminDineroLiquidacionesIndexRoute =
+  AdminDineroLiquidacionesIndexRouteImport.update({
+    id: '/liquidaciones/',
+    path: '/liquidaciones/',
+    getParentRoute: () => AdminDineroRouteRoute,
+  } as any)
+const AdminOperacionClientesIndexRoute =
+  AdminOperacionClientesIndexRouteImport.update({
+    id: '/clientes/',
+    path: '/clientes/',
+    getParentRoute: () => AdminOperacionRouteRoute,
+  } as any)
+const AdminOperacionOrdenesIndexRoute =
+  AdminOperacionOrdenesIndexRouteImport.update({
+    id: '/ordenes/',
+    path: '/ordenes/',
+    getParentRoute: () => AdminOperacionRouteRoute,
+  } as any)
+const AdminOperacionTurnosIndexRoute =
+  AdminOperacionTurnosIndexRouteImport.update({
+    id: '/turnos/',
+    path: '/turnos/',
+    getParentRoute: () => AdminOperacionRouteRoute,
+  } as any)
+const AdminPersonalLavadoresIndexRoute =
+  AdminPersonalLavadoresIndexRouteImport.update({
+    id: '/lavadores/',
+    path: '/lavadores/',
+    getParentRoute: () => AdminPersonalRouteRoute,
+  } as any)
+const AdminPersonalUsuariosIndexRoute =
+  AdminPersonalUsuariosIndexRouteImport.update({
+    id: '/usuarios/',
+    path: '/usuarios/',
+    getParentRoute: () => AdminPersonalRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -192,6 +251,10 @@ export interface FileRoutesByFullPath {
   '/jefe-zona': typeof JefeZonaRouteRouteWithChildren
   '/recepcion': typeof RecepcionRouteRouteWithChildren
   '/vigilante': typeof VigilanteRouteRouteWithChildren
+  '/admin/catalogo': typeof AdminCatalogoRouteRouteWithChildren
+  '/admin/dinero': typeof AdminDineroRouteRouteWithChildren
+  '/admin/operacion': typeof AdminOperacionRouteRouteWithChildren
+  '/admin/personal': typeof AdminPersonalRouteRouteWithChildren
   '/services/$serviceId': typeof ServicesServiceIdRoute
   '/admin/': typeof AdminIndexRoute
   '/jefe-zona/': typeof JefeZonaIndexRoute
@@ -199,23 +262,27 @@ export interface FileRoutesByFullPath {
   '/recepcion/': typeof RecepcionIndexRoute
   '/services/': typeof ServicesIndexRoute
   '/vigilante/': typeof VigilanteIndexRoute
-  '/admin/clientes/': typeof AdminClientesIndexRoute
-  '/admin/combos/': typeof AdminCombosIndexRoute
+  '/admin/catalogo/': typeof AdminCatalogoIndexRoute
   '/admin/configuracion/': typeof AdminConfiguracionIndexRoute
-  '/admin/gastos/': typeof AdminGastosIndexRoute
-  '/admin/inventario/': typeof AdminInventarioIndexRoute
-  '/admin/lavadores/': typeof AdminLavadoresIndexRoute
-  '/admin/liquidaciones/': typeof AdminLiquidacionesIndexRoute
-  '/admin/ordenes/': typeof AdminOrdenesIndexRoute
-  '/admin/parqueadero/': typeof AdminParqueaderoIndexRoute
-  '/admin/servicios/': typeof AdminServiciosIndexRoute
-  '/admin/tipos-vehiculo/': typeof AdminTiposVehiculoIndexRoute
-  '/admin/turnos/': typeof AdminTurnosIndexRoute
-  '/admin/usuarios/': typeof AdminUsuariosIndexRoute
+  '/admin/dinero/': typeof AdminDineroIndexRoute
+  '/admin/operacion/': typeof AdminOperacionIndexRoute
+  '/admin/personal/': typeof AdminPersonalIndexRoute
   '/jefe-zona/asistencia/': typeof JefeZonaAsistenciaIndexRoute
   '/jefe-zona/caja/': typeof JefeZonaCajaIndexRoute
   '/jefe-zona/inventario/': typeof JefeZonaInventarioIndexRoute
   '/jefe-zona/liquidaciones/': typeof JefeZonaLiquidacionesIndexRoute
+  '/admin/catalogo/combos/': typeof AdminCatalogoCombosIndexRoute
+  '/admin/catalogo/parqueadero/': typeof AdminCatalogoParqueaderoIndexRoute
+  '/admin/catalogo/servicios/': typeof AdminCatalogoServiciosIndexRoute
+  '/admin/catalogo/tipos-vehiculo/': typeof AdminCatalogoTiposVehiculoIndexRoute
+  '/admin/dinero/gastos/': typeof AdminDineroGastosIndexRoute
+  '/admin/dinero/inventario/': typeof AdminDineroInventarioIndexRoute
+  '/admin/dinero/liquidaciones/': typeof AdminDineroLiquidacionesIndexRoute
+  '/admin/operacion/clientes/': typeof AdminOperacionClientesIndexRoute
+  '/admin/operacion/ordenes/': typeof AdminOperacionOrdenesIndexRoute
+  '/admin/operacion/turnos/': typeof AdminOperacionTurnosIndexRoute
+  '/admin/personal/lavadores/': typeof AdminPersonalLavadoresIndexRoute
+  '/admin/personal/usuarios/': typeof AdminPersonalUsuariosIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -226,23 +293,27 @@ export interface FileRoutesByTo {
   '/recepcion': typeof RecepcionIndexRoute
   '/services': typeof ServicesIndexRoute
   '/vigilante': typeof VigilanteIndexRoute
-  '/admin/clientes': typeof AdminClientesIndexRoute
-  '/admin/combos': typeof AdminCombosIndexRoute
+  '/admin/catalogo': typeof AdminCatalogoIndexRoute
   '/admin/configuracion': typeof AdminConfiguracionIndexRoute
-  '/admin/gastos': typeof AdminGastosIndexRoute
-  '/admin/inventario': typeof AdminInventarioIndexRoute
-  '/admin/lavadores': typeof AdminLavadoresIndexRoute
-  '/admin/liquidaciones': typeof AdminLiquidacionesIndexRoute
-  '/admin/ordenes': typeof AdminOrdenesIndexRoute
-  '/admin/parqueadero': typeof AdminParqueaderoIndexRoute
-  '/admin/servicios': typeof AdminServiciosIndexRoute
-  '/admin/tipos-vehiculo': typeof AdminTiposVehiculoIndexRoute
-  '/admin/turnos': typeof AdminTurnosIndexRoute
-  '/admin/usuarios': typeof AdminUsuariosIndexRoute
+  '/admin/dinero': typeof AdminDineroIndexRoute
+  '/admin/operacion': typeof AdminOperacionIndexRoute
+  '/admin/personal': typeof AdminPersonalIndexRoute
   '/jefe-zona/asistencia': typeof JefeZonaAsistenciaIndexRoute
   '/jefe-zona/caja': typeof JefeZonaCajaIndexRoute
   '/jefe-zona/inventario': typeof JefeZonaInventarioIndexRoute
   '/jefe-zona/liquidaciones': typeof JefeZonaLiquidacionesIndexRoute
+  '/admin/catalogo/combos': typeof AdminCatalogoCombosIndexRoute
+  '/admin/catalogo/parqueadero': typeof AdminCatalogoParqueaderoIndexRoute
+  '/admin/catalogo/servicios': typeof AdminCatalogoServiciosIndexRoute
+  '/admin/catalogo/tipos-vehiculo': typeof AdminCatalogoTiposVehiculoIndexRoute
+  '/admin/dinero/gastos': typeof AdminDineroGastosIndexRoute
+  '/admin/dinero/inventario': typeof AdminDineroInventarioIndexRoute
+  '/admin/dinero/liquidaciones': typeof AdminDineroLiquidacionesIndexRoute
+  '/admin/operacion/clientes': typeof AdminOperacionClientesIndexRoute
+  '/admin/operacion/ordenes': typeof AdminOperacionOrdenesIndexRoute
+  '/admin/operacion/turnos': typeof AdminOperacionTurnosIndexRoute
+  '/admin/personal/lavadores': typeof AdminPersonalLavadoresIndexRoute
+  '/admin/personal/usuarios': typeof AdminPersonalUsuariosIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -251,6 +322,10 @@ export interface FileRoutesById {
   '/jefe-zona': typeof JefeZonaRouteRouteWithChildren
   '/recepcion': typeof RecepcionRouteRouteWithChildren
   '/vigilante': typeof VigilanteRouteRouteWithChildren
+  '/admin/catalogo': typeof AdminCatalogoRouteRouteWithChildren
+  '/admin/dinero': typeof AdminDineroRouteRouteWithChildren
+  '/admin/operacion': typeof AdminOperacionRouteRouteWithChildren
+  '/admin/personal': typeof AdminPersonalRouteRouteWithChildren
   '/services/$serviceId': typeof ServicesServiceIdRoute
   '/admin/': typeof AdminIndexRoute
   '/jefe-zona/': typeof JefeZonaIndexRoute
@@ -258,23 +333,27 @@ export interface FileRoutesById {
   '/recepcion/': typeof RecepcionIndexRoute
   '/services/': typeof ServicesIndexRoute
   '/vigilante/': typeof VigilanteIndexRoute
-  '/admin/clientes/': typeof AdminClientesIndexRoute
-  '/admin/combos/': typeof AdminCombosIndexRoute
+  '/admin/catalogo/': typeof AdminCatalogoIndexRoute
   '/admin/configuracion/': typeof AdminConfiguracionIndexRoute
-  '/admin/gastos/': typeof AdminGastosIndexRoute
-  '/admin/inventario/': typeof AdminInventarioIndexRoute
-  '/admin/lavadores/': typeof AdminLavadoresIndexRoute
-  '/admin/liquidaciones/': typeof AdminLiquidacionesIndexRoute
-  '/admin/ordenes/': typeof AdminOrdenesIndexRoute
-  '/admin/parqueadero/': typeof AdminParqueaderoIndexRoute
-  '/admin/servicios/': typeof AdminServiciosIndexRoute
-  '/admin/tipos-vehiculo/': typeof AdminTiposVehiculoIndexRoute
-  '/admin/turnos/': typeof AdminTurnosIndexRoute
-  '/admin/usuarios/': typeof AdminUsuariosIndexRoute
+  '/admin/dinero/': typeof AdminDineroIndexRoute
+  '/admin/operacion/': typeof AdminOperacionIndexRoute
+  '/admin/personal/': typeof AdminPersonalIndexRoute
   '/jefe-zona/asistencia/': typeof JefeZonaAsistenciaIndexRoute
   '/jefe-zona/caja/': typeof JefeZonaCajaIndexRoute
   '/jefe-zona/inventario/': typeof JefeZonaInventarioIndexRoute
   '/jefe-zona/liquidaciones/': typeof JefeZonaLiquidacionesIndexRoute
+  '/admin/catalogo/combos/': typeof AdminCatalogoCombosIndexRoute
+  '/admin/catalogo/parqueadero/': typeof AdminCatalogoParqueaderoIndexRoute
+  '/admin/catalogo/servicios/': typeof AdminCatalogoServiciosIndexRoute
+  '/admin/catalogo/tipos-vehiculo/': typeof AdminCatalogoTiposVehiculoIndexRoute
+  '/admin/dinero/gastos/': typeof AdminDineroGastosIndexRoute
+  '/admin/dinero/inventario/': typeof AdminDineroInventarioIndexRoute
+  '/admin/dinero/liquidaciones/': typeof AdminDineroLiquidacionesIndexRoute
+  '/admin/operacion/clientes/': typeof AdminOperacionClientesIndexRoute
+  '/admin/operacion/ordenes/': typeof AdminOperacionOrdenesIndexRoute
+  '/admin/operacion/turnos/': typeof AdminOperacionTurnosIndexRoute
+  '/admin/personal/lavadores/': typeof AdminPersonalLavadoresIndexRoute
+  '/admin/personal/usuarios/': typeof AdminPersonalUsuariosIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -284,6 +363,10 @@ export interface FileRouteTypes {
     | '/jefe-zona'
     | '/recepcion'
     | '/vigilante'
+    | '/admin/catalogo'
+    | '/admin/dinero'
+    | '/admin/operacion'
+    | '/admin/personal'
     | '/services/$serviceId'
     | '/admin/'
     | '/jefe-zona/'
@@ -291,23 +374,27 @@ export interface FileRouteTypes {
     | '/recepcion/'
     | '/services/'
     | '/vigilante/'
-    | '/admin/clientes/'
-    | '/admin/combos/'
+    | '/admin/catalogo/'
     | '/admin/configuracion/'
-    | '/admin/gastos/'
-    | '/admin/inventario/'
-    | '/admin/lavadores/'
-    | '/admin/liquidaciones/'
-    | '/admin/ordenes/'
-    | '/admin/parqueadero/'
-    | '/admin/servicios/'
-    | '/admin/tipos-vehiculo/'
-    | '/admin/turnos/'
-    | '/admin/usuarios/'
+    | '/admin/dinero/'
+    | '/admin/operacion/'
+    | '/admin/personal/'
     | '/jefe-zona/asistencia/'
     | '/jefe-zona/caja/'
     | '/jefe-zona/inventario/'
     | '/jefe-zona/liquidaciones/'
+    | '/admin/catalogo/combos/'
+    | '/admin/catalogo/parqueadero/'
+    | '/admin/catalogo/servicios/'
+    | '/admin/catalogo/tipos-vehiculo/'
+    | '/admin/dinero/gastos/'
+    | '/admin/dinero/inventario/'
+    | '/admin/dinero/liquidaciones/'
+    | '/admin/operacion/clientes/'
+    | '/admin/operacion/ordenes/'
+    | '/admin/operacion/turnos/'
+    | '/admin/personal/lavadores/'
+    | '/admin/personal/usuarios/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -318,23 +405,27 @@ export interface FileRouteTypes {
     | '/recepcion'
     | '/services'
     | '/vigilante'
-    | '/admin/clientes'
-    | '/admin/combos'
+    | '/admin/catalogo'
     | '/admin/configuracion'
-    | '/admin/gastos'
-    | '/admin/inventario'
-    | '/admin/lavadores'
-    | '/admin/liquidaciones'
-    | '/admin/ordenes'
-    | '/admin/parqueadero'
-    | '/admin/servicios'
-    | '/admin/tipos-vehiculo'
-    | '/admin/turnos'
-    | '/admin/usuarios'
+    | '/admin/dinero'
+    | '/admin/operacion'
+    | '/admin/personal'
     | '/jefe-zona/asistencia'
     | '/jefe-zona/caja'
     | '/jefe-zona/inventario'
     | '/jefe-zona/liquidaciones'
+    | '/admin/catalogo/combos'
+    | '/admin/catalogo/parqueadero'
+    | '/admin/catalogo/servicios'
+    | '/admin/catalogo/tipos-vehiculo'
+    | '/admin/dinero/gastos'
+    | '/admin/dinero/inventario'
+    | '/admin/dinero/liquidaciones'
+    | '/admin/operacion/clientes'
+    | '/admin/operacion/ordenes'
+    | '/admin/operacion/turnos'
+    | '/admin/personal/lavadores'
+    | '/admin/personal/usuarios'
   id:
     | '__root__'
     | '/'
@@ -342,6 +433,10 @@ export interface FileRouteTypes {
     | '/jefe-zona'
     | '/recepcion'
     | '/vigilante'
+    | '/admin/catalogo'
+    | '/admin/dinero'
+    | '/admin/operacion'
+    | '/admin/personal'
     | '/services/$serviceId'
     | '/admin/'
     | '/jefe-zona/'
@@ -349,23 +444,27 @@ export interface FileRouteTypes {
     | '/recepcion/'
     | '/services/'
     | '/vigilante/'
-    | '/admin/clientes/'
-    | '/admin/combos/'
+    | '/admin/catalogo/'
     | '/admin/configuracion/'
-    | '/admin/gastos/'
-    | '/admin/inventario/'
-    | '/admin/lavadores/'
-    | '/admin/liquidaciones/'
-    | '/admin/ordenes/'
-    | '/admin/parqueadero/'
-    | '/admin/servicios/'
-    | '/admin/tipos-vehiculo/'
-    | '/admin/turnos/'
-    | '/admin/usuarios/'
+    | '/admin/dinero/'
+    | '/admin/operacion/'
+    | '/admin/personal/'
     | '/jefe-zona/asistencia/'
     | '/jefe-zona/caja/'
     | '/jefe-zona/inventario/'
     | '/jefe-zona/liquidaciones/'
+    | '/admin/catalogo/combos/'
+    | '/admin/catalogo/parqueadero/'
+    | '/admin/catalogo/servicios/'
+    | '/admin/catalogo/tipos-vehiculo/'
+    | '/admin/dinero/gastos/'
+    | '/admin/dinero/inventario/'
+    | '/admin/dinero/liquidaciones/'
+    | '/admin/operacion/clientes/'
+    | '/admin/operacion/ordenes/'
+    | '/admin/operacion/turnos/'
+    | '/admin/personal/lavadores/'
+    | '/admin/personal/usuarios/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -423,6 +522,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminIndexRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/admin/catalogo': {
+      id: '/admin/catalogo'
+      path: '/catalogo'
+      fullPath: '/admin/catalogo'
+      preLoaderRoute: typeof AdminCatalogoRouteRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/dinero': {
+      id: '/admin/dinero'
+      path: '/dinero'
+      fullPath: '/admin/dinero'
+      preLoaderRoute: typeof AdminDineroRouteRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/operacion': {
+      id: '/admin/operacion'
+      path: '/operacion'
+      fullPath: '/admin/operacion'
+      preLoaderRoute: typeof AdminOperacionRouteRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/personal': {
+      id: '/admin/personal'
+      path: '/personal'
+      fullPath: '/admin/personal'
+      preLoaderRoute: typeof AdminPersonalRouteRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/jefe-zona/': {
       id: '/jefe-zona/'
       path: '/'
@@ -465,19 +592,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VigilanteIndexRouteImport
       parentRoute: typeof VigilanteRouteRoute
     }
-    '/admin/clientes/': {
-      id: '/admin/clientes/'
-      path: '/clientes'
-      fullPath: '/admin/clientes/'
-      preLoaderRoute: typeof AdminClientesIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/combos/': {
-      id: '/admin/combos/'
-      path: '/combos'
-      fullPath: '/admin/combos/'
-      preLoaderRoute: typeof AdminCombosIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
+    '/admin/catalogo/': {
+      id: '/admin/catalogo/'
+      path: '/'
+      fullPath: '/admin/catalogo/'
+      preLoaderRoute: typeof AdminCatalogoIndexRouteImport
+      parentRoute: typeof AdminCatalogoRouteRoute
     }
     '/admin/configuracion/': {
       id: '/admin/configuracion/'
@@ -486,75 +606,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminConfiguracionIndexRouteImport
       parentRoute: typeof AdminRouteRoute
     }
-    '/admin/gastos/': {
-      id: '/admin/gastos/'
-      path: '/gastos'
-      fullPath: '/admin/gastos/'
-      preLoaderRoute: typeof AdminGastosIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
+    '/admin/dinero/': {
+      id: '/admin/dinero/'
+      path: '/'
+      fullPath: '/admin/dinero/'
+      preLoaderRoute: typeof AdminDineroIndexRouteImport
+      parentRoute: typeof AdminDineroRouteRoute
     }
-    '/admin/inventario/': {
-      id: '/admin/inventario/'
-      path: '/inventario'
-      fullPath: '/admin/inventario/'
-      preLoaderRoute: typeof AdminInventarioIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
+    '/admin/operacion/': {
+      id: '/admin/operacion/'
+      path: '/'
+      fullPath: '/admin/operacion/'
+      preLoaderRoute: typeof AdminOperacionIndexRouteImport
+      parentRoute: typeof AdminOperacionRouteRoute
     }
-    '/admin/lavadores/': {
-      id: '/admin/lavadores/'
-      path: '/lavadores'
-      fullPath: '/admin/lavadores/'
-      preLoaderRoute: typeof AdminLavadoresIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/liquidaciones/': {
-      id: '/admin/liquidaciones/'
-      path: '/liquidaciones'
-      fullPath: '/admin/liquidaciones/'
-      preLoaderRoute: typeof AdminLiquidacionesIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/ordenes/': {
-      id: '/admin/ordenes/'
-      path: '/ordenes'
-      fullPath: '/admin/ordenes/'
-      preLoaderRoute: typeof AdminOrdenesIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/parqueadero/': {
-      id: '/admin/parqueadero/'
-      path: '/parqueadero'
-      fullPath: '/admin/parqueadero/'
-      preLoaderRoute: typeof AdminParqueaderoIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/servicios/': {
-      id: '/admin/servicios/'
-      path: '/servicios'
-      fullPath: '/admin/servicios/'
-      preLoaderRoute: typeof AdminServiciosIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/tipos-vehiculo/': {
-      id: '/admin/tipos-vehiculo/'
-      path: '/tipos-vehiculo'
-      fullPath: '/admin/tipos-vehiculo/'
-      preLoaderRoute: typeof AdminTiposVehiculoIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/turnos/': {
-      id: '/admin/turnos/'
-      path: '/turnos'
-      fullPath: '/admin/turnos/'
-      preLoaderRoute: typeof AdminTurnosIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/usuarios/': {
-      id: '/admin/usuarios/'
-      path: '/usuarios'
-      fullPath: '/admin/usuarios/'
-      preLoaderRoute: typeof AdminUsuariosIndexRouteImport
-      parentRoute: typeof AdminRouteRoute
+    '/admin/personal/': {
+      id: '/admin/personal/'
+      path: '/'
+      fullPath: '/admin/personal/'
+      preLoaderRoute: typeof AdminPersonalIndexRouteImport
+      parentRoute: typeof AdminPersonalRouteRoute
     }
     '/jefe-zona/asistencia/': {
       id: '/jefe-zona/asistencia/'
@@ -584,41 +655,177 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof JefeZonaLiquidacionesIndexRouteImport
       parentRoute: typeof JefeZonaRouteRoute
     }
+    '/admin/catalogo/combos/': {
+      id: '/admin/catalogo/combos/'
+      path: '/combos'
+      fullPath: '/admin/catalogo/combos/'
+      preLoaderRoute: typeof AdminCatalogoCombosIndexRouteImport
+      parentRoute: typeof AdminCatalogoRouteRoute
+    }
+    '/admin/catalogo/parqueadero/': {
+      id: '/admin/catalogo/parqueadero/'
+      path: '/parqueadero'
+      fullPath: '/admin/catalogo/parqueadero/'
+      preLoaderRoute: typeof AdminCatalogoParqueaderoIndexRouteImport
+      parentRoute: typeof AdminCatalogoRouteRoute
+    }
+    '/admin/catalogo/servicios/': {
+      id: '/admin/catalogo/servicios/'
+      path: '/servicios'
+      fullPath: '/admin/catalogo/servicios/'
+      preLoaderRoute: typeof AdminCatalogoServiciosIndexRouteImport
+      parentRoute: typeof AdminCatalogoRouteRoute
+    }
+    '/admin/catalogo/tipos-vehiculo/': {
+      id: '/admin/catalogo/tipos-vehiculo/'
+      path: '/tipos-vehiculo'
+      fullPath: '/admin/catalogo/tipos-vehiculo/'
+      preLoaderRoute: typeof AdminCatalogoTiposVehiculoIndexRouteImport
+      parentRoute: typeof AdminCatalogoRouteRoute
+    }
+    '/admin/dinero/gastos/': {
+      id: '/admin/dinero/gastos/'
+      path: '/gastos'
+      fullPath: '/admin/dinero/gastos/'
+      preLoaderRoute: typeof AdminDineroGastosIndexRouteImport
+      parentRoute: typeof AdminDineroRouteRoute
+    }
+    '/admin/dinero/inventario/': {
+      id: '/admin/dinero/inventario/'
+      path: '/inventario'
+      fullPath: '/admin/dinero/inventario/'
+      preLoaderRoute: typeof AdminDineroInventarioIndexRouteImport
+      parentRoute: typeof AdminDineroRouteRoute
+    }
+    '/admin/dinero/liquidaciones/': {
+      id: '/admin/dinero/liquidaciones/'
+      path: '/liquidaciones'
+      fullPath: '/admin/dinero/liquidaciones/'
+      preLoaderRoute: typeof AdminDineroLiquidacionesIndexRouteImport
+      parentRoute: typeof AdminDineroRouteRoute
+    }
+    '/admin/operacion/clientes/': {
+      id: '/admin/operacion/clientes/'
+      path: '/clientes'
+      fullPath: '/admin/operacion/clientes/'
+      preLoaderRoute: typeof AdminOperacionClientesIndexRouteImport
+      parentRoute: typeof AdminOperacionRouteRoute
+    }
+    '/admin/operacion/ordenes/': {
+      id: '/admin/operacion/ordenes/'
+      path: '/ordenes'
+      fullPath: '/admin/operacion/ordenes/'
+      preLoaderRoute: typeof AdminOperacionOrdenesIndexRouteImport
+      parentRoute: typeof AdminOperacionRouteRoute
+    }
+    '/admin/operacion/turnos/': {
+      id: '/admin/operacion/turnos/'
+      path: '/turnos'
+      fullPath: '/admin/operacion/turnos/'
+      preLoaderRoute: typeof AdminOperacionTurnosIndexRouteImport
+      parentRoute: typeof AdminOperacionRouteRoute
+    }
+    '/admin/personal/lavadores/': {
+      id: '/admin/personal/lavadores/'
+      path: '/lavadores'
+      fullPath: '/admin/personal/lavadores/'
+      preLoaderRoute: typeof AdminPersonalLavadoresIndexRouteImport
+      parentRoute: typeof AdminPersonalRouteRoute
+    }
+    '/admin/personal/usuarios/': {
+      id: '/admin/personal/usuarios/'
+      path: '/usuarios'
+      fullPath: '/admin/personal/usuarios/'
+      preLoaderRoute: typeof AdminPersonalUsuariosIndexRouteImport
+      parentRoute: typeof AdminPersonalRouteRoute
+    }
   }
 }
 
+interface AdminCatalogoRouteRouteChildren {
+  AdminCatalogoIndexRoute: typeof AdminCatalogoIndexRoute
+  AdminCatalogoCombosIndexRoute: typeof AdminCatalogoCombosIndexRoute
+  AdminCatalogoParqueaderoIndexRoute: typeof AdminCatalogoParqueaderoIndexRoute
+  AdminCatalogoServiciosIndexRoute: typeof AdminCatalogoServiciosIndexRoute
+  AdminCatalogoTiposVehiculoIndexRoute: typeof AdminCatalogoTiposVehiculoIndexRoute
+}
+
+const AdminCatalogoRouteRouteChildren: AdminCatalogoRouteRouteChildren = {
+  AdminCatalogoIndexRoute: AdminCatalogoIndexRoute,
+  AdminCatalogoCombosIndexRoute: AdminCatalogoCombosIndexRoute,
+  AdminCatalogoParqueaderoIndexRoute: AdminCatalogoParqueaderoIndexRoute,
+  AdminCatalogoServiciosIndexRoute: AdminCatalogoServiciosIndexRoute,
+  AdminCatalogoTiposVehiculoIndexRoute: AdminCatalogoTiposVehiculoIndexRoute,
+}
+
+const AdminCatalogoRouteRouteWithChildren =
+  AdminCatalogoRouteRoute._addFileChildren(AdminCatalogoRouteRouteChildren)
+
+interface AdminDineroRouteRouteChildren {
+  AdminDineroIndexRoute: typeof AdminDineroIndexRoute
+  AdminDineroGastosIndexRoute: typeof AdminDineroGastosIndexRoute
+  AdminDineroInventarioIndexRoute: typeof AdminDineroInventarioIndexRoute
+  AdminDineroLiquidacionesIndexRoute: typeof AdminDineroLiquidacionesIndexRoute
+}
+
+const AdminDineroRouteRouteChildren: AdminDineroRouteRouteChildren = {
+  AdminDineroIndexRoute: AdminDineroIndexRoute,
+  AdminDineroGastosIndexRoute: AdminDineroGastosIndexRoute,
+  AdminDineroInventarioIndexRoute: AdminDineroInventarioIndexRoute,
+  AdminDineroLiquidacionesIndexRoute: AdminDineroLiquidacionesIndexRoute,
+}
+
+const AdminDineroRouteRouteWithChildren =
+  AdminDineroRouteRoute._addFileChildren(AdminDineroRouteRouteChildren)
+
+interface AdminOperacionRouteRouteChildren {
+  AdminOperacionIndexRoute: typeof AdminOperacionIndexRoute
+  AdminOperacionClientesIndexRoute: typeof AdminOperacionClientesIndexRoute
+  AdminOperacionOrdenesIndexRoute: typeof AdminOperacionOrdenesIndexRoute
+  AdminOperacionTurnosIndexRoute: typeof AdminOperacionTurnosIndexRoute
+}
+
+const AdminOperacionRouteRouteChildren: AdminOperacionRouteRouteChildren = {
+  AdminOperacionIndexRoute: AdminOperacionIndexRoute,
+  AdminOperacionClientesIndexRoute: AdminOperacionClientesIndexRoute,
+  AdminOperacionOrdenesIndexRoute: AdminOperacionOrdenesIndexRoute,
+  AdminOperacionTurnosIndexRoute: AdminOperacionTurnosIndexRoute,
+}
+
+const AdminOperacionRouteRouteWithChildren =
+  AdminOperacionRouteRoute._addFileChildren(AdminOperacionRouteRouteChildren)
+
+interface AdminPersonalRouteRouteChildren {
+  AdminPersonalIndexRoute: typeof AdminPersonalIndexRoute
+  AdminPersonalLavadoresIndexRoute: typeof AdminPersonalLavadoresIndexRoute
+  AdminPersonalUsuariosIndexRoute: typeof AdminPersonalUsuariosIndexRoute
+}
+
+const AdminPersonalRouteRouteChildren: AdminPersonalRouteRouteChildren = {
+  AdminPersonalIndexRoute: AdminPersonalIndexRoute,
+  AdminPersonalLavadoresIndexRoute: AdminPersonalLavadoresIndexRoute,
+  AdminPersonalUsuariosIndexRoute: AdminPersonalUsuariosIndexRoute,
+}
+
+const AdminPersonalRouteRouteWithChildren =
+  AdminPersonalRouteRoute._addFileChildren(AdminPersonalRouteRouteChildren)
+
 interface AdminRouteRouteChildren {
+  AdminCatalogoRouteRoute: typeof AdminCatalogoRouteRouteWithChildren
+  AdminDineroRouteRoute: typeof AdminDineroRouteRouteWithChildren
+  AdminOperacionRouteRoute: typeof AdminOperacionRouteRouteWithChildren
+  AdminPersonalRouteRoute: typeof AdminPersonalRouteRouteWithChildren
   AdminIndexRoute: typeof AdminIndexRoute
-  AdminClientesIndexRoute: typeof AdminClientesIndexRoute
-  AdminCombosIndexRoute: typeof AdminCombosIndexRoute
   AdminConfiguracionIndexRoute: typeof AdminConfiguracionIndexRoute
-  AdminGastosIndexRoute: typeof AdminGastosIndexRoute
-  AdminInventarioIndexRoute: typeof AdminInventarioIndexRoute
-  AdminLavadoresIndexRoute: typeof AdminLavadoresIndexRoute
-  AdminLiquidacionesIndexRoute: typeof AdminLiquidacionesIndexRoute
-  AdminOrdenesIndexRoute: typeof AdminOrdenesIndexRoute
-  AdminParqueaderoIndexRoute: typeof AdminParqueaderoIndexRoute
-  AdminServiciosIndexRoute: typeof AdminServiciosIndexRoute
-  AdminTiposVehiculoIndexRoute: typeof AdminTiposVehiculoIndexRoute
-  AdminTurnosIndexRoute: typeof AdminTurnosIndexRoute
-  AdminUsuariosIndexRoute: typeof AdminUsuariosIndexRoute
 }
 
 const AdminRouteRouteChildren: AdminRouteRouteChildren = {
+  AdminCatalogoRouteRoute: AdminCatalogoRouteRouteWithChildren,
+  AdminDineroRouteRoute: AdminDineroRouteRouteWithChildren,
+  AdminOperacionRouteRoute: AdminOperacionRouteRouteWithChildren,
+  AdminPersonalRouteRoute: AdminPersonalRouteRouteWithChildren,
   AdminIndexRoute: AdminIndexRoute,
-  AdminClientesIndexRoute: AdminClientesIndexRoute,
-  AdminCombosIndexRoute: AdminCombosIndexRoute,
   AdminConfiguracionIndexRoute: AdminConfiguracionIndexRoute,
-  AdminGastosIndexRoute: AdminGastosIndexRoute,
-  AdminInventarioIndexRoute: AdminInventarioIndexRoute,
-  AdminLavadoresIndexRoute: AdminLavadoresIndexRoute,
-  AdminLiquidacionesIndexRoute: AdminLiquidacionesIndexRoute,
-  AdminOrdenesIndexRoute: AdminOrdenesIndexRoute,
-  AdminParqueaderoIndexRoute: AdminParqueaderoIndexRoute,
-  AdminServiciosIndexRoute: AdminServiciosIndexRoute,
-  AdminTiposVehiculoIndexRoute: AdminTiposVehiculoIndexRoute,
-  AdminTurnosIndexRoute: AdminTurnosIndexRoute,
-  AdminUsuariosIndexRoute: AdminUsuariosIndexRoute,
 }
 
 const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(

@@ -39,6 +39,9 @@ const PERIODICIDAD_OPCIONES: { value: Configuracion['periodicidadLiquidacion']; 
 function ConfiguracionPage() {
   const initial = Route.useLoaderData()
   const [comisionPorcentaje, setComisionPorcentaje] = useState(String(initial.comisionLavadorPorcentaje * 100))
+  const [comisionJefeZonaPorcentaje, setComisionJefeZonaPorcentaje] = useState(
+    String(initial.comisionJefeZonaPorcentaje * 100),
+  )
   const [comisionBase, setComisionBase] = useState<Configuracion['comisionBase']>(initial.comisionBase)
   const [periodicidadLiquidacion, setPeriodicidadLiquidacion] = useState<Configuracion['periodicidadLiquidacion']>(
     initial.periodicidadLiquidacion,
@@ -55,8 +58,14 @@ function ConfiguracionPage() {
       setError('Ingresa un porcentaje válido entre 0 y 100')
       return
     }
+    const numeroJefeZona = Number(comisionJefeZonaPorcentaje)
+    if (!Number.isFinite(numeroJefeZona) || numeroJefeZona < 0 || numeroJefeZona >= 100) {
+      setError('Ingresa un porcentaje de jefe de patio válido entre 0 y 100')
+      return
+    }
     const parsed = configuracionSchema.safeParse({
       comisionLavadorPorcentaje: numero / 100,
+      comisionJefeZonaPorcentaje: numeroJefeZona / 100,
       comisionBase,
       periodicidadLiquidacion,
       recargoAltoCilindraje: Number(recargoAltoCilindraje) || 0,
@@ -90,7 +99,7 @@ function ConfiguracionPage() {
           <label className="flex flex-col gap-1.5 text-left text-sm">
             <span className="font-medium text-neutral-700">Comisión del lavador (%)</span>
             <p className="text-xs text-neutral-500">
-              Porcentaje de cada combo que corresponde al lavador; el resto queda para el negocio.
+              Porcentaje de cada combo que corresponde al lavador; el resto queda para el negocio y el jefe de patio.
             </p>
             <input
               inputMode="decimal"
@@ -100,6 +109,24 @@ function ConfiguracionPage() {
                 setSaved(false)
               }}
               placeholder="p. ej. 40"
+              className="mt-1 w-32 rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+            />
+          </label>
+
+          <label className="flex flex-col gap-1.5 text-left text-sm">
+            <span className="font-medium text-neutral-700">Comisión del jefe de patio en turno (%)</span>
+            <p className="text-xs text-neutral-500">
+              Porcentaje de cada orden para quien esté a cargo del turno de recepción al registrar el vehículo —
+              el negocio se lleva lo que queda después de esta y la del lavador.
+            </p>
+            <input
+              inputMode="decimal"
+              value={comisionJefeZonaPorcentaje}
+              onChange={(event) => {
+                setComisionJefeZonaPorcentaje(event.target.value)
+                setSaved(false)
+              }}
+              placeholder="p. ej. 3"
               className="mt-1 w-32 rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
             />
           </label>
