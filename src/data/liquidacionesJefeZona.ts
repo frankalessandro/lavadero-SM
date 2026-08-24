@@ -46,6 +46,36 @@ export async function fetchComisionesPendientesJefeZona(): Promise<ComisionPendi
     .sort((a, b) => b.montoPendiente - a.montoPendiente)
 }
 
+export interface ResumenPeriodoJefeZona {
+  responsable: string
+  cantidadOrdenes: number
+  montoTotal: number
+  montoPendiente: number
+}
+
+// Mismo reporte por periodo que fetchResumenPeriodoLavadores (src/data/liquidaciones.ts), para
+// el selector día/semana/mes de /admin/dinero/liquidaciones — agrupa por responsable todo lo
+// generado en el rango, liquidado o no.
+export async function fetchResumenPeriodoJefeZona(periodoInicio: string, periodoFin: string): Promise<ResumenPeriodoJefeZona[]> {
+  const hastaExclusivoISO = new Date(`${periodoFin}T00:00:00.000Z`)
+  hastaExclusivoISO.setUTCDate(hastaExclusivoISO.getUTCDate() + 1)
+  const ordenes = await fetchOrdenesEnRango(new Date(`${periodoInicio}T00:00:00.000Z`).toISOString(), hastaExclusivoISO.toISOString())
+
+  const acumulado = new Map<string, { cantidad: number; total: number; pendiente: number }>()
+  for (const orden of ordenes) {
+    if (orden.estado === 'anulada' || !orden.jefeZonaResponsable) continue
+    const actual = acumulado.get(orden.jefeZonaResponsable) ?? { cantidad: 0, total: 0, pendiente: 0 }
+    actual.cantidad += 1
+    actual.total += orden.comisionJefeZona
+    if (orden.liquidacionJefeZonaId === undefined) actual.pendiente += orden.comisionJefeZona
+    acumulado.set(orden.jefeZonaResponsable, actual)
+  }
+
+  return Array.from(acumulado.entries())
+    .map(([responsable, a]) => ({ responsable, cantidadOrdenes: a.cantidad, montoTotal: a.total, montoPendiente: a.pendiente }))
+    .sort((a, b) => b.montoTotal - a.montoTotal)
+}
+
 async function ordenesElegiblesJefeZona(responsable: string, periodoInicio: string, periodoFin: string) {
   const hastaExclusivoISO = new Date(`${periodoFin}T00:00:00.000Z`)
   hastaExclusivoISO.setUTCDate(hastaExclusivoISO.getUTCDate() + 1)

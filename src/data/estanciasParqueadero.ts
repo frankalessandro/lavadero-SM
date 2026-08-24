@@ -5,6 +5,7 @@ import {
   type EntradaInput,
   type EstanciaParqueadero,
   type ModalidadParqueadero,
+  type MetodoPagoParqueadero,
 } from '../schemas/estanciaParqueadero'
 import { fetchTurnoAbierto } from './turnos'
 
@@ -64,7 +65,7 @@ export async function registrarEntrada(input: EntradaInput): Promise<EstanciaPar
 
 export async function registrarSalida(
   id: string,
-  metodoPago?: 'efectivo' | 'transferencia',
+  metodoPago?: MetodoPagoParqueadero,
 ): Promise<EstanciaParqueadero> {
   const { data: actual, error: fetchError } = await db
     .from('estancias_parqueadero')

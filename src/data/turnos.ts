@@ -116,8 +116,10 @@ async function gastosDeCaja(turnoId: string): Promise<number> {
   return (data ?? []).reduce((total, g) => total + (g.monto as number), 0)
 }
 
-// Solo la modalidad efectivo es dinero físico que se puede contar — transferencias no entran
-// al arqueo. Gastos en caja se asumen pagados en efectivo desde la misma caja.
+// Solo la modalidad efectivo es dinero físico que se puede contar — transferencia y datáfono no
+// entran al arqueo (ninguno de los dos es billete en la caja, aunque datáfono sí cuenta como
+// ingreso/ganancia del día — ver StatCards de /admin y /jefe-zona). Gastos en caja se asumen
+// pagados en efectivo desde la misma caja.
 export async function calcularValorEsperado(turno: TurnoCaja): Promise<number> {
   const salidas = await gastosDeCaja(turno.id)
 

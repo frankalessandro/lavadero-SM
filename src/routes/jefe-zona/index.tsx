@@ -53,6 +53,7 @@ import { CurrencyInput } from '../../components/layout/CurrencyInput'
 import { ContactoModal } from '../../components/layout/ContactoModal'
 import { LavadoAnimation } from '../../components/layout/LavadoAnimation'
 import { BarChart } from '../../components/layout/BarChart'
+import { METODO_PAGO_LABEL } from '../../lib/metodoPago'
 
 function hoyISO(): string {
   return new Date().toISOString().slice(0, 10)
@@ -396,7 +397,7 @@ function JefeZonaDashboard() {
           info={{
             title: 'Qué es "Caja del día"',
             description:
-              'Suma el precio de todas las órdenes de lavado entregadas HOY (cobradas), sin importar el método de pago (efectivo o transferencia) — un vehículo registrado hoy pero que todavía no se entrega/cobra no cuenta acá.\n\nNo es el arqueo del turno: no resta gastos ni distingue efectivo de transferencia (eso solo importa para el conteo físico de caja, que se hace en /jefe-zona/caja al cerrar turno). Tampoco incluye parqueadero, que se cobra y se arquea aparte con el vigilante.',
+              'Suma el precio de todas las órdenes de lavado entregadas HOY (cobradas), sin importar el método de pago (efectivo, transferencia o datáfono) — un vehículo registrado hoy pero que todavía no se entrega/cobra no cuenta acá.\n\nNo es el arqueo del turno: no resta gastos ni distingue el método de pago (eso solo importa para el conteo físico de caja, que se hace en /jefe-zona/caja al cerrar turno — ni transferencia ni datáfono son efectivo físico). Tampoco incluye parqueadero, que se cobra y se arquea aparte con el vigilante.',
           }}
         />
       </div>
@@ -1503,25 +1504,25 @@ function CobroModal({
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5 text-sm">
             <span className="font-medium text-neutral-700">Método de pago</span>
-            <div className="grid grid-cols-2 gap-2">
-              {(['efectivo', 'transferencia'] as const).map((value) => (
+            <div className="grid grid-cols-3 gap-2">
+              {(['efectivo', 'transferencia', 'datafono'] as const).map((value) => (
                 <button
                   key={value}
                   type="button"
                   onClick={() => setMetodoPago(value)}
-                  className={`rounded-lg border px-3 py-2.5 text-sm font-medium capitalize transition-colors ${
+                  className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
                     metodoPago === value
                       ? 'border-primary-600 bg-primary-50 text-primary-700'
                       : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
                   }`}
                 >
-                  {value}
+                  {METODO_PAGO_LABEL[value]}
                 </button>
               ))}
             </div>
           </div>
 
-          {metodoPago === 'transferencia' ? (
+          {metodoPago === 'transferencia' || metodoPago === 'datafono' ? (
             <label className="flex flex-col gap-1.5 text-sm">
               <span className="font-medium text-neutral-700">Referencia</span>
               <input

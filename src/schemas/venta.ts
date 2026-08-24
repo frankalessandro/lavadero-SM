@@ -45,8 +45,8 @@ export const ventaInputSchema = z
     referenciaPago: z.string().trim().optional(),
     vendidoPor: z.string().trim().min(1, 'El responsable es obligatorio'),
   })
-  .refine((data) => data.metodoPago !== 'transferencia' || !!data.referenciaPago, {
-    message: 'La referencia es obligatoria en pagos por transferencia',
+  .refine((data) => (data.metodoPago !== 'transferencia' && data.metodoPago !== 'datafono') || !!data.referenciaPago, {
+    message: 'La referencia es obligatoria en pagos por transferencia o datáfono',
     path: ['referenciaPago'],
   })
 

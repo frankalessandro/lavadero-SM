@@ -7,6 +7,7 @@ import { fetchGastos, fetchTotalGastosPorCategoria } from '../../data/gastos'
 import { fetchComisionesPendientes } from '../../data/liquidaciones'
 import { fetchComisionesPendientesJefeZona } from '../../data/liquidacionesJefeZona'
 import { fetchVentasHoy } from '../../data/ventas'
+import type { MetodoPago } from '../../schemas/orden'
 import { StatCard } from '../../components/layout/StatCard'
 import { Card } from '../../components/layout/Card'
 import { BarChart } from '../../components/layout/BarChart'
@@ -86,7 +87,7 @@ function AdminDashboard() {
       if (o.metodoPago) acc[o.metodoPago] += o.precio
       return acc
     },
-    { efectivo: 0, transferencia: 0 } as Record<'efectivo' | 'transferencia', number>,
+    { efectivo: 0, transferencia: 0, datafono: 0 } as Record<MetodoPago, number>,
   )
 
   const ventasPorMetodo = ventasActivasHoy.reduce(
@@ -94,7 +95,7 @@ function AdminDashboard() {
       acc[v.metodoPago] += v.total
       return acc
     },
-    { efectivo: 0, transferencia: 0 } as Record<'efectivo' | 'transferencia', number>,
+    { efectivo: 0, transferencia: 0, datafono: 0 } as Record<MetodoPago, number>,
   )
 
   const totalGastosHoy = gastosHoy.reduce((total, g) => total + g.monto, 0)
@@ -109,12 +110,25 @@ function AdminDashboard() {
   // la fila de parqueadero. Parqueadero no distingue método (fetchResumenHoy solo da el total),
   // por eso va con "—" en esas columnas en vez de inventar un reparto.
   const filasIngresos = [
-    { linea: 'Lavadero', efectivo: ingresosPorMetodo.efectivo, transferencia: ingresosPorMetodo.transferencia, total: ingresosLavadero },
-    { linea: 'Ventas de productos', efectivo: ventasPorMetodo.efectivo, transferencia: ventasPorMetodo.transferencia, total: ingresosVentas },
-    { linea: 'Parqueadero', efectivo: undefined, transferencia: undefined, total: ingresosParqueadero },
+    {
+      linea: 'Lavadero',
+      efectivo: ingresosPorMetodo.efectivo,
+      transferencia: ingresosPorMetodo.transferencia,
+      datafono: ingresosPorMetodo.datafono,
+      total: ingresosLavadero,
+    },
+    {
+      linea: 'Ventas de productos',
+      efectivo: ventasPorMetodo.efectivo,
+      transferencia: ventasPorMetodo.transferencia,
+      datafono: ventasPorMetodo.datafono,
+      total: ingresosVentas,
+    },
+    { linea: 'Parqueadero', efectivo: undefined, transferencia: undefined, datafono: undefined, total: ingresosParqueadero },
   ]
   const totalEfectivo = ingresosPorMetodo.efectivo + ventasPorMetodo.efectivo
   const totalTransferencia = ingresosPorMetodo.transferencia + ventasPorMetodo.transferencia
+  const totalDatafono = ingresosPorMetodo.datafono + ventasPorMetodo.datafono
 
   return (
     <div className="flex flex-col gap-8">
@@ -154,6 +168,7 @@ function AdminDashboard() {
                     <th className="py-2 text-left">Línea</th>
                     <th className="py-2 text-right">Efectivo</th>
                     <th className="py-2 text-right">Transfer.</th>
+                    <th className="py-2 text-right">Datáfono</th>
                     <th className="py-2 text-right">Total</th>
                   </tr>
                 </thead>
@@ -171,6 +186,9 @@ function AdminDashboard() {
                           COP.format(fila.transferencia)
                         )}
                       </td>
+                      <td className="py-2 text-right text-neutral-700">
+                        {fila.datafono === undefined ? <span className="text-neutral-300">—</span> : COP.format(fila.datafono)}
+                      </td>
                       <td className="py-2 text-right font-medium text-neutral-900">{COP.format(fila.total)}</td>
                     </tr>
                   ))}
@@ -178,6 +196,7 @@ function AdminDashboard() {
                     <td className="py-2 font-medium text-neutral-700">Total</td>
                     <td className="py-2 text-right font-medium text-neutral-900">{COP.format(totalEfectivo)}</td>
                     <td className="py-2 text-right font-medium text-neutral-900">{COP.format(totalTransferencia)}</td>
+                    <td className="py-2 text-right font-medium text-neutral-900">{COP.format(totalDatafono)}</td>
                     <td className="py-2 text-right font-semibold text-neutral-900">{COP.format(ingresosTotales)}</td>
                   </tr>
                 </tbody>
@@ -185,7 +204,8 @@ function AdminDashboard() {
             </div>
             <p className="mt-3 text-xs text-neutral-400">
               El parqueadero no registra método de pago todavía, por eso su valor solo aparece en la columna Total —
-              las columnas de efectivo y transferencia no lo incluyen.
+              las columnas de efectivo, transferencia y datáfono no lo incluyen. Datáfono muestra el monto bruto
+              cobrado — cuánto llega neto a la cuenta (descuento de la pasarela) todavía no está configurado.
             </p>
           </Card>
 

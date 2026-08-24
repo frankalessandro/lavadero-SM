@@ -104,6 +104,55 @@ export async function fetchComisionesPendientes(): Promise<ComisionPendiente[]> 
   })
 }
 
+export interface ResumenPeriodoLavador {
+  lavadorId: string
+  lavadorNombre: string
+  cantidadOrdenes: number
+  // Comisión generada en el periodo, haya quedado liquidada o no — para comparar "cuánto se
+  // ganó" contra el histórico de liquidaciones (que muestra lo ya cortado/pagado de verdad).
+  montoTotal: number
+  // De ese total, lo que sigue sin liquidación (ni principal ni de segundo lavador según aplique).
+  montoPendiente: number
+}
+
+// Reporte por periodo (día/semana/mes vía PeriodoSelector) para /admin/dinero/liquidaciones —
+// a diferencia de fetchComisionesPendientes (acumulado TOTAL histórico sin liquidar, sin fecha),
+// esto agrupa por lavador todo lo generado dentro de un rango específico, liquidado o no.
+export async function fetchResumenPeriodoLavadores(periodoInicio: string, periodoFin: string): Promise<ResumenPeriodoLavador[]> {
+  const hastaExclusivoISO = new Date(`${periodoFin}T00:00:00.000Z`)
+  hastaExclusivoISO.setUTCDate(hastaExclusivoISO.getUTCDate() + 1)
+
+  const [lavadores, ordenes] = await Promise.all([
+    fetchLavadores(),
+    fetchOrdenesEnRango(new Date(`${periodoInicio}T00:00:00.000Z`).toISOString(), hastaExclusivoISO.toISOString()),
+  ])
+
+  const acumulado = new Map<string, { cantidad: number; total: number; pendiente: number }>()
+  function sumar(lavadorId: string, monto: number, liquidado: boolean) {
+    const actual = acumulado.get(lavadorId) ?? { cantidad: 0, total: 0, pendiente: 0 }
+    actual.cantidad += 1
+    actual.total += monto
+    if (!liquidado) actual.pendiente += monto
+    acumulado.set(lavadorId, actual)
+  }
+  for (const orden of ordenes) {
+    if (orden.estado === 'anulada') continue
+    if (orden.lavadorId) sumar(orden.lavadorId, comisionParaLavador(orden, orden.lavadorId), orden.liquidacionId !== undefined)
+    if (orden.lavadorId2) sumar(orden.lavadorId2, comisionParaLavador(orden, orden.lavadorId2), orden.liquidacionId2 !== undefined)
+  }
+
+  const nombrePorId = new Map(lavadores.map((l) => [l.id, l.nombre] as const))
+  return Array.from(acumulado.entries())
+    .map(([lavadorId, a]) => ({
+      lavadorId,
+      lavadorNombre: nombrePorId.get(lavadorId) ?? '—',
+      cantidadOrdenes: a.cantidad,
+      montoTotal: a.total,
+      montoPendiente: a.pendiente,
+    }))
+    .sort((a, b) => b.montoTotal - a.montoTotal)
+}
+
 // Órdenes que entrarían en una liquidación de este lavador para el rango [periodoInicio,
 // periodoFin] (fechas YYYY-MM-DD, ambas inclusivas) — mismo filtro que aplica `generarLiquidacion`
 // al momento de crearla, extraído aparte para poder mostrar un monto preciso ANTES de generar

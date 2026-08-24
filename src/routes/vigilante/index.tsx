@@ -11,7 +11,13 @@ import {
   cobroPorModalidad,
   fueraDeVentanaSalida,
 } from '../../data/estanciasParqueadero'
-import { entradaInputSchema, type EstanciaParqueadero, type ModalidadParqueadero } from '../../schemas/estanciaParqueadero'
+import {
+  entradaInputSchema,
+  type EstanciaParqueadero,
+  type ModalidadParqueadero,
+  type MetodoPagoParqueadero,
+} from '../../schemas/estanciaParqueadero'
+import { METODO_PAGO_LABEL } from '../../lib/metodoPago'
 import { fetchTurnoAbierto, abrirTurno, calcularValorEsperado, cerrarTurno } from '../../data/turnos'
 import type { TurnoCaja } from '../../schemas/turnoCaja'
 import { Card } from '../../components/layout/Card'
@@ -566,7 +572,7 @@ function SalidaModal({
   onSaved: () => void
 }) {
   const [estanciaId, setEstanciaId] = useState(seleccionada?.id ?? '')
-  const [metodoPago, setMetodoPago] = useState<'efectivo' | 'transferencia'>('efectivo')
+  const [metodoPago, setMetodoPago] = useState<MetodoPagoParqueadero>('efectivo')
   const [saving, setSaving] = useState(false)
   const [cobro, setCobro] = useState(0)
 
@@ -636,19 +642,19 @@ function SalidaModal({
             </div>
             <div className="flex flex-col gap-1.5 text-sm">
               <span className="font-medium text-neutral-700">Método de pago</span>
-              <div className="grid grid-cols-2 gap-2">
-                {(['efectivo', 'transferencia'] as const).map((value) => (
+              <div className="grid grid-cols-3 gap-2">
+                {(['efectivo', 'transferencia', 'datafono'] as const).map((value) => (
                   <button
                     key={value}
                     type="button"
                     onClick={() => setMetodoPago(value)}
-                    className={`rounded-lg border px-3 py-2.5 text-sm font-medium capitalize transition-colors ${
+                    className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
                       metodoPago === value
                         ? 'border-primary-600 bg-primary-50 text-primary-700'
                         : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
                     }`}
                   >
-                    {value}
+                    {METODO_PAGO_LABEL[value]}
                   </button>
                 ))}
               </div>

@@ -29,6 +29,28 @@ export async function fetchMovimientosOperativo(productoId?: string): Promise<Mo
   return movimientoInventarioSchema.array().parse(data)
 }
 
+// Para jefe_zona: RLS bloquea INSERT directo sobre movimientos_inventario (0012_rls_policies.sql
+// — solo admin), así que registra el movimiento a través de la vista operativa (mismo trigger
+// INSTEAD OF que ya usa fetchMovimientosOperativo para leer). Sin costo_unitario/proveedor porque
+// esas columnas no existen en la vista — jefe_zona no ve costos (CLAUDE.md §Roles); una entrada
+// registrada así queda sin costo, igual que hoy pasa con cualquier entrada sin costo capturado.
+export async function createMovimientoOperativo(input: MovimientoInventarioInput): Promise<MovimientoInventario> {
+  const parsed = movimientoInventarioInputSchema.parse(input)
+  const { data, error } = await db
+    .from('movimientos_inventario_operativo')
+    .insert({
+      producto_id: parsed.productoId,
+      tipo: parsed.tipo,
+      cantidad: parsed.cantidad,
+      motivo: parsed.motivo,
+      responsable: parsed.responsable,
+    })
+    .select(MOVIMIENTO_OPERATIVO_SELECT)
+    .single()
+  if (error) throw new Error(error.message)
+  return movimientoInventarioSchema.parse(data)
+}
+
 export async function createMovimiento(input: MovimientoInventarioInput): Promise<MovimientoInventario> {
   const parsed = movimientoInventarioInputSchema.parse(input)
   const { data, error } = await db

@@ -26,6 +26,7 @@ import { ConfirmModal } from '../../../../components/layout/ConfirmModal'
 import { CurrencyInput } from '../../../../components/layout/CurrencyInput'
 import { BarChart } from '../../../../components/layout/BarChart'
 import { CHART_COLORS } from '../../../../lib/chartTheme'
+import { METODO_PAGO_LABEL } from '../../../../lib/metodoPago'
 
 function hace30DiasISO(): string {
   const fecha = new Date()
@@ -309,7 +310,7 @@ function InventarioPage() {
                 <td className="px-5 py-3 font-medium text-neutral-900">{productoNombre(venta.productoId)}</td>
                 <td className="px-5 py-3 text-neutral-700">{venta.cantidad}</td>
                 <td className="px-5 py-3 text-neutral-700">{COP.format(venta.total)}</td>
-                <td className="px-5 py-3 text-neutral-600">{venta.metodoPago === 'efectivo' ? 'Efectivo' : 'Transferencia'}</td>
+                <td className="px-5 py-3 text-neutral-600">{METODO_PAGO_LABEL[venta.metodoPago]}</td>
                 <td className="px-5 py-3 text-neutral-600">{venta.vendidoPor}</td>
                 <td className="px-5 py-3">
                   <span

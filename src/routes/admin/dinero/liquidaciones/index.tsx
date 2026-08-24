@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { Wallet, CheckCircle2, Receipt, Clock, ShieldCheck } from 'lucide-react'
 import {
@@ -6,20 +6,26 @@ import {
   fetchLiquidaciones,
   fetchMontoPeriodo,
   fetchDesgloseLiquidacion,
+  fetchResumenPeriodoLavadores,
   generarLiquidacion,
   marcarLiquidacionPagada,
   type MontoPeriodo,
+  type ResumenPeriodoLavador,
 } from '../../../../data/liquidaciones'
 import {
   fetchComisionesPendientesJefeZona,
   fetchLiquidacionesJefeZona,
   fetchMontoPeriodoJefeZona,
   fetchCantidadOrdenesLiquidacionJefeZona,
+  fetchResumenPeriodoJefeZona,
   generarLiquidacionJefeZona,
   marcarLiquidacionJefeZonaPagada,
   type ComisionPendienteJefeZona,
   type MontoPeriodoJefeZona,
+  type ResumenPeriodoJefeZona,
 } from '../../../../data/liquidacionesJefeZona'
+import { PeriodoSelector } from '../../../../components/layout/PeriodoSelector'
+import { calcularRango, type ModoPeriodo } from '../../../../lib/periodo'
 import { fetchLavadores } from '../../../../data/lavadores'
 import { fetchConfiguracion } from '../../../../data/configuracion'
 import { fetchTiposVehiculo } from '../../../../data/tiposVehiculo'
@@ -99,6 +105,10 @@ function LiquidacionesPage() {
     periodoInicio: string
     periodoFin: string
     preview: MontoPeriodo
+    // Presente solo cuando se genera desde el reporte por periodo (PeriodoSelector) en vez de
+    // los botones rápidos diaria/semanal — reemplaza la frase "de hoy"/"de los últimos 7 días"
+    // del mensaje de confirmación por la etiqueta real del periodo elegido (ej. "Semana 18 – 24 ago").
+    rangoLabel?: string
   } | null>(null)
   const [confirmandoPago, setConfirmandoPago] = useState<Liquidacion | null>(null)
   const [colilla, setColilla] = useState<ColillaLiquidacionData | null>(null)
@@ -117,6 +127,7 @@ function LiquidacionesPage() {
     periodoInicio: string
     periodoFin: string
     preview: MontoPeriodoJefeZona
+    rangoLabel?: string
   } | null>(null)
   const [confirmandoPagoJefeZona, setConfirmandoPagoJefeZona] = useState<LiquidacionJefeZona | null>(null)
   const [colillaJefeZona, setColillaJefeZona] = useState<ColillaJefeZonaData | null>(null)
@@ -129,6 +140,116 @@ function LiquidacionesPage() {
   const [sujeto, setSujeto] = useState<'lavadores' | 'jefe_zona'>('lavadores')
   const totalPendienteLavadores = pendientes.reduce((suma, c) => suma + c.montoPendiente, 0)
   const totalPendienteJefeZona = pendientesJefeZona.reduce((suma, c) => suma + c.montoPendiente, 0)
+
+  // Reporte por periodo (día/semana/mes) — complementa las tarjetas de "acumulado total sin
+  // liquidar" de arriba (que no tienen fecha) con una vista navegable de cuánto se generó y
+  // cuánto de eso sigue pendiente en un rango específico, más el histórico que cae en ese mismo
+  // rango. Mismo estado sirve para ambos sujetos (lavadores/jefe de patio), solo cambia qué
+  // función de resumen se llama.
+  const [modoPeriodo, setModoPeriodo] = useState<ModoPeriodo>('semana')
+  const [anclaPeriodo, setAnclaPeriodo] = useState(() => new Date())
+  const rangoPeriodo = calcularRango(modoPeriodo, anclaPeriodo)
+  const [resumenLavadores, setResumenLavadores] = useState<ResumenPeriodoLavador[]>([])
+  const [resumenJefeZona, setResumenJefeZona] = useState<ResumenPeriodoJefeZona[]>([])
+  // Se marca "cargando" desde los propios manejadores de clic (cambiarModoPeriodo/cambiarAnclaPeriodo/
+  // cambiarSujeto abajo), no de forma síncrona dentro del efecto — evita el cascading-render que
+  // marca react-hooks/set-state-in-effect cuando el setState corre en el cuerpo del efecto en vez
+  // de en respuesta a un evento real del usuario.
+  const [cargandoResumen, setCargandoResumen] = useState(false)
+
+  function cambiarModoPeriodo(modo: ModoPeriodo) {
+    setCargandoResumen(true)
+    setModoPeriodo(modo)
+  }
+  function cambiarAnclaPeriodo(ancla: Date) {
+    setCargandoResumen(true)
+    setAnclaPeriodo(ancla)
+  }
+  function cambiarSujeto(value: 'lavadores' | 'jefe_zona') {
+    setCargandoResumen(true)
+    setSujeto(value)
+  }
+
+  useEffect(() => {
+    let cancelado = false
+    const cargar =
+      sujeto === 'lavadores'
+        ? fetchResumenPeriodoLavadores(rangoPeriodo.periodoInicio, rangoPeriodo.periodoFin).then((r) => {
+            if (!cancelado) setResumenLavadores(r)
+          })
+        : fetchResumenPeriodoJefeZona(rangoPeriodo.periodoInicio, rangoPeriodo.periodoFin).then((r) => {
+            if (!cancelado) setResumenJefeZona(r)
+          })
+    cargar.finally(() => {
+      if (!cancelado) setCargandoResumen(false)
+    })
+    return () => {
+      cancelado = true
+    }
+  }, [sujeto, rangoPeriodo.periodoInicio, rangoPeriodo.periodoFin])
+
+  // Histórico de liquidaciones cuyo periodo se solapa con el rango navegado — misma condición de
+  // overlap que usan los calendarios (inicioA <= finB && finA >= inicioB).
+  const historicoEnPeriodo = historico.filter(
+    (l) => l.periodoInicio <= rangoPeriodo.periodoFin && l.periodoFin >= rangoPeriodo.periodoInicio,
+  )
+  const historicoJefeZonaEnPeriodo = historicoJefeZona.filter(
+    (l) => l.periodoInicio <= rangoPeriodo.periodoFin && l.periodoFin >= rangoPeriodo.periodoInicio,
+  )
+  const totalLiquidadoEnPeriodo = historicoEnPeriodo.reduce((suma, l) => suma + l.monto, 0)
+  const totalLiquidadoJefeZonaEnPeriodo = historicoJefeZonaEnPeriodo.reduce((suma, l) => suma + l.monto, 0)
+
+  // Tras generar una liquidación (desde cualquiera de los dos flujos), el reporte por periodo
+  // queda desactualizado — refresh() ya recarga pendientes/histórico, esto recarga el resumen.
+  async function refreshResumen() {
+    if (sujeto === 'lavadores') {
+      setResumenLavadores(await fetchResumenPeriodoLavadores(rangoPeriodo.periodoInicio, rangoPeriodo.periodoFin))
+    } else {
+      setResumenJefeZona(await fetchResumenPeriodoJefeZona(rangoPeriodo.periodoInicio, rangoPeriodo.periodoFin))
+    }
+  }
+
+  async function handleGenerarDesdeReporte(resumen: ResumenPeriodoLavador) {
+    setError(null)
+    const key = `${resumen.lavadorId}:reporte`
+    setCalculando(key)
+    try {
+      const preview = await fetchMontoPeriodo(resumen.lavadorId, rangoPeriodo.periodoInicio, rangoPeriodo.periodoFin, tiposVehiculo, combos)
+      setConfirmandoGenerar({
+        comision: { lavadorId: resumen.lavadorId, lavadorNombre: resumen.lavadorNombre, montoPendiente: resumen.montoPendiente, cantidadOrdenes: resumen.cantidadOrdenes },
+        periodicidad: 'semanal',
+        periodoInicio: rangoPeriodo.periodoInicio,
+        periodoFin: rangoPeriodo.periodoFin,
+        preview,
+        rangoLabel: rangoPeriodo.label,
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo calcular el monto del periodo')
+    } finally {
+      setCalculando(null)
+    }
+  }
+
+  async function handleGenerarDesdeReporteJefeZona(resumen: ResumenPeriodoJefeZona) {
+    setError(null)
+    const key = `${resumen.responsable}:reporte`
+    setCalculandoJefeZona(key)
+    try {
+      const preview = await fetchMontoPeriodoJefeZona(resumen.responsable, rangoPeriodo.periodoInicio, rangoPeriodo.periodoFin)
+      setConfirmandoGenerarJefeZona({
+        comision: { responsable: resumen.responsable, montoPendiente: resumen.montoPendiente, cantidadOrdenes: resumen.cantidadOrdenes },
+        periodicidad: 'semanal',
+        periodoInicio: rangoPeriodo.periodoInicio,
+        periodoFin: rangoPeriodo.periodoFin,
+        preview,
+        rangoLabel: rangoPeriodo.label,
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo calcular el monto del periodo')
+    } finally {
+      setCalculandoJefeZona(null)
+    }
+  }
 
   const lavadoresPorId = new Map(lavadores.map((l) => [l.id, l] as const))
 
@@ -200,6 +321,7 @@ function LiquidacionesPage() {
     try {
       const liquidacion = await generarLiquidacion(comision.lavadorId, periodoInicio, periodoFin)
       await refresh()
+      await refreshResumen()
       await abrirColilla(liquidacion, comision.lavadorNombre)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo generar la liquidación')
@@ -249,6 +371,7 @@ function LiquidacionesPage() {
     try {
       const liquidacion = await generarLiquidacionJefeZona(comision.responsable, periodoInicio, periodoFin)
       await refresh()
+      await refreshResumen()
       setColillaJefeZona({
         responsable: comision.responsable,
         periodoInicio: liquidacion.periodoInicio,
@@ -315,7 +438,7 @@ function LiquidacionesPage() {
           <button
             key={value}
             type="button"
-            onClick={() => setSujeto(value)}
+            onClick={() => cambiarSujeto(value)}
             className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left transition-colors ${
               sujeto === value
                 ? 'border-primary-600 bg-primary-50'
@@ -344,6 +467,104 @@ function LiquidacionesPage() {
       {error ? (
         <p className="rounded-lg bg-danger-50 px-4 py-3 text-sm text-danger-700">{error}</p>
       ) : null}
+
+      <section className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-neutral-900">Reporte por periodo</h3>
+          <PeriodoSelector modo={modoPeriodo} onModoChange={cambiarModoPeriodo} ancla={anclaPeriodo} onAnclaChange={cambiarAnclaPeriodo} rango={rangoPeriodo} />
+        </div>
+        <p className="-mt-1 text-xs text-neutral-500">
+          Navega cualquier día, semana o mes — no solo "hoy" o "últimos 7 días". Muestra lo generado en ese rango
+          (liquidado o no) junto con lo ya liquidado que cae ahí, para comparar.
+        </p>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <StatCard
+            label={`Generado en ${rangoPeriodo.label}`}
+            value={COP.format(
+              sujeto === 'lavadores'
+                ? resumenLavadores.reduce((s, r) => s + r.montoTotal, 0)
+                : resumenJefeZona.reduce((s, r) => s + r.montoTotal, 0),
+            )}
+            hint={cargandoResumen ? 'Calculando…' : undefined}
+            icon={Wallet}
+          />
+          <StatCard
+            label={`Ya liquidado en ${rangoPeriodo.label}`}
+            value={COP.format(sujeto === 'lavadores' ? totalLiquidadoEnPeriodo : totalLiquidadoJefeZonaEnPeriodo)}
+            hint={`${sujeto === 'lavadores' ? historicoEnPeriodo.length : historicoJefeZonaEnPeriodo.length} liquidación(es) en este rango`}
+            icon={CheckCircle2}
+          />
+        </div>
+
+        <Card className="p-0">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
+                <th className="px-5 py-3">{sujeto === 'lavadores' ? 'Lavador' : 'Responsable'}</th>
+                <th className="px-5 py-3">Órdenes</th>
+                <th className="px-5 py-3">Generado</th>
+                <th className="px-5 py-3">Pendiente</th>
+                <th className="px-5 py-3 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sujeto === 'lavadores'
+                ? resumenLavadores.map((r) => (
+                    <tr key={r.lavadorId} className="border-b border-neutral-100 last:border-0">
+                      <td className="px-5 py-3 font-medium text-neutral-900">{r.lavadorNombre}</td>
+                      <td className="px-5 py-3 text-neutral-600">{r.cantidadOrdenes}</td>
+                      <td className="px-5 py-3 text-neutral-700">{COP.format(r.montoTotal)}</td>
+                      <td className="px-5 py-3 text-neutral-700">{COP.format(r.montoPendiente)}</td>
+                      <td className="px-5 py-3 text-right">
+                        {r.montoPendiente > 0 ? (
+                          <button
+                            type="button"
+                            disabled={calculando === `${r.lavadorId}:reporte` || generando === r.lavadorId}
+                            onClick={() => handleGenerarDesdeReporte(r)}
+                            className="rounded-lg px-3 py-1.5 text-xs font-medium text-primary-700 transition-colors hover:bg-primary-100 disabled:opacity-50"
+                          >
+                            {calculando === `${r.lavadorId}:reporte` ? 'Calculando…' : 'Generar de este periodo'}
+                          </button>
+                        ) : (
+                          <span className="text-xs text-neutral-400">Al día</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                : resumenJefeZona.map((r) => (
+                    <tr key={r.responsable} className="border-b border-neutral-100 last:border-0">
+                      <td className="px-5 py-3 font-medium text-neutral-900">{r.responsable}</td>
+                      <td className="px-5 py-3 text-neutral-600">{r.cantidadOrdenes}</td>
+                      <td className="px-5 py-3 text-neutral-700">{COP.format(r.montoTotal)}</td>
+                      <td className="px-5 py-3 text-neutral-700">{COP.format(r.montoPendiente)}</td>
+                      <td className="px-5 py-3 text-right">
+                        {r.montoPendiente > 0 ? (
+                          <button
+                            type="button"
+                            disabled={calculandoJefeZona === `${r.responsable}:reporte` || generandoJefeZona === r.responsable}
+                            onClick={() => handleGenerarDesdeReporteJefeZona(r)}
+                            className="rounded-lg px-3 py-1.5 text-xs font-medium text-primary-700 transition-colors hover:bg-primary-100 disabled:opacity-50"
+                          >
+                            {calculandoJefeZona === `${r.responsable}:reporte` ? 'Calculando…' : 'Generar de este periodo'}
+                          </button>
+                        ) : (
+                          <span className="text-xs text-neutral-400">Al día</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+              {(sujeto === 'lavadores' ? resumenLavadores.length : resumenJefeZona.length) === 0 ? (
+                <tr>
+                  <td className="px-5 py-6 text-center text-neutral-400" colSpan={5}>
+                    {cargandoResumen ? 'Cargando…' : `Nada generado en ${rangoPeriodo.label}.`}
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </Card>
+      </section>
 
       {sujeto === 'lavadores' ? (
         <>
@@ -569,9 +790,13 @@ function LiquidacionesPage() {
 
       {confirmandoGenerar ? (
         <ConfirmModal
-          title={`Generar liquidación ${confirmandoGenerar.periodicidad}`}
+          title={confirmandoGenerar.rangoLabel ? `Generar liquidación — ${confirmandoGenerar.rangoLabel}` : `Generar liquidación ${confirmandoGenerar.periodicidad}`}
           message={`¿Generar la liquidación ${
-            confirmandoGenerar.periodicidad === 'diaria' ? 'de hoy' : 'de los últimos 7 días'
+            confirmandoGenerar.rangoLabel
+              ? `de ${confirmandoGenerar.rangoLabel}`
+              : confirmandoGenerar.periodicidad === 'diaria'
+                ? 'de hoy'
+                : 'de los últimos 7 días'
           } (${confirmandoGenerar.periodoInicio} → ${confirmandoGenerar.periodoFin}) para ${
             confirmandoGenerar.comision.lavadorNombre
           } por ${COP.format(confirmandoGenerar.preview.monto)}? Carros: ${
@@ -604,9 +829,13 @@ function LiquidacionesPage() {
 
       {confirmandoGenerarJefeZona ? (
         <ConfirmModal
-          title={`Generar liquidación ${confirmandoGenerarJefeZona.periodicidad}`}
+          title={confirmandoGenerarJefeZona.rangoLabel ? `Generar liquidación — ${confirmandoGenerarJefeZona.rangoLabel}` : `Generar liquidación ${confirmandoGenerarJefeZona.periodicidad}`}
           message={`¿Generar la liquidación ${
-            confirmandoGenerarJefeZona.periodicidad === 'diaria' ? 'de hoy' : 'de los últimos 7 días'
+            confirmandoGenerarJefeZona.rangoLabel
+              ? `de ${confirmandoGenerarJefeZona.rangoLabel}`
+              : confirmandoGenerarJefeZona.periodicidad === 'diaria'
+                ? 'de hoy'
+                : 'de los últimos 7 días'
           } (${confirmandoGenerarJefeZona.periodoInicio} → ${confirmandoGenerarJefeZona.periodoFin}) para ${
             confirmandoGenerarJefeZona.comision.responsable
           } por ${COP.format(confirmandoGenerarJefeZona.preview.monto)} (${

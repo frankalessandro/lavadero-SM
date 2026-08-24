@@ -1,6 +1,11 @@
 import { z } from 'zod'
 
-export const metodoPagoSchema = z.enum(['efectivo', 'transferencia'])
+// 'datafono' = pago con tarjeta en el POS físico del datáfono — distinto de 'transferencia'
+// (Nequi/Bancolombia app a app) aunque los dos requieren referencia y ninguno es efectivo físico
+// para el arqueo (ver calcularValorEsperado en src/data/turnos.ts). Cuánto de lo cobrado por
+// datáfono llega neto a la cuenta (descuento de la pasarela) es una configuración pendiente,
+// todavía no modelada — por ahora se registra el monto bruto cobrado, igual que transferencia.
+export const metodoPagoSchema = z.enum(['efectivo', 'transferencia', 'datafono'])
 export const estadoOrdenSchema = z.enum(['en_proceso', 'listo', 'entregado', 'anulada'])
 
 // Postgres devuelve `null` (no `undefined`) en las columnas nullable sin valor —
@@ -160,8 +165,8 @@ export const cobroInputSchema = z
     metodoPago: metodoPagoSchema,
     referenciaPago: z.string().trim().optional(),
   })
-  .refine((data) => data.metodoPago !== 'transferencia' || !!data.referenciaPago, {
-    message: 'La referencia es obligatoria en pagos por transferencia',
+  .refine((data) => (data.metodoPago !== 'transferencia' && data.metodoPago !== 'datafono') || !!data.referenciaPago, {
+    message: 'La referencia es obligatoria en pagos por transferencia o datáfono',
     path: ['referenciaPago'],
   })
 

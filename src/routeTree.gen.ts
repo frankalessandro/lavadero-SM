@@ -34,6 +34,7 @@ import { Route as JefeZonaAsistenciaIndexRouteImport } from './routes/jefe-zona/
 import { Route as JefeZonaCajaIndexRouteImport } from './routes/jefe-zona/caja/index'
 import { Route as JefeZonaInventarioIndexRouteImport } from './routes/jefe-zona/inventario/index'
 import { Route as JefeZonaLiquidacionesIndexRouteImport } from './routes/jefe-zona/liquidaciones/index'
+import { Route as JefeZonaVentasIndexRouteImport } from './routes/jefe-zona/ventas/index'
 import { Route as AdminCatalogoCombosIndexRouteImport } from './routes/admin/catalogo/combos/index'
 import { Route as AdminCatalogoParqueaderoIndexRouteImport } from './routes/admin/catalogo/parqueadero/index'
 import { Route as AdminCatalogoServiciosIndexRouteImport } from './routes/admin/catalogo/servicios/index'
@@ -173,6 +174,11 @@ const JefeZonaLiquidacionesIndexRoute =
     path: '/liquidaciones/',
     getParentRoute: () => JefeZonaRouteRoute,
   } as any)
+const JefeZonaVentasIndexRoute = JefeZonaVentasIndexRouteImport.update({
+  id: '/ventas/',
+  path: '/ventas/',
+  getParentRoute: () => JefeZonaRouteRoute,
+} as any)
 const AdminCatalogoCombosIndexRoute =
   AdminCatalogoCombosIndexRouteImport.update({
     id: '/combos/',
@@ -271,6 +277,7 @@ export interface FileRoutesByFullPath {
   '/jefe-zona/caja/': typeof JefeZonaCajaIndexRoute
   '/jefe-zona/inventario/': typeof JefeZonaInventarioIndexRoute
   '/jefe-zona/liquidaciones/': typeof JefeZonaLiquidacionesIndexRoute
+  '/jefe-zona/ventas/': typeof JefeZonaVentasIndexRoute
   '/admin/catalogo/combos/': typeof AdminCatalogoCombosIndexRoute
   '/admin/catalogo/parqueadero/': typeof AdminCatalogoParqueaderoIndexRoute
   '/admin/catalogo/servicios/': typeof AdminCatalogoServiciosIndexRoute
@@ -302,6 +309,7 @@ export interface FileRoutesByTo {
   '/jefe-zona/caja': typeof JefeZonaCajaIndexRoute
   '/jefe-zona/inventario': typeof JefeZonaInventarioIndexRoute
   '/jefe-zona/liquidaciones': typeof JefeZonaLiquidacionesIndexRoute
+  '/jefe-zona/ventas': typeof JefeZonaVentasIndexRoute
   '/admin/catalogo/combos': typeof AdminCatalogoCombosIndexRoute
   '/admin/catalogo/parqueadero': typeof AdminCatalogoParqueaderoIndexRoute
   '/admin/catalogo/servicios': typeof AdminCatalogoServiciosIndexRoute
@@ -342,6 +350,7 @@ export interface FileRoutesById {
   '/jefe-zona/caja/': typeof JefeZonaCajaIndexRoute
   '/jefe-zona/inventario/': typeof JefeZonaInventarioIndexRoute
   '/jefe-zona/liquidaciones/': typeof JefeZonaLiquidacionesIndexRoute
+  '/jefe-zona/ventas/': typeof JefeZonaVentasIndexRoute
   '/admin/catalogo/combos/': typeof AdminCatalogoCombosIndexRoute
   '/admin/catalogo/parqueadero/': typeof AdminCatalogoParqueaderoIndexRoute
   '/admin/catalogo/servicios/': typeof AdminCatalogoServiciosIndexRoute
@@ -383,6 +392,7 @@ export interface FileRouteTypes {
     | '/jefe-zona/caja/'
     | '/jefe-zona/inventario/'
     | '/jefe-zona/liquidaciones/'
+    | '/jefe-zona/ventas/'
     | '/admin/catalogo/combos/'
     | '/admin/catalogo/parqueadero/'
     | '/admin/catalogo/servicios/'
@@ -414,6 +424,7 @@ export interface FileRouteTypes {
     | '/jefe-zona/caja'
     | '/jefe-zona/inventario'
     | '/jefe-zona/liquidaciones'
+    | '/jefe-zona/ventas'
     | '/admin/catalogo/combos'
     | '/admin/catalogo/parqueadero'
     | '/admin/catalogo/servicios'
@@ -453,6 +464,7 @@ export interface FileRouteTypes {
     | '/jefe-zona/caja/'
     | '/jefe-zona/inventario/'
     | '/jefe-zona/liquidaciones/'
+    | '/jefe-zona/ventas/'
     | '/admin/catalogo/combos/'
     | '/admin/catalogo/parqueadero/'
     | '/admin/catalogo/servicios/'
@@ -655,6 +667,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof JefeZonaLiquidacionesIndexRouteImport
       parentRoute: typeof JefeZonaRouteRoute
     }
+    '/jefe-zona/ventas/': {
+      id: '/jefe-zona/ventas/'
+      path: '/ventas'
+      fullPath: '/jefe-zona/ventas/'
+      preLoaderRoute: typeof JefeZonaVentasIndexRouteImport
+      parentRoute: typeof JefeZonaRouteRoute
+    }
     '/admin/catalogo/combos/': {
       id: '/admin/catalogo/combos/'
       path: '/combos'
@@ -838,6 +857,7 @@ interface JefeZonaRouteRouteChildren {
   JefeZonaCajaIndexRoute: typeof JefeZonaCajaIndexRoute
   JefeZonaInventarioIndexRoute: typeof JefeZonaInventarioIndexRoute
   JefeZonaLiquidacionesIndexRoute: typeof JefeZonaLiquidacionesIndexRoute
+  JefeZonaVentasIndexRoute: typeof JefeZonaVentasIndexRoute
 }
 
 const JefeZonaRouteRouteChildren: JefeZonaRouteRouteChildren = {
@@ -846,6 +866,7 @@ const JefeZonaRouteRouteChildren: JefeZonaRouteRouteChildren = {
   JefeZonaCajaIndexRoute: JefeZonaCajaIndexRoute,
   JefeZonaInventarioIndexRoute: JefeZonaInventarioIndexRoute,
   JefeZonaLiquidacionesIndexRoute: JefeZonaLiquidacionesIndexRoute,
+  JefeZonaVentasIndexRoute: JefeZonaVentasIndexRoute,
 }
 
 const JefeZonaRouteRouteWithChildren = JefeZonaRouteRoute._addFileChildren(

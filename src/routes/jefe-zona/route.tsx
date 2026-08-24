@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { createFileRoute, Outlet, redirect } from '@tanstack/react-router'
-import { LayoutDashboard, ClipboardList, Wallet, Boxes, CalendarCheck, Coins } from 'lucide-react'
+import { LayoutDashboard, Wallet, ShoppingCart, Boxes, Coins, CalendarCheck } from 'lucide-react'
 import { Sidebar, type NavItem } from '../../components/layout/Sidebar'
 import { Topbar } from '../../components/layout/Topbar'
 import { MobileTabBar } from '../../components/layout/MobileTabBar'
@@ -23,13 +23,19 @@ export const Route = createFileRoute('/jefe-zona')({
   component: JefeZonaLayout,
 })
 
+// "Recepción" no tiene ítem propio a propósito — el Dashboard (= Seguimiento, ver más abajo) ya
+// abre con un banner "Abrir recepción" imposible de no ver, así que un ítem de nav aparte solo
+// duplicaba exactamente ese mismo enlace. "Ventas" e "Inventario" se separaron (antes un solo
+// ítem "Inventario" con pestañas) porque son tareas de ritmo distinto: vender es una acción de
+// caja frecuente, inventario es control de stock ocasional — meterlas bajo un nombre genérico
+// escondía la venta detrás de una pestaña con nombre que no la mencionaba.
 const NAV_ITEMS: NavItem[] = [
   { to: '/jefe-zona', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/recepcion', label: 'Recepción', icon: ClipboardList },
   { to: '/jefe-zona/caja', label: 'Caja', icon: Wallet },
+  { to: '/jefe-zona/ventas', label: 'Ventas', icon: ShoppingCart },
+  { to: '/jefe-zona/inventario', label: 'Inventario', icon: Boxes },
   { to: '/jefe-zona/liquidaciones', label: 'Liquidaciones', icon: Coins },
   { to: '/jefe-zona/asistencia', label: 'Asistencia', icon: CalendarCheck },
-  { to: '/jefe-zona/inventario', label: 'Inventario', icon: Boxes },
 ]
 
 function JefeZonaLayout() {

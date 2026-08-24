@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 export const modalidadParqueaderoSchema = z.enum(['noche', 'mensualidad', 'fijo'])
-export const metodoPagoParqueaderoSchema = z.enum(['efectivo', 'transferencia'])
+export const metodoPagoParqueaderoSchema = z.enum(['efectivo', 'transferencia', 'datafono'])
 
 // Postgres devuelve `null` (no `undefined`) en las columnas nullable sin valor —
 // `.nullish()` + transform normaliza ambos a `undefined` para el resto de la app.
@@ -30,5 +30,6 @@ export const entradaInputSchema = z.object({
 })
 
 export type ModalidadParqueadero = z.infer<typeof modalidadParqueaderoSchema>
+export type MetodoPagoParqueadero = z.infer<typeof metodoPagoParqueaderoSchema>
 export type EstanciaParqueadero = z.infer<typeof estanciaParqueaderoSchema>
 export type EntradaInput = z.infer<typeof entradaInputSchema>
