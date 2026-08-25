@@ -6,7 +6,7 @@ import { fetchResumenHoy } from '../../data/estanciasParqueadero'
 import { fetchGastos, fetchTotalGastosPorCategoria } from '../../data/gastos'
 import { fetchComisionesPendientes } from '../../data/liquidaciones'
 import { fetchComisionesPendientesJefeZona } from '../../data/liquidacionesJefeZona'
-import { fetchVentasHoy } from '../../data/ventas'
+import { fetchVentasHoy, fetchCostoMercanciaVendida } from '../../data/ventas'
 import type { MetodoPago } from '../../schemas/orden'
 import { StatCard } from '../../components/layout/StatCard'
 import { Card } from '../../components/layout/Card'
@@ -39,6 +39,11 @@ async function loadDashboard() {
     fetchComisionesPendientesJefeZona(),
     fetchVentasHoy(),
   ])
+  // Depende de las ventas activas del día, así que no puede ir en el Promise.all de arriba: el
+  // costo se busca por los ids de esas ventas (una sola query, no una por venta).
+  const costoMercancia = await fetchCostoMercanciaVendida(
+    ventasHoy.filter((v) => v.estado === 'activa').map((v) => v.id),
+  )
   return {
     ordenesHoy,
     entregadasHoy,
@@ -49,6 +54,7 @@ async function loadDashboard() {
     comisionesPendientes,
     comisionesPendientesJefeZona,
     ventasHoy,
+    costoMercancia,
   }
 }
 
@@ -70,6 +76,7 @@ function AdminDashboard() {
     comisionesPendientes,
     comisionesPendientesJefeZona,
     ventasHoy,
+    costoMercancia,
   } = Route.useLoaderData()
   const lavadoresActivos = lavadores.filter((l) => l.activo).length
   const anuladasHoy = ordenesHoy.filter((o) => o.estado === 'anulada')
@@ -101,7 +108,7 @@ function AdminDashboard() {
   const totalGastosHoy = gastosHoy.reduce((total, g) => total + g.monto, 0)
   const comisionesHoy = entregadasHoy.reduce((total, o) => total + o.comisionLavador, 0)
   const comisionesJefeZonaHoy = entregadasHoy.reduce((total, o) => total + o.comisionJefeZona, 0)
-  const utilidadNetaHoy = ingresosTotales - comisionesHoy - comisionesJefeZonaHoy - totalGastosHoy
+  const utilidadNetaHoy = ingresosTotales - comisionesHoy - comisionesJefeZonaHoy - costoMercancia.costo - totalGastosHoy
   const totalComisionesPendientes = comisionesPendientes.reduce((total, c) => total + c.montoPendiente, 0)
   const totalComisionesPendientesJefeZona = comisionesPendientesJefeZona.reduce((total, c) => total + c.montoPendiente, 0)
 
@@ -225,6 +232,10 @@ function AdminDashboard() {
                 <dd className="font-medium text-danger-600">{COP.format(comisionesJefeZonaHoy)}</dd>
               </div>
               <div className="flex items-center justify-between">
+                <dt className="text-neutral-500">− Costo de los productos vendidos</dt>
+                <dd className="font-medium text-danger-600">{COP.format(costoMercancia.costo)}</dd>
+              </div>
+              <div className="flex items-center justify-between">
                 <dt className="text-neutral-500">− Gastos del día</dt>
                 <dd className="font-medium text-danger-600">{COP.format(totalGastosHoy)}</dd>
               </div>
@@ -237,8 +248,20 @@ function AdminDashboard() {
               </div>
             </dl>
             <p className="mt-3 text-xs text-neutral-400">
-              Incluye las ventas de productos como ingreso, pero todavía no resta su costo de mercancía. Tampoco
-              descuenta el consumo de insumos de lavado ni refleja el arqueo real de caja.
+              El costo de los productos vendidos usa el costo promedio ponderado de las entradas al momento de cada
+              venta. Todavía no descuenta el consumo de insumos de lavado ni refleja el arqueo real de caja.
+              {costoMercancia.ventasSinCosto > 0 ? (
+                <>
+                  {' '}
+                  <span className="text-warning-600">
+                    {costoMercancia.ventasSinCosto === 1
+                      ? '1 venta de hoy no tiene costo registrado'
+                      : `${costoMercancia.ventasSinCosto} ventas de hoy no tienen costo registrado`}{' '}
+                    (su producto nunca tuvo una entrada con costo capturado), así que la utilidad sale algo más
+                    alta de lo real.
+                  </span>
+                </>
+              ) : null}
             </p>
           </Card>
         </div>
