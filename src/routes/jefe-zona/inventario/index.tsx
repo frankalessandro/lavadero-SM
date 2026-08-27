@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { Package, Droplet, AlertTriangle, PackageSearch } from 'lucide-react'
+import { Package, Droplet, AlertTriangle, PackageSearch, ShoppingBag } from 'lucide-react'
 import { fetchTurnoAbierto } from '../../../data/turnos'
 import { fetchProductos } from '../../../data/productos'
 import {
@@ -28,6 +28,8 @@ export const Route = createFileRoute('/jefe-zona/inventario/')({
   loader: loadStock,
   component: StockPage,
 })
+
+const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 
 const TIPO_LABEL: Record<TipoMovimientoInventario, string> = {
   entrada: 'Entrada',
@@ -99,7 +101,10 @@ function StockPage() {
 
       <StockTable
         titulo="Insumos de lavado"
+        subtitulo="Uso interno — no se venden"
         icono={Droplet}
+        accento="border-t-primary-500"
+        badgeClass="bg-primary-50 text-primary-700"
         productos={insumos}
         stockPorProducto={stockPorProducto}
         vacio="No hay insumos registrados en Admin › Dinero › Inventario y ventas."
@@ -107,9 +112,13 @@ function StockPage() {
 
       <StockTable
         titulo="Productos para vender"
-        icono={Package}
+        subtitulo="Nevera / mostrador"
+        icono={ShoppingBag}
+        accento="border-t-warning-500"
+        badgeClass="bg-warning-50 text-warning-700"
         productos={vendibles}
         stockPorProducto={stockPorProducto}
+        mostrarPrecio
         vacio="No hay productos de nevera registrados en Admin › Dinero › Inventario y ventas."
       />
 
@@ -147,24 +156,35 @@ function StockPage() {
 
 function StockTable({
   titulo,
+  subtitulo,
   icono: Icono,
+  accento,
+  badgeClass,
   productos,
   stockPorProducto,
+  mostrarPrecio = false,
   vacio,
 }: {
   titulo: string
+  subtitulo: string
   icono: typeof Package
+  accento: string
+  badgeClass: string
   productos: Producto[]
   stockPorProducto: Map<string, number>
+  mostrarPrecio?: boolean
   vacio: string
 }) {
   return (
-    <Card className="p-0">
-      <div className="border-b border-neutral-100 px-5 py-4">
-        <h3 className="flex items-center gap-1.5 text-sm font-semibold text-neutral-900">
-          <Icono size={15} className="text-primary-500" />
-          {titulo}
-        </h3>
+    <Card className={`overflow-hidden border-t-4 p-0 ${accento}`}>
+      <div className="flex items-center gap-3 border-b border-neutral-100 px-5 py-4">
+        <span className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${badgeClass}`}>
+          <Icono size={16} />
+        </span>
+        <div>
+          <h3 className="text-sm font-semibold text-neutral-900">{titulo}</h3>
+          <p className="text-xs text-neutral-500">{subtitulo}</p>
+        </div>
       </div>
       <table className="w-full text-sm">
         <thead>
@@ -172,6 +192,7 @@ function StockTable({
             <th className="px-5 py-3">Producto</th>
             <th className="px-5 py-3">Stock</th>
             <th className="px-5 py-3">Mínimo</th>
+            {mostrarPrecio ? <th className="px-5 py-3">Precio</th> : null}
             <th className="px-5 py-3">Estado</th>
           </tr>
         </thead>
@@ -187,6 +208,11 @@ function StockTable({
                 </td>
                 <td className={`px-5 py-3 font-medium ${bajoMin ? 'text-danger-600' : 'text-neutral-900'}`}>{stockActual}</td>
                 <td className="px-5 py-3 text-neutral-500">{producto.stockMinimo}</td>
+                {mostrarPrecio ? (
+                  <td className="px-5 py-3 text-neutral-700">
+                    {producto.precioVenta != null ? COP.format(producto.precioVenta) : '—'}
+                  </td>
+                ) : null}
                 <td className="px-5 py-3">
                   {bajoMin ? (
                     <span className="inline-flex items-center gap-1 rounded-full bg-danger-50 px-2.5 py-1 text-xs font-medium text-danger-700">
@@ -201,7 +227,7 @@ function StockTable({
           })}
           {productos.length === 0 ? (
             <tr>
-              <td className="px-5 py-6 text-center text-neutral-400" colSpan={4}>
+              <td className="px-5 py-6 text-center text-neutral-400" colSpan={mostrarPrecio ? 5 : 4}>
                 {vacio}
               </td>
             </tr>

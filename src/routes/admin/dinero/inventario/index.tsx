@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { Plus, X, Pencil, AlertTriangle, Boxes, PackageSearch, Coins, ShoppingCart } from 'lucide-react'
+import { Plus, X, Pencil, AlertTriangle, Boxes, PackageSearch, Coins, ShoppingCart, Droplet, ShoppingBag } from 'lucide-react'
 import {
   fetchProductos,
   createProducto,
@@ -104,13 +104,18 @@ function InventarioPage() {
   const productosActivos = productos.filter((p) => p.activo)
   const bajoMinimo = productosActivos.filter((p) => (stockPorProducto.get(p.id)?.stock ?? 0) < p.stockMinimo)
   const valorizacionTotal = stock.reduce((total, s) => total + s.valorizacion, 0)
+  // Mismo criterio que /jefe-zona/inventario: sin precio_venta = insumo de uso interno (jabón,
+  // cera), con precio_venta = producto de nevera para vender. Incluye inactivos (igual que la
+  // tabla única de antes) para no perder visibilidad de productos recién inactivados.
+  const productosInsumos = productos.filter((p) => p.precioVenta == null)
+  const productosVendibles = productos.filter((p) => p.precioVenta != null)
 
   return (
     <div className="flex flex-col gap-6 text-left">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-base font-semibold text-neutral-900">Inventario</h2>
-          <p className="text-sm text-neutral-500">Productos e insumos, movimientos manuales y valorización.</p>
+          <p className="text-sm text-neutral-500">Insumos de lavado y productos de nevera, movimientos manuales y valorización.</p>
         </div>
         <button
           type="button"
@@ -152,91 +157,38 @@ function InventarioPage() {
         </Card>
       ) : null}
 
-      <Card className="p-0">
-        <div className="border-b border-neutral-100 px-5 py-4">
-          <h3 className="text-sm font-semibold text-neutral-900">Stock actual</h3>
-        </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
-              <th className="px-5 py-3">Producto</th>
-              <th className="px-5 py-3">Stock</th>
-              <th className="px-5 py-3">Mínimo</th>
-              <th className="px-5 py-3">Costo prom.</th>
-              <th className="px-5 py-3">Valorización</th>
-              <th className="px-5 py-3">Estado</th>
-              <th className="px-5 py-3 text-right">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {productos.map((producto) => {
-              const s = stockPorProducto.get(producto.id)
-              const stockActual = s?.stock ?? 0
-              const bajoMin = stockActual < producto.stockMinimo
-              return (
-                <tr key={producto.id} className="border-b border-neutral-100 transition-colors last:border-0 hover:bg-primary-50/40">
-                  <td className="px-5 py-3">
-                    <p className="font-medium text-neutral-900">{producto.nombre}</p>
-                    <p className="text-xs text-neutral-400">{producto.unidadMedida}</p>
-                  </td>
-                  <td className="px-5 py-3">
-                    <span className={`font-medium ${bajoMin ? 'text-danger-600' : 'text-neutral-900'}`}>
-                      {stockActual}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3 text-neutral-500">{producto.stockMinimo}</td>
-                  <td className="px-5 py-3 text-neutral-700">{COP.format(Math.round(s?.costoPromedio ?? 0))}</td>
-                  <td className="px-5 py-3 text-neutral-700">{COP.format(s?.valorizacion ?? 0)}</td>
-                  <td className="px-5 py-3">
-                    {bajoMin ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-danger-50 px-2.5 py-1 text-xs font-medium text-danger-700">
-                        <AlertTriangle size={11} /> Stock bajo
-                      </span>
-                    ) : (
-                      <span
-                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
-                          producto.activo ? 'bg-success-50 text-success-700' : 'bg-neutral-100 text-neutral-500'
-                        }`}
-                      >
-                        {producto.activo ? 'Activo' : 'Inactivo'}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-5 py-3">
-                    <div className="flex justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditing(producto)
-                          setFormOpen(true)
-                        }}
-                        className="flex size-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-primary-100 hover:text-primary-700"
-                        aria-label={`Editar ${producto.nombre}`}
-                      >
-                        <Pencil size={15} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setConfirmando(producto)}
-                        className="rounded-lg px-3 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-primary-100 hover:text-primary-700"
-                      >
-                        {producto.activo ? 'Inactivar' : 'Activar'}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-            {productos.length === 0 ? (
-              <tr>
-                <td className="px-5 py-6 text-center text-neutral-400" colSpan={7}>
-                  No hay productos registrados.
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </Card>
+      <StockTable
+        titulo="Insumos de lavado"
+        subtitulo="Uso interno — no se venden"
+        icono={Droplet}
+        accento="border-t-primary-500"
+        badgeClass="bg-primary-50 text-primary-700"
+        productos={productosInsumos}
+        stockPorProducto={stockPorProducto}
+        onEditar={(p) => {
+          setEditing(p)
+          setFormOpen(true)
+        }}
+        onToggleActivo={setConfirmando}
+        vacio="No hay insumos registrados. Usa «Nuevo producto» sin precio de venta."
+      />
+
+      <StockTable
+        titulo="Productos para vender"
+        subtitulo="Nevera / mostrador"
+        icono={ShoppingBag}
+        accento="border-t-warning-500"
+        badgeClass="bg-warning-50 text-warning-700"
+        productos={productosVendibles}
+        stockPorProducto={stockPorProducto}
+        mostrarPrecio
+        onEditar={(p) => {
+          setEditing(p)
+          setFormOpen(true)
+        }}
+        onToggleActivo={setConfirmando}
+        vacio="No hay productos de nevera registrados. Usa «Nuevo producto» con precio de venta."
+      />
 
       <Card className="p-0">
         <div className="border-b border-neutral-100 px-5 py-4">
@@ -364,6 +316,127 @@ function InventarioPage() {
         />
       ) : null}
     </div>
+  )
+}
+
+function StockTable({
+  titulo,
+  subtitulo,
+  icono: Icono,
+  accento,
+  badgeClass,
+  productos,
+  stockPorProducto,
+  mostrarPrecio = false,
+  onEditar,
+  onToggleActivo,
+  vacio,
+}: {
+  titulo: string
+  subtitulo: string
+  icono: typeof Boxes
+  accento: string
+  badgeClass: string
+  productos: Producto[]
+  stockPorProducto: Map<string, StockProducto>
+  mostrarPrecio?: boolean
+  onEditar: (producto: Producto) => void
+  onToggleActivo: (producto: Producto) => void
+  vacio: string
+}) {
+  return (
+    <Card className={`overflow-hidden border-t-4 p-0 ${accento}`}>
+      <div className="flex items-center gap-3 border-b border-neutral-100 px-5 py-4">
+        <span className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${badgeClass}`}>
+          <Icono size={16} />
+        </span>
+        <div>
+          <h3 className="text-sm font-semibold text-neutral-900">{titulo}</h3>
+          <p className="text-xs text-neutral-500">{subtitulo}</p>
+        </div>
+      </div>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
+            <th className="px-5 py-3">Producto</th>
+            <th className="px-5 py-3">Stock</th>
+            <th className="px-5 py-3">Mínimo</th>
+            <th className="px-5 py-3">Costo prom.</th>
+            <th className="px-5 py-3">Valorización</th>
+            {mostrarPrecio ? <th className="px-5 py-3">Precio venta</th> : null}
+            <th className="px-5 py-3">Estado</th>
+            <th className="px-5 py-3 text-right">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {productos.map((producto) => {
+            const s = stockPorProducto.get(producto.id)
+            const stockActual = s?.stock ?? 0
+            const bajoMin = stockActual < producto.stockMinimo
+            return (
+              <tr key={producto.id} className="border-b border-neutral-100 transition-colors last:border-0 hover:bg-primary-50/40">
+                <td className="px-5 py-3">
+                  <p className="font-medium text-neutral-900">{producto.nombre}</p>
+                  <p className="text-xs text-neutral-400">{producto.unidadMedida}</p>
+                </td>
+                <td className="px-5 py-3">
+                  <span className={`font-medium ${bajoMin ? 'text-danger-600' : 'text-neutral-900'}`}>{stockActual}</span>
+                </td>
+                <td className="px-5 py-3 text-neutral-500">{producto.stockMinimo}</td>
+                <td className="px-5 py-3 text-neutral-700">{COP.format(Math.round(s?.costoPromedio ?? 0))}</td>
+                <td className="px-5 py-3 text-neutral-700">{COP.format(s?.valorizacion ?? 0)}</td>
+                {mostrarPrecio ? (
+                  <td className="px-5 py-3 text-neutral-700">
+                    {producto.precioVenta != null ? COP.format(producto.precioVenta) : '—'}
+                  </td>
+                ) : null}
+                <td className="px-5 py-3">
+                  {bajoMin ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-danger-50 px-2.5 py-1 text-xs font-medium text-danger-700">
+                      <AlertTriangle size={11} /> Stock bajo
+                    </span>
+                  ) : (
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
+                        producto.activo ? 'bg-success-50 text-success-700' : 'bg-neutral-100 text-neutral-500'
+                      }`}
+                    >
+                      {producto.activo ? 'Activo' : 'Inactivo'}
+                    </span>
+                  )}
+                </td>
+                <td className="px-5 py-3">
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onEditar(producto)}
+                      className="flex size-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-primary-100 hover:text-primary-700"
+                      aria-label={`Editar ${producto.nombre}`}
+                    >
+                      <Pencil size={15} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onToggleActivo(producto)}
+                      className="rounded-lg px-3 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-primary-100 hover:text-primary-700"
+                    >
+                      {producto.activo ? 'Inactivar' : 'Activar'}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            )
+          })}
+          {productos.length === 0 ? (
+            <tr>
+              <td className="px-5 py-6 text-center text-neutral-400" colSpan={mostrarPrecio ? 8 : 7}>
+                {vacio}
+              </td>
+            </tr>
+          ) : null}
+        </tbody>
+      </table>
+    </Card>
   )
 }
 
