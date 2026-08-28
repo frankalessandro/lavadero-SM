@@ -249,7 +249,8 @@ function AdminDashboard() {
             </dl>
             <p className="mt-3 text-xs text-neutral-400">
               El costo de los productos vendidos usa el costo promedio ponderado de las entradas al momento de cada
-              venta. Todavía no descuenta el consumo de insumos de lavado ni refleja el arqueo real de caja.
+              venta, o el costo oficial del producto si todavía no tiene entradas con costo. Todavía no descuenta el
+              consumo de insumos de lavado ni refleja el arqueo real de caja.
               {costoMercancia.ventasSinCosto > 0 ? (
                 <>
                   {' '}
@@ -257,8 +258,8 @@ function AdminDashboard() {
                     {costoMercancia.ventasSinCosto === 1
                       ? '1 venta de hoy no tiene costo registrado'
                       : `${costoMercancia.ventasSinCosto} ventas de hoy no tienen costo registrado`}{' '}
-                    (su producto nunca tuvo una entrada con costo capturado), así que la utilidad sale algo más
-                    alta de lo real.
+                    (su producto no tiene costo oficial ni una entrada con costo capturado), así que la utilidad sale
+                    algo más alta de lo real.
                   </span>
                 </>
               ) : null}

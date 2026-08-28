@@ -364,6 +364,7 @@ function StockTable({
             <th className="px-5 py-3">Costo prom.</th>
             <th className="px-5 py-3">Valorización</th>
             {mostrarPrecio ? <th className="px-5 py-3">Precio venta</th> : null}
+            {mostrarPrecio ? <th className="px-5 py-3">Ganancia</th> : null}
             <th className="px-5 py-3">Estado</th>
             <th className="px-5 py-3 text-right">Acciones</th>
           </tr>
@@ -388,6 +389,20 @@ function StockTable({
                 {mostrarPrecio ? (
                   <td className="px-5 py-3 text-neutral-700">
                     {producto.precioVenta != null ? COP.format(producto.precioVenta) : '—'}
+                  </td>
+                ) : null}
+                {mostrarPrecio ? (
+                  <td className="px-5 py-3">
+                    {(() => {
+                      const costoRef = producto.costo ?? (s?.costoPromedio ? Math.round(s.costoPromedio) : null)
+                      if (producto.precioVenta == null || costoRef == null) return <span className="text-neutral-400">—</span>
+                      const ganancia = producto.precioVenta - costoRef
+                      return (
+                        <span className={`font-medium ${ganancia >= 0 ? 'text-success-700' : 'text-danger-600'}`}>
+                          {COP.format(ganancia)}
+                        </span>
+                      )
+                    })()}
                   </td>
                 ) : null}
                 <td className="px-5 py-3">
@@ -429,7 +444,7 @@ function StockTable({
           })}
           {productos.length === 0 ? (
             <tr>
-              <td className="px-5 py-6 text-center text-neutral-400" colSpan={mostrarPrecio ? 8 : 7}>
+              <td className="px-5 py-6 text-center text-neutral-400" colSpan={mostrarPrecio ? 9 : 7}>
                 {vacio}
               </td>
             </tr>
@@ -638,6 +653,7 @@ function ProductoForm({
   const [unidadMedida, setUnidadMedida] = useState(producto?.unidadMedida ?? '')
   const [stockMinimo, setStockMinimo] = useState(String(producto?.stockMinimo ?? 0))
   const [precioVenta, setPrecioVenta] = useState(producto?.precioVenta != null ? String(producto.precioVenta) : '')
+  const [costo, setCosto] = useState(producto?.costo != null ? String(producto.costo) : '')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -648,6 +664,7 @@ function ProductoForm({
       unidadMedida,
       stockMinimo: Number(stockMinimo) || 0,
       precioVenta: precioVenta ? Number(precioVenta) : undefined,
+      costo: costo ? Number(costo) : undefined,
     })
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Datos inválidos')
@@ -717,12 +734,30 @@ function ProductoForm({
             </label>
           </div>
 
-          <label className="flex flex-col gap-1.5 text-left text-sm">
-            <span className="font-medium text-neutral-700">
-              Precio de venta <span className="font-normal text-neutral-400">(opcional — sin este valor no se puede vender en /jefe-zona/inventario)</span>
-            </span>
-            <CurrencyInput size="sm" prefix="$" value={precioVenta} onChange={setPrecioVenta} />
-          </label>
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+            <label className="flex flex-col gap-1.5 text-left text-sm">
+              <span className="font-medium text-neutral-700">
+                Costo <span className="font-normal text-neutral-400">(compra)</span>
+              </span>
+              <CurrencyInput size="sm" prefix="$" value={costo} onChange={setCosto} />
+            </label>
+            <label className="flex flex-col gap-1.5 text-left text-sm">
+              <span className="font-medium text-neutral-700">
+                Precio de venta <span className="font-normal text-neutral-400">(opcional)</span>
+              </span>
+              <CurrencyInput size="sm" prefix="$" value={precioVenta} onChange={setPrecioVenta} />
+            </label>
+          </div>
+          <p className="-mt-2 text-xs text-neutral-400">
+            Sin precio de venta el producto no se puede vender en /jefe-zona. El costo es el precio de compra de
+            referencia — se usa para el margen y para el costo de mercancía vendida mientras no haya una entrada de
+            inventario con costo.
+            {costo && precioVenta ? (
+              <span className="ml-1 font-medium text-success-700">
+                Ganancia: {COP.format(Number(precioVenta) - Number(costo))}
+              </span>
+            ) : null}
+          </p>
 
           {error ? <p className="text-xs text-danger-600">{error}</p> : null}
 

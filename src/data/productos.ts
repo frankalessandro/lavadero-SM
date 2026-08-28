@@ -1,10 +1,25 @@
 import { db } from '../lib/db'
 import { productoInputSchema, productoSchema, type Producto, type ProductoInput } from '../schemas/producto'
 
-const PRODUCTO_SELECT = 'id, nombre, unidadMedida:unidad_medida, stockMinimo:stock_minimo, activo, precioVenta:precio_venta'
+const PRODUCTO_SELECT = 'id, nombre, unidadMedida:unidad_medida, stockMinimo:stock_minimo, activo, precioVenta:precio_venta, costo'
 
+// Sin la columna `costo` — jefe de zona no ve costos (CLAUDE.md §Roles). Es lo que expone la
+// vista productos_operativo (0034).
+const PRODUCTO_OPERATIVO_SELECT = 'id, nombre, unidadMedida:unidad_medida, stockMinimo:stock_minimo, activo, precioVenta:precio_venta'
+
+// Catálogo completo, con `costo` — solo lo llama el panel de admin. RLS deja leer `productos`
+// (tabla base) a admin y a jefe_zona, así que el candado real del costo es que jefe_zona use
+// fetchProductosOperativo() en su lugar, no esta función.
 export async function fetchProductos(): Promise<Producto[]> {
   const { data, error } = await db.from('productos').select(PRODUCTO_SELECT).order('nombre')
+  if (error) throw new Error(error.message)
+  return productoSchema.array().parse(data)
+}
+
+// Igual que fetchProductos pero contra la vista productos_operativo, que no expone `costo`. Lo
+// usan las pantallas de jefe de zona (ventas, inventario) — nada de costos al bundle de ese rol.
+export async function fetchProductosOperativo(): Promise<Producto[]> {
+  const { data, error } = await db.from('productos_operativo').select(PRODUCTO_OPERATIVO_SELECT).order('nombre')
   if (error) throw new Error(error.message)
   return productoSchema.array().parse(data)
 }
@@ -19,6 +34,7 @@ export async function createProducto(input: ProductoInput): Promise<Producto> {
       unidad_medida: parsed.unidadMedida,
       stock_minimo: parsed.stockMinimo,
       precio_venta: parsed.precioVenta ?? null,
+      costo: parsed.costo ?? null,
     })
     .select(PRODUCTO_SELECT)
     .single()
@@ -35,6 +51,7 @@ export async function updateProducto(id: string, input: ProductoInput): Promise<
       unidad_medida: parsed.unidadMedida,
       stock_minimo: parsed.stockMinimo,
       precio_venta: parsed.precioVenta ?? null,
+      costo: parsed.costo ?? null,
     })
     .eq('id', id)
     .select(PRODUCTO_SELECT)

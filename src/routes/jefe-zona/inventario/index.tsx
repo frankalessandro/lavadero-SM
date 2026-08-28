@@ -2,7 +2,7 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { Package, Droplet, AlertTriangle, PackageSearch, ShoppingBag } from 'lucide-react'
 import { fetchTurnoAbierto } from '../../../data/turnos'
-import { fetchProductos } from '../../../data/productos'
+import { fetchProductosOperativo } from '../../../data/productos'
 import {
   fetchStockProductosOperativo,
   fetchMovimientosOperativo,
@@ -17,7 +17,7 @@ import { CustomSelect } from '../../../components/layout/CustomSelect'
 async function loadStock() {
   const [turno, productos, stock, movimientos] = await Promise.all([
     fetchTurnoAbierto('jefe_zona'),
-    fetchProductos(),
+    fetchProductosOperativo(),
     fetchStockProductosOperativo(),
     fetchMovimientosOperativo(),
   ])
