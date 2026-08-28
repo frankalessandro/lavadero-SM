@@ -2,7 +2,7 @@ import { db } from '../lib/db'
 import { anularVentaInputSchema, ventaInputSchema, ventaSchema, type AnularVentaInput, type Venta, type VentaInput } from '../schemas/venta'
 
 const VENTA_SELECT =
-  'id, consecutivo, productoId:producto_id, cantidad, precioUnitario:precio_unitario, total, metodoPago:metodo_pago, referenciaPago:referencia_pago, turnoId:turno_id, vendidoPor:vendido_por, estado, motivoAnulacion:motivo_anulacion, anuladaPor:anulada_por, anuladaEn:anulada_en, creadoEn:creado_en'
+  'id, consecutivo, productoId:producto_id, cantidad, precioUnitario:precio_unitario, total, metodoPago:metodo_pago, referenciaPago:referencia_pago, turnoId:turno_id, ordenId:orden_id, vendidoPor:vendido_por, estado, motivoAnulacion:motivo_anulacion, anuladaPor:anulada_por, anuladaEn:anulada_en, creadoEn:creado_en'
 
 function inicioDeHoyISO(): string {
   const ahora = new Date()
@@ -15,6 +15,20 @@ export async function fetchVentasHoy(): Promise<Venta[]> {
     .select(VENTA_SELECT)
     .gte('creado_en', inicioDeHoyISO())
     .order('consecutivo', { ascending: false })
+  if (error) throw new Error(error.message)
+  return ventaSchema.array().parse(data)
+}
+
+// Productos cargados a órdenes de lavado que todavía no se han cobrado (estado 'pendiente').
+// El tablero de seguimiento (jefe de zona) los agrupa por `ordenId` para mostrar el chip de
+// "productos" en cada tarjeta y sumarlos al total del cobro. Volumen chico (lo que hay en
+// proceso ahora mismo), así que se traen todos y se agrupan en el cliente.
+export async function fetchVentasPendientes(): Promise<Venta[]> {
+  const { data, error } = await db
+    .from('ventas')
+    .select(VENTA_SELECT)
+    .eq('estado', 'pendiente')
+    .order('consecutivo', { ascending: true })
   if (error) throw new Error(error.message)
   return ventaSchema.array().parse(data)
 }
@@ -40,6 +54,10 @@ export async function fetchVentasEnRango(desdeISO: string, hastaISO: string): Pr
 // cobrada sin descontar stock descuadra el inventario en silencio. Las validaciones de producto
 // activo / precio configurado / turno abierto viven dentro de la función (borde de confianza
 // real); el `parse` de acá sigue siendo el que da los mensajes de campo en el formulario.
+// Con `ordenId`, la RPC crea la venta como `pendiente` (sin turno, sin mover stock) cargada a
+// esa orden de lavado; el cobro y el descuento de inventario ocurren después, al entregar el
+// vehículo (`cobrar_orden` en src/data/ordenes.ts). Sin `ordenId`, es la venta aparte de
+// siempre: cobro en el acto.
 export async function createVenta(input: VentaInput): Promise<Venta> {
   const parsed = ventaInputSchema.parse(input)
   const { data, error } = await db
@@ -49,6 +67,7 @@ export async function createVenta(input: VentaInput): Promise<Venta> {
       p_metodo_pago: parsed.metodoPago,
       p_referencia_pago: parsed.referenciaPago ?? null,
       p_vendido_por: parsed.vendidoPor,
+      p_orden_id: parsed.ordenId ?? null,
     })
     .select(VENTA_SELECT)
     .single()

@@ -27,6 +27,10 @@ import {
   Bell,
   BellRing,
   Undo2,
+  Plus,
+  Minus,
+  Trash2,
+  CupSoda,
 } from 'lucide-react'
 import {
   fetchOrdenesHoy,
@@ -43,6 +47,11 @@ import { fetchAsistenciasDelDia, fetchDiasDescanso, ensureDiasDescansoGenerados 
 import { fetchCombos } from '../../data/combos'
 import { fetchTiposVehiculo } from '../../data/tiposVehiculo'
 import { fetchTurnoAbierto } from '../../data/turnos'
+import { fetchProductosOperativo } from '../../data/productos'
+import { fetchStockProductosOperativo } from '../../data/movimientosInventario'
+import { createVenta, anularVenta, fetchVentasPendientes } from '../../data/ventas'
+import { anularVentaInputSchema, type Venta } from '../../schemas/venta'
+import type { Producto } from '../../schemas/producto'
 import { clienteInfoInputSchema, cobroInputSchema, type MetodoPago, type Orden } from '../../schemas/orden'
 import { StatCard } from '../../components/layout/StatCard'
 import { Card } from '../../components/layout/Card'
@@ -64,18 +73,44 @@ async function loadDashboard() {
   // Mismo self-heal que /recepcion: sin esto, si nadie visitó /jefe-zona/asistencia hoy, la
   // fila de dias_descanso de hoy no existe y nadie aparece marcado como "descansa hoy" acá.
   await ensureDiasDescansoGenerados(hoy)
-  const [ordenesHoy, entregadasHoy, lavadores, combos, tiposVehiculo, turno, asistenciasHoy, descansosHoy] =
-    await Promise.all([
-      fetchOrdenesHoy(),
-      fetchOrdenesEntregadasHoy(),
-      fetchLavadores(),
-      fetchCombos(),
-      fetchTiposVehiculo(),
-      fetchTurnoAbierto('jefe_zona'),
-      fetchAsistenciasDelDia(hoy),
-      fetchDiasDescanso(hoy, hoy),
-    ])
-  return { ordenesHoy, entregadasHoy, lavadores, combos, tiposVehiculo, turno, asistenciasHoy, descansosHoy }
+  const [
+    ordenesHoy,
+    entregadasHoy,
+    lavadores,
+    combos,
+    tiposVehiculo,
+    turno,
+    asistenciasHoy,
+    descansosHoy,
+    productos,
+    stock,
+    ventasPendientes,
+  ] = await Promise.all([
+    fetchOrdenesHoy(),
+    fetchOrdenesEntregadasHoy(),
+    fetchLavadores(),
+    fetchCombos(),
+    fetchTiposVehiculo(),
+    fetchTurnoAbierto('jefe_zona'),
+    fetchAsistenciasDelDia(hoy),
+    fetchDiasDescanso(hoy, hoy),
+    fetchProductosOperativo(),
+    fetchStockProductosOperativo(),
+    fetchVentasPendientes(),
+  ])
+  return {
+    ordenesHoy,
+    entregadasHoy,
+    lavadores,
+    combos,
+    tiposVehiculo,
+    turno,
+    asistenciasHoy,
+    descansosHoy,
+    productos,
+    stock,
+    ventasPendientes,
+  }
 }
 
 export const Route = createFileRoute('/jefe-zona/')({
@@ -135,6 +170,13 @@ function JefeZonaDashboard() {
   const [combos] = useState(data.combos)
   const [tiposVehiculo] = useState(data.tiposVehiculo)
   const [turno, setTurno] = useState(data.turno)
+  const [productos] = useState<Producto[]>(data.productos)
+  const [stock, setStock] = useState(data.stock)
+  // Productos de nevera cargados a órdenes que todavía no se cobran (estado 'pendiente'). Se
+  // agrupan por orden para el chip de cada tarjeta y para sumarlos al total del cobro.
+  const [ventasPendientes, setVentasPendientes] = useState<Venta[]>(data.ventasPendientes)
+  const [agregandoProductoA, setAgregandoProductoA] = useState<Orden | null>(null)
+  const [quitandoProducto, setQuitandoProducto] = useState<Venta | null>(null)
   // `finalizarPrimero`: cuando se cobra directo desde una orden en_proceso (cliente esperando en
   // sala, no hace falta esperar a que "venga por ella" — ver onCobrarDirecto en OrdenCard), el
   // submit del modal marca listo (fija tiempo_lavado_segundos) y de inmediato cobra/entrega.
@@ -168,14 +210,18 @@ function JefeZonaDashboard() {
   }, [])
 
   async function refresh() {
-    const [nuevasOrdenes, nuevasEntregadas, nuevoTurno] = await Promise.all([
+    const [nuevasOrdenes, nuevasEntregadas, nuevoTurno, nuevoStock, nuevasPendientes] = await Promise.all([
       fetchOrdenesHoy(),
       fetchOrdenesEntregadasHoy(),
       fetchTurnoAbierto('jefe_zona'),
+      fetchStockProductosOperativo(),
+      fetchVentasPendientes(),
     ])
     setOrdenesHoy(nuevasOrdenes)
     setEntregadasHoy(nuevasEntregadas)
     setTurno(nuevoTurno)
+    setStock(nuevoStock)
+    setVentasPendientes(nuevasPendientes)
     router.invalidate()
   }
 
@@ -214,9 +260,53 @@ function JefeZonaDashboard() {
     await refresh()
   }
 
+  // Carga un producto de nevera a un vehículo en espera — queda 'pendiente' (sin descontar
+  // stock) hasta que se cobra la orden. Se cobra junto con el lavado al entregar.
+  async function handleAgregarProducto(orden: Orden, productoId: string, cantidad: number) {
+    await createVenta({
+      productoId,
+      cantidad,
+      metodoPago: 'efectivo', // provisional — el método real se define al cobrar la orden
+      vendidoPor: turno?.responsableActual ?? orden.jefeZonaResponsable ?? 'jefe de zona',
+      ordenId: orden.id,
+    })
+    await refresh()
+  }
+
+  async function handleQuitarProducto(venta: Venta, motivo: string) {
+    await anularVenta(venta.id, {
+      motivo,
+      anuladaPor: turno?.responsableActual ?? 'jefe de zona',
+    })
+    setQuitandoProducto(null)
+    await refresh()
+  }
+
   const comboNombre = (id: string | undefined) => (id ? combos.find((c) => c.id === id)?.nombre : undefined) ?? 'Sin combo'
   const lavadorNombre = (id: string | undefined) => (id ? lavadores.find((l) => l.id === id)?.nombre : undefined) ?? 'Sin asignar'
   const tipoVehiculo = (id: string) => tiposVehiculo.find((t) => t.id === id)
+  const productoNombre = (id: string) => productos.find((p) => p.id === id)?.nombre ?? 'Producto'
+
+  const productosVendibles = useMemo(
+    () => productos.filter((p) => p.activo && p.precioVenta != null),
+    [productos],
+  )
+  const stockPorProducto = useMemo(() => {
+    const mapa = new Map<string, number>()
+    for (const s of stock) mapa.set(s.productoId, s.stock)
+    return mapa
+  }, [stock])
+  // ordenId -> productos pendientes de esa orden (para el chip de la tarjeta y el total del cobro).
+  const ventasPendientesPorOrden = useMemo(() => {
+    const mapa = new Map<string, Venta[]>()
+    for (const v of ventasPendientes) {
+      if (!v.ordenId) continue
+      const lista = mapa.get(v.ordenId) ?? []
+      lista.push(v)
+      mapa.set(v.ordenId, lista)
+    }
+    return mapa
+  }, [ventasPendientes])
 
   const enProcesoLista = ordenesHoy.filter((o) => o.estado === 'en_proceso')
   const listoLista = ordenesHoy.filter((o) => o.estado === 'listo')
@@ -325,6 +415,13 @@ function JefeZonaDashboard() {
   }, [entregadasHoy])
 
   async function handleCobrado(orden: Orden, metodoPago: MetodoPago, referenciaPago?: string) {
+    // Se capturan ANTES del refresh: tras cobrar dejan de estar 'pendiente' y salen del mapa.
+    const productos = (ventasPendientesPorOrden.get(orden.id) ?? []).map((v) => ({
+      nombre: productoNombre(v.productoId),
+      cantidad: v.cantidad,
+      total: v.total,
+    }))
+    const totalProductos = productos.reduce((suma, p) => suma + p.total, 0)
     setRecibo({
       consecutivo: orden.consecutivo,
       placa: orden.placa,
@@ -334,7 +431,9 @@ function JefeZonaDashboard() {
       tipoNombre: tipoVehiculo(orden.tipoVehiculoId)?.nombre ?? '—',
       lavadorNombre: lavadorNombre(orden.lavadorId),
       lavadorNombre2: orden.lavadorId2 ? lavadorNombre(orden.lavadorId2) : undefined,
-      precio: orden.precio,
+      productos: productos.length > 0 ? productos : undefined,
+      precioLavado: productos.length > 0 ? orden.precio : undefined,
+      precio: orden.precio + totalProductos,
       fecha: new Date().toISOString(),
       metodoPago,
       referenciaPago,
@@ -629,6 +728,10 @@ function JefeZonaDashboard() {
                   tipoVehiculoNombre={tipoVehiculo(orden.tipoVehiculoId)?.nombre ?? '—'}
                   esMoto={tipoVehiculo(orden.tipoVehiculoId)?.categoria === 'moto'}
                   tiempoTexto={tiempoTranscurrido(orden.creadoEn, ahora)}
+                  productosPendientes={ventasPendientesPorOrden.get(orden.id) ?? []}
+                  productoNombre={productoNombre}
+                  onAgregarProducto={() => setAgregandoProductoA(orden)}
+                  onQuitarProducto={setQuitandoProducto}
                   onFinalizar={() => setFinalizando(orden)}
                   onCobrarDirecto={() => setCobrando({ orden, finalizarPrimero: true })}
                   onReasignar={() => setReasignando(orden)}
@@ -662,6 +765,10 @@ function JefeZonaDashboard() {
                   tipoVehiculoNombre={tipoVehiculo(orden.tipoVehiculoId)?.nombre ?? '—'}
                   esMoto={tipoVehiculo(orden.tipoVehiculoId)?.categoria === 'moto'}
                   tiempoTexto={tiempoTranscurrido(orden.listaEn ?? orden.creadoEn, ahora)}
+                  productosPendientes={ventasPendientesPorOrden.get(orden.id) ?? []}
+                  productoNombre={productoNombre}
+                  onAgregarProducto={() => setAgregandoProductoA(orden)}
+                  onQuitarProducto={setQuitandoProducto}
                   onCobrar={() => setCobrando({ orden, finalizarPrimero: false })}
                   onToggleNotificado={() => handleToggleNotificado(orden)}
                   onVolverAProceso={() => setVolviendoAProceso(orden)}
@@ -694,6 +801,8 @@ function JefeZonaDashboard() {
         <CobroModal
           orden={cobrando.orden}
           finalizarPrimero={cobrando.finalizarPrimero}
+          productosPendientes={ventasPendientesPorOrden.get(cobrando.orden.id) ?? []}
+          productoNombre={productoNombre}
           onClose={() => setCobrando(null)}
           onCobrado={(metodoPago, referenciaPago) => handleCobrado(cobrando.orden, metodoPago, referenciaPago)}
         />
@@ -787,6 +896,25 @@ function JefeZonaDashboard() {
           onCancel={() => setVolviendoAProceso(null)}
         />
       ) : null}
+
+      {agregandoProductoA ? (
+        <AgregarProductoModal
+          orden={agregandoProductoA}
+          productos={productosVendibles}
+          stockPorProducto={stockPorProducto}
+          onClose={() => setAgregandoProductoA(null)}
+          onAgregar={handleAgregarProducto}
+        />
+      ) : null}
+
+      {quitandoProducto ? (
+        <QuitarProductoModal
+          venta={quitandoProducto}
+          productoNombre={productoNombre(quitandoProducto.productoId)}
+          onClose={() => setQuitandoProducto(null)}
+          onQuitar={handleQuitarProducto}
+        />
+      ) : null}
     </div>
   )
 }
@@ -799,6 +927,10 @@ function OrdenCard({
   tipoVehiculoNombre,
   esMoto,
   tiempoTexto,
+  productosPendientes,
+  productoNombre,
+  onAgregarProducto,
+  onQuitarProducto,
   onFinalizar,
   onCobrar,
   onCobrarDirecto,
@@ -818,6 +950,11 @@ function OrdenCard({
   tipoVehiculoNombre: string
   esMoto: boolean
   tiempoTexto: string
+  /** Productos de nevera cargados a esta orden y aún sin cobrar. */
+  productosPendientes: Venta[]
+  productoNombre: (id: string) => string
+  onAgregarProducto?: () => void
+  onQuitarProducto?: (venta: Venta) => void
   onFinalizar?: () => void
   onCobrar?: () => void
   /** Solo en tarjetas "en proceso" — cliente esperando en sala, no hace falta pasar primero por
@@ -839,6 +976,7 @@ function OrdenCard({
   // proceso" y no se ofrecen esas acciones todavía.
   const sinAsignar = enProceso && !orden.lavadorId
   const VehiculoIcon = esMoto ? Motorbike : Car
+  const totalProductos = productosPendientes.reduce((suma, v) => suma + v.total, 0)
   return (
     <Card
       className={`group border-l-4 p-0 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-card-hover ${
@@ -914,8 +1052,51 @@ function OrdenCard({
         ) : null}
       </div>
 
+      {productosPendientes.length > 0 ? (
+        <div className="flex flex-col gap-1 border-t border-neutral-100 bg-primary-50/40 px-3 py-2">
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-primary-800">
+            <CupSoda size={13} /> Productos por cobrar · {COP.format(totalProductos)}
+          </span>
+          <ul className="flex flex-col gap-0.5">
+            {productosPendientes.map((v) => (
+              <li key={v.id} className="flex items-center justify-between gap-2 text-xs text-neutral-600">
+                <span className="truncate">
+                  {productoNombre(v.productoId)} <span className="text-neutral-400">×{v.cantidad}</span>
+                </span>
+                <span className="flex shrink-0 items-center gap-2">
+                  <span className="font-medium text-neutral-700">{COP.format(v.total)}</span>
+                  {onQuitarProducto ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onQuitarProducto(v)
+                      }}
+                      title="Quitar producto"
+                      className="text-danger-500 transition-colors hover:text-danger-700"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  ) : null}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-neutral-100 bg-white/60 px-3 py-2">
         <div className="flex items-center gap-1">
+          {onAgregarProducto ? (
+            <button
+              type="button"
+              onClick={onAgregarProducto}
+              className="group/btn flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-primary-50 hover:text-primary-700"
+            >
+              <Plus size={14} className="transition-transform group-hover/btn:scale-110" />
+              Producto
+            </button>
+          ) : null}
           {onContactar ? (
             <button
               type="button"
@@ -1428,6 +1609,8 @@ function EditarClienteModal({
 function CobroModal({
   orden,
   finalizarPrimero,
+  productosPendientes,
+  productoNombre,
   onClose,
   onCobrado,
 }: {
@@ -1435,6 +1618,9 @@ function CobroModal({
   /** Orden todavía en_proceso (cliente esperando en sala) — marca el lavado terminado antes de
    * cobrar, en el mismo submit, para no obligar a pasar primero por "Listo para cobrar". */
   finalizarPrimero?: boolean
+  /** Productos de nevera cargados a la orden — se cobran en la misma factura. */
+  productosPendientes: Venta[]
+  productoNombre: (id: string) => string
   onClose: () => void
   onCobrado: (metodoPago: MetodoPago, referenciaPago?: string) => void
 }) {
@@ -1445,7 +1631,9 @@ function CobroModal({
   const [montoRecibido, setMontoRecibido] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const cambio = montoRecibido ? Number(montoRecibido) - orden.precio : undefined
+  const totalProductos = productosPendientes.reduce((suma, v) => suma + v.total, 0)
+  const totalCobro = orden.precio + totalProductos
+  const cambio = montoRecibido ? Number(montoRecibido) - totalCobro : undefined
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -1496,9 +1684,32 @@ function CobroModal({
           </button>
         </div>
 
-        <div className="mb-4 flex items-center justify-between rounded-lg bg-primary-50 px-3 py-2.5 text-sm">
-          <span className="font-medium text-primary-900">Total a cobrar</span>
-          <span className="font-semibold text-primary-900">{COP.format(orden.precio)}</span>
+        <div className="mb-4 flex flex-col gap-1 rounded-lg bg-primary-50 px-3 py-2.5 text-sm">
+          {productosPendientes.length > 0 ? (
+            <>
+              <div className="flex items-center justify-between text-primary-900">
+                <span>Lavado</span>
+                <span>{COP.format(orden.precio)}</span>
+              </div>
+              {productosPendientes.map((v) => (
+                <div key={v.id} className="flex items-center justify-between text-xs text-primary-800">
+                  <span className="truncate">
+                    {productoNombre(v.productoId)} ×{v.cantidad}
+                  </span>
+                  <span>{COP.format(v.total)}</span>
+                </div>
+              ))}
+              <div className="mt-1 flex items-center justify-between border-t border-primary-200 pt-1.5 font-semibold text-primary-900">
+                <span>Total a cobrar</span>
+                <span>{COP.format(totalCobro)}</span>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center justify-between">
+              <span className="font-medium text-primary-900">Total a cobrar</span>
+              <span className="font-semibold text-primary-900">{COP.format(totalCobro)}</span>
+            </div>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -1559,6 +1770,236 @@ function CobroModal({
             <CheckCircle2 size={16} />
             {saving ? 'Registrando…' : 'Confirmar cobro y entrega'}
           </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// Cargar productos de nevera a un vehículo en espera — se acumulan como 'pendiente' y se cobran
+// junto con el lavado al entregar. Hoja anclada abajo en móvil (mismo patrón que CobroModal),
+// grilla de productos como botones grandes + carrito con steppers.
+function AgregarProductoModal({
+  orden,
+  productos,
+  stockPorProducto,
+  onClose,
+  onAgregar,
+}: {
+  orden: Orden
+  productos: Producto[]
+  stockPorProducto: Map<string, number>
+  onClose: () => void
+  onAgregar: (orden: Orden, productoId: string, cantidad: number) => Promise<void>
+}) {
+  const [carrito, setCarrito] = useState<Map<string, number>>(new Map())
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  function setCantidad(productoId: string, cantidad: number) {
+    setCarrito((prev) => {
+      const siguiente = new Map(prev)
+      if (cantidad <= 0) siguiente.delete(productoId)
+      else siguiente.set(productoId, cantidad)
+      return siguiente
+    })
+  }
+
+  const lineas = [...carrito.entries()]
+  const total = lineas.reduce((suma, [id, cant]) => {
+    const p = productos.find((x) => x.id === id)
+    return suma + (p?.precioVenta ?? 0) * cant
+  }, 0)
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault()
+    if (lineas.length === 0) return
+    setError(null)
+    setSaving(true)
+    try {
+      for (const [productoId, cantidad] of lineas) {
+        await onAgregar(orden, productoId, cantidad)
+      }
+      onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo agregar el producto')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
+      <div className="flex max-h-[90vh] w-full max-w-sm flex-col rounded-t-2xl bg-white p-5 shadow-card-hover sm:rounded-2xl sm:p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h3 className="text-base font-semibold text-neutral-900">Agregar productos</h3>
+            <p className="text-xs text-neutral-500">
+              {orden.placa} · #{orden.consecutivo} — se cobran al entregar
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-col gap-4">
+          <div className="grid min-h-0 grid-cols-2 gap-2 overflow-y-auto">
+            {productos.map((p) => {
+              const stock = stockPorProducto.get(p.id) ?? 0
+              const cant = carrito.get(p.id) ?? 0
+              const agotado = stock <= 0
+              return (
+                <div
+                  key={p.id}
+                  className={`flex flex-col gap-1.5 rounded-lg border p-2.5 text-left transition-colors ${
+                    cant > 0 ? 'border-primary-500 bg-primary-50' : 'border-neutral-200'
+                  } ${agotado ? 'opacity-50' : ''}`}
+                >
+                  <button
+                    type="button"
+                    disabled={agotado}
+                    onClick={() => setCantidad(p.id, cant + 1)}
+                    className="text-left disabled:cursor-not-allowed"
+                  >
+                    <span className="block text-sm font-medium text-neutral-800">{p.nombre}</span>
+                    <span className="block text-xs text-neutral-500">
+                      {COP.format(p.precioVenta ?? 0)} · stock {stock}
+                    </span>
+                  </button>
+                  {cant > 0 ? (
+                    <div className="flex items-center justify-between rounded-md bg-white px-1 py-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setCantidad(p.id, cant - 1)}
+                        className="flex size-6 items-center justify-center rounded text-neutral-600 hover:bg-neutral-100"
+                      >
+                        <Minus size={13} />
+                      </button>
+                      <span className="text-sm font-semibold text-neutral-900">{cant}</span>
+                      <button
+                        type="button"
+                        onClick={() => setCantidad(p.id, cant + 1)}
+                        className="flex size-6 items-center justify-center rounded text-neutral-600 hover:bg-neutral-100"
+                      >
+                        <Plus size={13} />
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              )
+            })}
+            {productos.length === 0 ? (
+              <p className="col-span-2 py-6 text-center text-xs text-neutral-400">
+                No hay productos con precio de venta configurado.
+              </p>
+            ) : null}
+          </div>
+
+          {error ? <p className="text-xs text-danger-600">{error}</p> : null}
+
+          <button
+            type="submit"
+            disabled={saving || lineas.length === 0}
+            className="flex items-center justify-center gap-2 rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
+          >
+            <Plus size={16} />
+            {saving
+              ? 'Agregando…'
+              : lineas.length === 0
+                ? 'Elige productos'
+                : `Agregar ${lineas.reduce((s, [, c]) => s + c, 0)} · ${COP.format(total)}`}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// Quitar un producto ya cargado a una orden antes de cobrar (regla de negocio 13: se anula con
+// motivo, no se borra — queda visible en reportes). Como nunca descontó stock, no hay reverso.
+function QuitarProductoModal({
+  venta,
+  productoNombre,
+  onClose,
+  onQuitar,
+}: {
+  venta: Venta
+  productoNombre: string
+  onClose: () => void
+  onQuitar: (venta: Venta, motivo: string) => Promise<void>
+}) {
+  const [motivo, setMotivo] = useState('Quitado antes de cobrar')
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault()
+    const parsed = anularVentaInputSchema.pick({ motivo: true }).safeParse({ motivo })
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.message ?? 'Indica un motivo')
+      return
+    }
+    setError(null)
+    setSaving(true)
+    try {
+      await onQuitar(venta, parsed.data.motivo)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo quitar el producto')
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-[2px]">
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-card-hover">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-base font-semibold text-neutral-900">
+            Quitar {productoNombre} ×{venta.cantidad}
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <p className="mb-4 text-xs text-neutral-500">
+          Queda anulado con el motivo, visible en reportes (control antifraude). No afecta el stock.
+        </p>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="font-medium text-neutral-700">Motivo</span>
+            <textarea
+              autoFocus
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              rows={2}
+              className="resize-none rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+            />
+          </label>
+          {error ? <p className="text-xs text-danger-600">{error}</p> : null}
+          <div className="flex justify-end gap-2 border-t border-neutral-100 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg px-4 py-2 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-100"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded-lg bg-danger-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-danger-700 disabled:opacity-60"
+            >
+              {saving ? 'Quitando…' : 'Quitar producto'}
+            </button>
+          </div>
         </form>
       </div>
     </div>

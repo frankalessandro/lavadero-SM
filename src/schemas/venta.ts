@@ -1,7 +1,10 @@
 import { z } from 'zod'
 import { metodoPagoSchema } from './orden'
 
-export const estadoVentaSchema = z.enum(['activa', 'anulada'])
+// `pendiente` = producto cargado a una orden de lavado, aún sin cobrar y sin descontar
+// inventario. Pasa a `activa` (con su salida de stock) cuando se cobra la orden. Ver
+// 0035_venta_asociada_a_orden.sql.
+export const estadoVentaSchema = z.enum(['activa', 'anulada', 'pendiente'])
 
 const nullableTrimmedString = z
   .string()
@@ -29,6 +32,9 @@ export const ventaSchema = z.object({
   metodoPago: metodoPagoSchema,
   referenciaPago: nullableTrimmedString,
   turnoId: nullableTrimmedString,
+  // Orden de lavado a la que se cargó el producto (null = venta aparte de mostrador). Cuando
+  // está presente, la venta se cobra junto con el lavado al entregar el vehículo.
+  ordenId: nullableTrimmedString,
   vendidoPor: z.string().trim().min(1),
   estado: estadoVentaSchema,
   motivoAnulacion: nullableTrimmedString,
@@ -43,12 +49,21 @@ export const ventaInputSchema = z
     cantidad: z.number().int().positive('La cantidad debe ser mayor a cero'),
     metodoPago: metodoPagoSchema,
     referenciaPago: z.string().trim().optional(),
+    // Cuando viene, la venta se carga a esa orden como `pendiente` y su método/referencia
+    // reales se definen al cobrar la orden — por eso la referencia no se exige acá en ese caso.
+    ordenId: z.string().uuid().optional(),
     vendidoPor: z.string().trim().min(1, 'El responsable es obligatorio'),
   })
-  .refine((data) => (data.metodoPago !== 'transferencia' && data.metodoPago !== 'datafono') || !!data.referenciaPago, {
-    message: 'La referencia es obligatoria en pagos por transferencia o datáfono',
-    path: ['referenciaPago'],
-  })
+  .refine(
+    (data) =>
+      !!data.ordenId ||
+      (data.metodoPago !== 'transferencia' && data.metodoPago !== 'datafono') ||
+      !!data.referenciaPago,
+    {
+      message: 'La referencia es obligatoria en pagos por transferencia o datáfono',
+      path: ['referenciaPago'],
+    },
+  )
 
 export const anularVentaInputSchema = z.object({
   motivo: z.string().trim().min(3, 'El motivo de anulación es obligatorio'),

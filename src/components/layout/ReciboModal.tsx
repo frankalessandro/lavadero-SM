@@ -13,6 +13,11 @@ export interface ReciboData {
   lavadorNombre: string
   // "Lavar entre 2" — presente solo cuando la orden tiene segundo lavador.
   lavadorNombre2?: string
+  // Productos de nevera cargados al vehículo y cobrados en la misma factura. Presente solo
+  // cuando la orden llevaba productos; `precioLavado` es el subtotal del lavado (sin productos)
+  // y `precio` pasa a ser el total combinado.
+  productos?: { nombre: string; cantidad: number; total: number }[]
+  precioLavado?: number
   precio: number
   fecha: string
   metodoPago?: MetodoPago
@@ -91,6 +96,15 @@ export function ReciboModal({
           ) : null}
           {esPago && recibo.referenciaPago ? <ReciboRow label="Referencia" value={recibo.referenciaPago} /> : null}
           <ReciboRow label={esPago ? 'Fecha de entrega' : 'Fecha de ingreso'} value={FECHA_HORA.format(new Date(recibo.fecha))} />
+
+          {recibo.productos && recibo.productos.length > 0 ? (
+            <div className="mt-1 flex flex-col gap-1.5 rounded-lg bg-neutral-50 px-3 py-2.5">
+              <ReciboRow label="Lavado" value={COP.format(recibo.precioLavado ?? recibo.precio)} />
+              {recibo.productos.map((p, i) => (
+                <ReciboRow key={i} label={`${p.nombre} ×${p.cantidad}`} value={COP.format(p.total)} />
+              ))}
+            </div>
+          ) : null}
 
           <div
             className={`mt-1 flex items-center justify-between rounded-lg px-3 py-3 ${esPago ? 'bg-success-50' : 'bg-primary-50'}`}

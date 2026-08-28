@@ -1,8 +1,8 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { ShoppingCart, Receipt, X } from 'lucide-react'
+import { ShoppingCart, Receipt, X, Plus, Minus, Trash2 } from 'lucide-react'
 import { fetchTurnoAbierto } from '../../../data/turnos'
-import { fetchProductos } from '../../../data/productos'
+import { fetchProductosOperativo } from '../../../data/productos'
 import { fetchStockProductosOperativo } from '../../../data/movimientosInventario'
 import { createVenta, anularVenta, fetchVentasHoy } from '../../../data/ventas'
 import { ventaInputSchema, anularVentaInputSchema, type Venta } from '../../../schemas/venta'
@@ -10,7 +10,6 @@ import type { Producto } from '../../../schemas/producto'
 import type { MetodoPago } from '../../../schemas/orden'
 import { Card } from '../../../components/layout/Card'
 import { StatCard } from '../../../components/layout/StatCard'
-import { CustomSelect } from '../../../components/layout/CustomSelect'
 import { AbrirTurnoPrompt } from '../../../components/layout/TurnoResponsableBanner'
 import { VentaReciboModal, type VentaReciboData } from '../../../components/layout/VentaReciboModal'
 import { METODO_PAGO_LABEL } from '../../../lib/metodoPago'
@@ -18,7 +17,7 @@ import { METODO_PAGO_LABEL } from '../../../lib/metodoPago'
 async function loadVentas() {
   const [turno, productos, stock, ventasHoy] = await Promise.all([
     fetchTurnoAbierto('jefe_zona'),
-    fetchProductos(),
+    fetchProductosOperativo(),
     fetchStockProductosOperativo(),
     fetchVentasHoy(),
   ])
@@ -76,21 +75,33 @@ function VenderPage() {
       </div>
 
       {turno ? (
-        <VentaForm
+        <VentaCarrito
           productosVendibles={productosVendibles}
           stockPorProducto={stockPorProducto}
           responsableSugerido={turno.responsableActual}
-          onVendida={async (venta, productoNombreVendido) => {
+          onVendido={async (ventas) => {
+            const primera = ventas[0]
+            const consecutivos = ventas.map((v) => v.consecutivo)
             setRecibo({
-              consecutivo: venta.consecutivo,
-              productoNombre: productoNombreVendido,
-              cantidad: venta.cantidad,
-              precioUnitario: venta.precioUnitario,
-              total: venta.total,
-              metodoPago: venta.metodoPago,
-              referenciaPago: venta.referenciaPago,
-              vendidoPor: venta.vendidoPor,
-              fecha: venta.creadoEn,
+              consecutivo: Math.min(...consecutivos),
+              consecutivoFin: Math.max(...consecutivos),
+              productoNombre: ventas.length === 1 ? productoNombre(primera.productoId) : `${ventas.length} productos`,
+              cantidad: ventas.reduce((s, v) => s + v.cantidad, 0),
+              precioUnitario: ventas.length === 1 ? primera.precioUnitario : 0,
+              total: ventas.reduce((s, v) => s + v.total, 0),
+              items:
+                ventas.length === 1
+                  ? undefined
+                  : ventas.map((v) => ({
+                      nombre: productoNombre(v.productoId),
+                      cantidad: v.cantidad,
+                      precioUnitario: v.precioUnitario,
+                      total: v.total,
+                    })),
+              metodoPago: primera.metodoPago,
+              referenciaPago: primera.referenciaPago,
+              vendidoPor: primera.vendidoPor,
+              fecha: primera.creadoEn,
             })
             await refresh()
           }}
@@ -156,56 +167,75 @@ function VenderPage() {
   )
 }
 
-function VentaForm({
+// Carrito de venta aparte: se arman varias líneas (una fila `ventas` por producto) y se cobran
+// en un solo pago → un solo comprobante combinado. Cada línea va por su propia RPC atómica
+// `registrar_venta` (sin orden), así que una falla no arrastra a las demás.
+function VentaCarrito({
   productosVendibles,
   stockPorProducto,
   responsableSugerido,
-  onVendida,
+  onVendido,
 }: {
   productosVendibles: Producto[]
   stockPorProducto: Map<string, number>
   responsableSugerido: string
-  onVendida: (venta: Venta, productoNombre: string) => Promise<void>
+  onVendido: (ventas: Venta[]) => Promise<void>
 }) {
-  const [productoId, setProductoId] = useState('')
-  const [cantidad, setCantidad] = useState('1')
+  const [carrito, setCarrito] = useState<Map<string, number>>(new Map())
   const [metodoPago, setMetodoPago] = useState<MetodoPago>('efectivo')
   const [referenciaPago, setReferenciaPago] = useState('')
   const [vendidoPor, setVendidoPor] = useState(responsableSugerido)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
-  function reset() {
-    setProductoId('')
-    setCantidad('1')
-    setMetodoPago('efectivo')
-    setReferenciaPago('')
+  function setCantidad(productoId: string, cantidad: number) {
+    setCarrito((prev) => {
+      const siguiente = new Map(prev)
+      if (cantidad <= 0) siguiente.delete(productoId)
+      else siguiente.set(productoId, cantidad)
+      return siguiente
+    })
   }
 
   const requiereReferencia = metodoPago === 'transferencia' || metodoPago === 'datafono'
+  const lineas = [...carrito.entries()]
+  const unidades = lineas.reduce((s, [, c]) => s + c, 0)
+  const total = lineas.reduce((s, [id, c]) => {
+    const p = productosVendibles.find((x) => x.id === id)
+    return s + (p?.precioVenta ?? 0) * c
+  }, 0)
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    const parsed = ventaInputSchema.safeParse({
-      productoId,
-      cantidad: Number(cantidad),
-      metodoPago,
-      referenciaPago: requiereReferencia ? referenciaPago || undefined : undefined,
-      vendidoPor,
-    })
-    if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? 'Revisa los datos del formulario')
+    if (lineas.length === 0) return
+    if (requiereReferencia && !referenciaPago.trim()) {
+      setError('La referencia es obligatoria en pagos por transferencia o datáfono')
+      return
+    }
+    if (!vendidoPor.trim()) {
+      setError('El responsable es obligatorio')
       return
     }
     setError(null)
     setSaving(true)
+    const hechas: Venta[] = []
     try {
-      const producto = productosVendibles.find((p) => p.id === productoId)
-      const venta = await createVenta(parsed.data)
-      reset()
-      await onVendida(venta, producto?.nombre ?? '—')
+      for (const [productoId, cantidad] of lineas) {
+        const parsed = ventaInputSchema.parse({
+          productoId,
+          cantidad,
+          metodoPago,
+          referenciaPago: requiereReferencia ? referenciaPago.trim() : undefined,
+          vendidoPor: vendidoPor.trim(),
+        })
+        hechas.push(await createVenta(parsed))
+      }
+      setCarrito(new Map())
+      setReferenciaPago('')
+      await onVendido(hechas)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo registrar la venta')
+      const base = err instanceof Error ? err.message : 'No se pudo registrar la venta'
+      setError(hechas.length > 0 ? `${base}. Se registraron ${hechas.length} de ${lineas.length} líneas — revisa "Ventas de hoy".` : base)
     } finally {
       setSaving(false)
     }
@@ -218,31 +248,67 @@ function VentaForm({
         Registrar venta
       </h3>
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-        <label className="flex flex-col gap-1.5 text-sm">
-          <span className="font-medium text-neutral-700">Producto</span>
-          <CustomSelect
-            value={productoId}
-            onChange={setProductoId}
-            placeholder="Selecciona…"
-            emptyLabel="No hay productos con precio de venta definido"
-            options={productosVendibles.map((p) => ({
-              value: p.id,
-              label: `${p.nombre} — ${COP.format(p.precioVenta ?? 0)}`,
-              description: `Stock: ${stockPorProducto.get(p.id) ?? 0} ${p.unidadMedida}`,
-            }))}
-          />
-        </label>
+        <div className="grid grid-cols-2 gap-2">
+          {productosVendibles.map((p) => {
+            const stock = stockPorProducto.get(p.id) ?? 0
+            const cant = carrito.get(p.id) ?? 0
+            const agotado = stock <= 0
+            return (
+              <div
+                key={p.id}
+                className={`flex flex-col gap-1.5 rounded-lg border p-2.5 transition-colors ${
+                  cant > 0 ? 'border-primary-500 bg-primary-50' : 'border-neutral-200'
+                } ${agotado ? 'opacity-50' : ''}`}
+              >
+                <button
+                  type="button"
+                  disabled={agotado}
+                  onClick={() => setCantidad(p.id, cant + 1)}
+                  className="text-left disabled:cursor-not-allowed"
+                >
+                  <span className="block text-sm font-medium text-neutral-800">{p.nombre}</span>
+                  <span className="block text-xs text-neutral-500">
+                    {COP.format(p.precioVenta ?? 0)} · stock {stock}
+                  </span>
+                </button>
+                {cant > 0 ? (
+                  <div className="flex items-center justify-between rounded-md bg-white px-1 py-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setCantidad(p.id, cant - 1)}
+                      className="flex size-7 items-center justify-center rounded text-neutral-600 hover:bg-neutral-100"
+                    >
+                      <Minus size={14} />
+                    </button>
+                    <span className="text-sm font-semibold text-neutral-900">{cant}</span>
+                    <button
+                      type="button"
+                      onClick={() => setCantidad(p.id, cant + 1)}
+                      className="flex size-7 items-center justify-center rounded text-neutral-600 hover:bg-neutral-100"
+                    >
+                      <Plus size={14} />
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            )
+          })}
+          {productosVendibles.length === 0 ? (
+            <p className="col-span-2 py-6 text-center text-xs text-neutral-400">
+              No hay productos con precio de venta definido.
+            </p>
+          ) : null}
+        </div>
 
-        <label className="flex flex-col gap-1.5 text-sm">
-          <span className="font-medium text-neutral-700">Cantidad</span>
-          <input
-            type="number"
-            min={1}
-            value={cantidad}
-            onChange={(e) => setCantidad(e.target.value)}
-            className="rounded-lg border border-neutral-300 px-3 py-3 text-base outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-          />
-        </label>
+        {lineas.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => setCarrito(new Map())}
+            className="flex items-center gap-1.5 self-start text-xs font-medium text-danger-600 transition-colors hover:text-danger-700"
+          >
+            <Trash2 size={13} /> Vaciar
+          </button>
+        ) : null}
 
         <div className="flex flex-col gap-1.5 text-sm">
           <span className="font-medium text-neutral-700">Método de pago</span>
@@ -290,10 +356,14 @@ function VentaForm({
 
         <button
           type="submit"
-          disabled={saving}
+          disabled={saving || lineas.length === 0}
           className="flex items-center justify-center gap-2 rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
         >
-          {saving ? 'Registrando…' : 'Cobrar venta'}
+          {saving
+            ? 'Registrando…'
+            : lineas.length === 0
+              ? 'Elige productos'
+              : `Cobrar ${unidades} · ${COP.format(total)}`}
         </button>
       </form>
     </Card>

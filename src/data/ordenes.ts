@@ -403,32 +403,19 @@ export async function editarInfoCliente(id: string, input: ClienteInfoInput): Pr
 // Se etiqueta con el turno de jefe de zona abierto en ESE momento (regla de negocio 11: el
 // movimiento pertenece al turno en que se registró, y el cobro es el movimiento de dinero real
 // — no el registro del vehículo, que puede haber pasado en un turno anterior).
+//
+// Va por la RPC `cobrar_orden` (0035_venta_asociada_a_orden.sql), no por un UPDATE suelto: si
+// la orden tiene productos de nevera cargados (`ventas` en estado 'pendiente'), la entrega y la
+// liquidación de esos productos —pasarlos a 'activa' y descontar su stock— tienen que quedar en
+// la misma transacción. El tiempo de espera y el turno los calcula la función.
 export async function cobrarYEntregarOrden(id: string, input: CobroInput): Promise<Orden> {
   const parsed = cobroInputSchema.parse(input)
-  const [turno, actual] = await Promise.all([
-    fetchTurnoAbierto('jefe_zona'),
-    db.from('ordenes').select('listaEn:lista_en, creadoEn:creado_en').eq('id', id).single(),
-  ])
-  if (actual.error) throw new Error(actual.error.message)
-
-  const ahora = new Date()
-  // Cuánto se demoró el cliente en reclamar el vehículo ya lavado (KPI de M10). Si por lo que
-  // sea no hay lista_en (no debería pasar en el flujo normal, siempre pasa por marcarListo
-  // antes de cobrar), se usa creado_en para no dejar la columna vacía.
-  const desde = (actual.data.listaEn as string | null) ?? (actual.data.creadoEn as string)
-  const tiempoEsperaEntregaSegundos = Math.max(0, Math.round((ahora.getTime() - new Date(desde).getTime()) / 1000))
-
   const { data, error } = await db
-    .from('ordenes')
-    .update({
-      estado: 'entregado',
-      metodo_pago: parsed.metodoPago,
-      referencia_pago: parsed.referenciaPago,
-      entregada_en: ahora.toISOString(),
-      tiempo_espera_entrega_segundos: tiempoEsperaEntregaSegundos,
-      turno_id: turno?.id,
+    .rpc('cobrar_orden', {
+      p_orden_id: id,
+      p_metodo_pago: parsed.metodoPago,
+      p_referencia_pago: parsed.referenciaPago ?? null,
     })
-    .eq('id', id)
     .select(ORDEN_SELECT)
     .single()
   if (error) throw new Error(error.message)

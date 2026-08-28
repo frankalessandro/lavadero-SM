@@ -2,16 +2,40 @@ import { X } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import type { MetodoPago } from '../../schemas/orden'
 
+export interface VentaReciboItem {
+  nombre: string
+  cantidad: number
+  precioUnitario: number
+  total: number
+}
+
 export interface VentaReciboData {
   consecutivo: number
+  // Rango de consecutivos cuando la venta tiene varias líneas (una fila `ventas` por producto).
+  consecutivoFin?: number
   productoNombre: string
   cantidad: number
   precioUnitario: number
   total: number
+  // Varias líneas en una sola factura (carrito). Si viene, se muestra el detalle por línea en
+  // vez de los campos de producto único.
+  items?: VentaReciboItem[]
   metodoPago: MetodoPago
   referenciaPago?: string
   vendidoPor: string
   fecha: string
+}
+
+function refTexto(venta: VentaReciboData): string {
+  return venta.consecutivoFin && venta.consecutivoFin !== venta.consecutivo
+    ? `VTA-${venta.consecutivo} a VTA-${venta.consecutivoFin}`
+    : `VTA-${venta.consecutivo}`
+}
+
+function metodoLabel(metodo: MetodoPago): string {
+  if (metodo === 'efectivo') return 'Efectivo'
+  if (metodo === 'datafono') return 'Datáfono'
+  return 'Transferencia'
 }
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
@@ -39,14 +63,24 @@ export function VentaReciboModal({ venta, onClose }: { venta: VentaReciboData; o
 
         <div className="flex flex-col items-center gap-0.5 border-y border-dashed border-neutral-200 bg-neutral-50 px-6 py-4">
           <span className="text-xs font-medium uppercase tracking-wide text-neutral-400">Número de referencia</span>
-          <span className="font-mono text-lg font-semibold text-primary-700">VTA-{venta.consecutivo}</span>
+          <span className="font-mono text-lg font-semibold text-primary-700">{refTexto(venta)}</span>
         </div>
 
         <div className="flex flex-col gap-2.5 px-6 py-5 text-sm">
-          <VentaReciboRow label="Producto" value={venta.productoNombre} />
-          <VentaReciboRow label="Cantidad" value={String(venta.cantidad)} />
-          <VentaReciboRow label="Precio unitario" value={COP.format(venta.precioUnitario)} />
-          <VentaReciboRow label="Método de pago" value={venta.metodoPago === 'efectivo' ? 'Efectivo' : 'Transferencia'} />
+          {venta.items && venta.items.length > 0 ? (
+            <div className="flex flex-col gap-1.5 rounded-lg bg-neutral-50 px-3 py-2.5">
+              {venta.items.map((it, i) => (
+                <VentaReciboRow key={i} label={`${it.nombre} ×${it.cantidad}`} value={COP.format(it.total)} />
+              ))}
+            </div>
+          ) : (
+            <>
+              <VentaReciboRow label="Producto" value={venta.productoNombre} />
+              <VentaReciboRow label="Cantidad" value={String(venta.cantidad)} />
+              <VentaReciboRow label="Precio unitario" value={COP.format(venta.precioUnitario)} />
+            </>
+          )}
+          <VentaReciboRow label="Método de pago" value={metodoLabel(venta.metodoPago)} />
           {venta.referenciaPago ? <VentaReciboRow label="Referencia" value={venta.referenciaPago} /> : null}
           <VentaReciboRow label="Vendido por" value={venta.vendidoPor} />
           <VentaReciboRow label="Fecha" value={FECHA_HORA.format(new Date(venta.fecha))} />
@@ -108,7 +142,7 @@ function VentaTicketPrint({ venta }: { venta: VentaReciboData }) {
 
       <div className="tiquete-58__fila">
         <span className="tiquete-58__fila-label">No.</span>
-        <span className="tiquete-58__fila-valor">VTA-{venta.consecutivo}</span>
+        <span className="tiquete-58__fila-valor">{refTexto(venta)}</span>
       </div>
       <div className="tiquete-58__fila">
         <span className="tiquete-58__fila-label">Fecha</span>
@@ -117,21 +151,34 @@ function VentaTicketPrint({ venta }: { venta: VentaReciboData }) {
 
       <div className="tiquete-58__linea" />
 
-      <div className="tiquete-58__fila">
-        <span className="tiquete-58__fila-label">Producto</span>
-        <span className="tiquete-58__fila-valor">{venta.productoNombre}</span>
-      </div>
-      <div className="tiquete-58__fila">
-        <span className="tiquete-58__fila-label">Cantidad</span>
-        <span className="tiquete-58__fila-valor">{venta.cantidad}</span>
-      </div>
-      <div className="tiquete-58__fila">
-        <span className="tiquete-58__fila-label">Precio unit.</span>
-        <span className="tiquete-58__fila-valor">{COP.format(venta.precioUnitario)}</span>
-      </div>
+      {venta.items && venta.items.length > 0 ? (
+        venta.items.map((it, i) => (
+          <div className="tiquete-58__fila" key={i}>
+            <span className="tiquete-58__fila-label">
+              {it.nombre} x{it.cantidad}
+            </span>
+            <span className="tiquete-58__fila-valor">{COP.format(it.total)}</span>
+          </div>
+        ))
+      ) : (
+        <>
+          <div className="tiquete-58__fila">
+            <span className="tiquete-58__fila-label">Producto</span>
+            <span className="tiquete-58__fila-valor">{venta.productoNombre}</span>
+          </div>
+          <div className="tiquete-58__fila">
+            <span className="tiquete-58__fila-label">Cantidad</span>
+            <span className="tiquete-58__fila-valor">{venta.cantidad}</span>
+          </div>
+          <div className="tiquete-58__fila">
+            <span className="tiquete-58__fila-label">Precio unit.</span>
+            <span className="tiquete-58__fila-valor">{COP.format(venta.precioUnitario)}</span>
+          </div>
+        </>
+      )}
       <div className="tiquete-58__fila">
         <span className="tiquete-58__fila-label">Pago</span>
-        <span className="tiquete-58__fila-valor">{venta.metodoPago === 'efectivo' ? 'Efectivo' : 'Transferencia'}</span>
+        <span className="tiquete-58__fila-valor">{metodoLabel(venta.metodoPago)}</span>
       </div>
       {venta.referenciaPago ? (
         <div className="tiquete-58__fila">
