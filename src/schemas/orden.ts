@@ -74,6 +74,16 @@ export const ordenSchema = z.object({
   // siendo el TOTAL de la orden, no la mitad de nadie.
   lavadorId2: nullableTrimmedString,
   precio: z.number().int().positive(),
+  // Descuento sobre el lavado, absorbido por el negocio (regla confirmada): baja lo que entra a
+  // caja, NUNCA las comisiones (que siguen sobre `precio` de lista). Solo se aplica en el cobro.
+  // `descuento` es el monto absoluto; `descuentoPct` queda solo si se ingresó como %.
+  descuento: z.number().int().nonnegative().default(0),
+  descuentoPct: z
+    .number()
+    .nullish()
+    .transform((v) => v ?? undefined),
+  descuentoMotivo: nullableTrimmedString,
+  descuentoAutorizadoPor: nullableTrimmedString,
   // Recargo fijo de moto alto cilindraje ya sumado a `precio` — se guarda aparte solo para poder
   // mostrarlo/auditarlo, no se resta ni se recalcula desde acá.
   altoCilindraje: z.boolean(),

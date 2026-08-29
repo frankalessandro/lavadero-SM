@@ -17,7 +17,7 @@ import { fetchTurnoAbierto } from './turnos'
 // orden_servicios embebido vía FK de PostgREST (mismo patrón que `categorias_gasto(nombre)`
 // en `src/data/gastos.ts`): trae los add-ons de cada orden en la misma consulta.
 const ORDEN_SELECT =
-  'id, consecutivo, placa, clienteNombre:cliente_nombre, clienteTelefono:cliente_telefono, clienteCorreo:cliente_correo, tipoVehiculoId:tipo_vehiculo_id, comboId:combo_id, lavadorId:lavador_id, lavadorId2:lavador_id_2, precio, altoCilindraje:alto_cilindraje, comisionLavador:comision_lavador, comisionJefeZona:comision_jefe_zona, jefeZonaResponsable:jefe_zona_responsable, comisionNegocio:comision_negocio, metodoPago:metodo_pago, referenciaPago:referencia_pago, observaciones, estado, creadoEn:creado_en, listaEn:lista_en, entregadaEn:entregada_en, tiempoLavadoSegundos:tiempo_lavado_segundos, tiempoEsperaEntregaSegundos:tiempo_espera_entrega_segundos, notificadoListo:notificado_listo, liquidacionId:liquidacion_id, liquidacionId2:liquidacion_id_2, liquidacionJefeZonaId:liquidacion_jefe_zona_id, motivoAnulacion:motivo_anulacion, anuladaEn:anulada_en, anuladaPor:anulada_por, serviciosAdicionales:orden_servicios(servicioId:servicio_id, precio, servicios(nombre))'
+  'id, consecutivo, placa, clienteNombre:cliente_nombre, clienteTelefono:cliente_telefono, clienteCorreo:cliente_correo, tipoVehiculoId:tipo_vehiculo_id, comboId:combo_id, lavadorId:lavador_id, lavadorId2:lavador_id_2, precio, descuento, descuentoPct:descuento_pct, descuentoMotivo:descuento_motivo, descuentoAutorizadoPor:descuento_autorizado_por, altoCilindraje:alto_cilindraje, comisionLavador:comision_lavador, comisionJefeZona:comision_jefe_zona, jefeZonaResponsable:jefe_zona_responsable, comisionNegocio:comision_negocio, metodoPago:metodo_pago, referenciaPago:referencia_pago, observaciones, estado, creadoEn:creado_en, listaEn:lista_en, entregadaEn:entregada_en, tiempoLavadoSegundos:tiempo_lavado_segundos, tiempoEsperaEntregaSegundos:tiempo_espera_entrega_segundos, notificadoListo:notificado_listo, liquidacionId:liquidacion_id, liquidacionId2:liquidacion_id_2, liquidacionJefeZonaId:liquidacion_jefe_zona_id, motivoAnulacion:motivo_anulacion, anuladaEn:anulada_en, anuladaPor:anulada_por, serviciosAdicionales:orden_servicios(servicioId:servicio_id, precio, servicios(nombre))'
 
 interface OrdenServicioAdicionalRaw {
   servicioId: string
@@ -403,16 +403,35 @@ export async function editarInfoCliente(id: string, input: ClienteInfoInput): Pr
 // movimiento pertenece al turno en que se registró, y el cobro es el movimiento de dinero real
 // — no el registro del vehículo, que puede haber pasado en un turno anterior).
 //
-// Va por la RPC `cobrar_orden` (0036_pago_partido.sql), no por un UPDATE suelto: la entrega de la
-// orden, sus líneas de pago (tabla `pagos`, 1–3 por cobro), y la liquidación de los productos de
-// nevera cargados (`ventas` 'pendiente' → 'activa' + salida de stock) tienen que quedar en la
-// misma transacción. La RPC valida que las líneas sumen EXACTO el total (lavado + productos), la
-// referencia por línea, y calcula tiempo de espera + turno. `pagos` es el reparto por método.
-export async function cobrarYEntregarOrden(id: string, pagos: PagoLineaInput[]): Promise<Orden> {
+// Descuento sobre el lavado, absorbido por el negocio (0037): baja el total a cobrar, NUNCA las
+// comisiones (siguen sobre `precio` de lista, ya fijadas al crear la orden). `monto` es el valor
+// absoluto ya resuelto; `pct` viaja solo para auditoría/recibo. Exige `motivo` y `autorizadoPor`.
+export interface DescuentoInput {
+  monto: number
+  pct?: number
+  motivo: string
+  autorizadoPor: string
+}
+
+// Va por la RPC `cobrar_orden` (0036 + 0037), no por un UPDATE suelto: la entrega de la orden,
+// sus líneas de pago (tabla `pagos`, 1–3 por cobro), el descuento y la liquidación de los
+// productos de nevera cargados (`ventas` 'pendiente' → 'activa' + salida de stock) tienen que
+// quedar en la misma transacción. La RPC valida que las líneas sumen EXACTO `(precio − descuento)
+// + productos`, la referencia por línea, y calcula tiempo de espera + turno. Si el total queda en
+// $0 (cortesía), `pagos` va vacío.
+export async function cobrarYEntregarOrden(
+  id: string,
+  pagos: PagoLineaInput[],
+  descuento?: DescuentoInput,
+): Promise<Orden> {
   const { data, error } = await db
     .rpc('cobrar_orden', {
       p_orden_id: id,
       p_pagos: pagos.map((l) => ({ metodo: l.metodo, monto: l.monto, referencia: l.referencia ?? null })),
+      p_descuento: descuento?.monto ?? 0,
+      p_descuento_pct: descuento?.pct ?? null,
+      p_descuento_motivo: descuento?.motivo ?? null,
+      p_descuento_autorizado_por: descuento?.autorizadoPor ?? null,
     })
     .select(ORDEN_SELECT)
     .single()

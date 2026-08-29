@@ -31,6 +31,7 @@ import {
   Minus,
   Trash2,
   CupSoda,
+  Percent,
 } from 'lucide-react'
 import {
   fetchOrdenesHoy,
@@ -49,7 +50,7 @@ import { fetchTiposVehiculo } from '../../data/tiposVehiculo'
 import { fetchTurnoAbierto } from '../../data/turnos'
 import { fetchProductosOperativo } from '../../data/productos'
 import { fetchStockProductosOperativo } from '../../data/movimientosInventario'
-import { createVenta, anularVenta, fetchVentasPendientes } from '../../data/ventas'
+import { createVenta, anularVenta, fetchVentasPendientes, fetchVentasDeOrden } from '../../data/ventas'
 import { anularVentaInputSchema, type Venta } from '../../schemas/venta'
 import type { Producto } from '../../schemas/producto'
 import { clienteInfoInputSchema, type Orden } from '../../schemas/orden'
@@ -420,7 +421,7 @@ function JefeZonaDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entregadasHoy])
 
-  async function handleCobrado(orden: Orden, pagos: PagoLineaInput[]) {
+  async function handleCobrado(orden: Orden, pagos: PagoLineaInput[], descuento?: DescuentoResumen) {
     // Se capturan ANTES del refresh: tras cobrar dejan de estar 'pendiente' y salen del mapa.
     const productos = (ventasPendientesPorOrden.get(orden.id) ?? []).map((v) => ({
       nombre: productoNombre(v.productoId),
@@ -428,9 +429,11 @@ function JefeZonaDashboard() {
       total: v.total,
     }))
     const totalProductos = productos.reduce((suma, p) => suma + p.total, 0)
+    const descuentoMonto = descuento?.monto ?? 0
     // Etiqueta-resumen para el recibo: método único si todas las líneas comparten método, si no
-    // 'mixto'. El desglose real va en `pagos`.
+    // 'mixto'. El desglose real va en `pagos`. Sin pagos = cortesía total.
     const metodos = new Set(pagos.map((p) => p.metodo))
+    const hayDetalle = productos.length > 0 || descuentoMonto > 0
     setRecibo({
       consecutivo: orden.consecutivo,
       placa: orden.placa,
@@ -441,10 +444,13 @@ function JefeZonaDashboard() {
       lavadorNombre: lavadorNombre(orden.lavadorId),
       lavadorNombre2: orden.lavadorId2 ? lavadorNombre(orden.lavadorId2) : undefined,
       productos: productos.length > 0 ? productos : undefined,
-      precioLavado: productos.length > 0 ? orden.precio : undefined,
-      precio: orden.precio + totalProductos,
+      precioLavado: hayDetalle ? orden.precio : undefined,
+      descuento: descuentoMonto > 0 ? descuentoMonto : undefined,
+      descuentoMotivo: descuento?.motivo,
+      precio: orden.precio - descuentoMonto + totalProductos,
       fecha: new Date().toISOString(),
-      metodoPago: metodos.size === 1 ? [...metodos][0] : 'mixto',
+      entregada: true,
+      metodoPago: pagos.length === 0 ? undefined : metodos.size === 1 ? [...metodos][0] : 'mixto',
       referenciaPago: pagos.length === 1 ? pagos[0].referencia : undefined,
       pagos: pagos.length > 1 ? pagos.map((p) => ({ metodo: p.metodo, monto: p.monto, referencia: p.referencia })) : undefined,
     })
@@ -455,8 +461,19 @@ function JefeZonaDashboard() {
 
   // Reabrir el tiquete de una orden ya existente, en cualquier estado (en proceso, listo o
   // entregado) — mismo componente/diseño que el comprobante que se muestra al registrar o
-  // cobrar, para poder verlo/reimprimirlo en cualquier momento sin repetir esa acción.
-  function abrirTiquete(orden: Orden) {
+  // cobrar, para poder verlo/reimprimirlo en cualquier momento sin repetir esa acción. Para una
+  // orden entregada trae también sus productos de vitrina para que la factura reimpresa muestre
+  // el mismo detalle que la original.
+  async function abrirTiquete(orden: Orden) {
+    const entregada = orden.estado === 'entregado'
+    const ventasOrden = entregada ? await fetchVentasDeOrden(orden.id) : []
+    const productos = ventasOrden.map((v) => ({
+      nombre: productoNombre(v.productoId),
+      cantidad: v.cantidad,
+      total: v.total,
+    }))
+    const totalProductos = productos.reduce((s, p) => s + p.total, 0)
+    const hayDetalle = productos.length > 0 || orden.descuento > 0
     setRecibo({
       consecutivo: orden.consecutivo,
       placa: orden.placa,
@@ -466,8 +483,13 @@ function JefeZonaDashboard() {
       tipoNombre: tipoVehiculo(orden.tipoVehiculoId)?.nombre ?? '—',
       lavadorNombre: lavadorNombre(orden.lavadorId),
       lavadorNombre2: orden.lavadorId2 ? lavadorNombre(orden.lavadorId2) : undefined,
-      precio: orden.precio,
-      fecha: orden.estado === 'entregado' ? (orden.entregadaEn ?? orden.creadoEn) : orden.creadoEn,
+      productos: productos.length > 0 ? productos : undefined,
+      precioLavado: hayDetalle ? orden.precio : undefined,
+      descuento: orden.descuento > 0 ? orden.descuento : undefined,
+      descuentoMotivo: orden.descuentoMotivo,
+      precio: orden.precio - orden.descuento + totalProductos,
+      fecha: entregada ? (orden.entregadaEn ?? orden.creadoEn) : orden.creadoEn,
+      entregada,
       metodoPago: orden.metodoPago,
       referenciaPago: orden.referenciaPago,
     })
@@ -815,7 +837,7 @@ function JefeZonaDashboard() {
           productosPendientes={ventasPendientesPorOrden.get(cobrando.orden.id) ?? []}
           productoNombre={productoNombre}
           onClose={() => setCobrando(null)}
-          onCobrado={(pagos) => handleCobrado(cobrando.orden, pagos)}
+          onCobrado={(pagos, descuento) => handleCobrado(cobrando.orden, pagos, descuento)}
         />
       ) : null}
 
@@ -857,7 +879,7 @@ function JefeZonaDashboard() {
       {recibo ? (
         <ReciboModal
           recibo={recibo}
-          variant={recibo.metodoPago ? 'pago' : 'ingreso'}
+          variant={recibo.entregada || recibo.metodoPago ? 'pago' : 'ingreso'}
           autoPrint={reciboAutoPrint}
           onClose={() => setRecibo(null)}
         />
@@ -1270,9 +1292,20 @@ function EntregadosHoyTable({
                 {lavadorNombre(orden.lavadorId)}
                 {orden.lavadorId2 ? ` + ${lavadorNombre(orden.lavadorId2)}` : ''}
               </td>
-              <td className="px-5 py-3 font-medium text-neutral-900">{COP.format(orden.precio)}</td>
+              <td className="px-5 py-3 font-medium text-neutral-900">
+                {orden.descuento > 0 ? (
+                  <span className="flex flex-col">
+                    <span>{COP.format(orden.precio - orden.descuento)}</span>
+                    <span className="text-xs font-normal text-warning-600" title={orden.descuentoMotivo ?? undefined}>
+                      desc. −{COP.format(orden.descuento)}
+                    </span>
+                  </span>
+                ) : (
+                  COP.format(orden.precio)
+                )}
+              </td>
               <td className="px-5 py-3 text-neutral-700">
-                {orden.metodoPago ? METODO_PAGO_LABEL[orden.metodoPago] : '—'}
+                {orden.metodoPago ? METODO_PAGO_LABEL[orden.metodoPago] : orden.estado === 'entregado' ? 'Cortesía' : '—'}
               </td>
               <td className="px-5 py-3">
                 <div className="flex justify-end gap-1">
@@ -1641,6 +1674,11 @@ function EditarClienteModal({
   )
 }
 
+interface DescuentoResumen {
+  monto: number
+  motivo: string
+}
+
 function CobroModal({
   orden,
   finalizarPrimero,
@@ -1657,24 +1695,53 @@ function CobroModal({
   productosPendientes: Venta[]
   productoNombre: (id: string) => string
   onClose: () => void
-  onCobrado: (pagos: PagoLineaInput[]) => void
+  onCobrado: (pagos: PagoLineaInput[], descuento?: DescuentoResumen) => void
 }) {
   const totalProductos = productosPendientes.reduce((suma, v) => suma + v.total, 0)
-  const totalCobro = orden.precio + totalProductos
+
+  // Descuento sobre el lavado, absorbido por el negocio — no toca comisiones. Cerrado por
+  // defecto (regla antifraude: descuentos deshabilitados salvo que se presione).
+  const [descAbierto, setDescAbierto] = useState(false)
+  const [descModo, setDescModo] = useState<'monto' | 'pct'>('monto')
+  const [descValor, setDescValor] = useState('')
+  const [descMotivo, setDescMotivo] = useState('')
+  const [descAutoriza, setDescAutoriza] = useState('')
+
+  const descBruto =
+    !descAbierto || !descValor
+      ? 0
+      : descModo === 'pct'
+        ? Math.round((orden.precio * Math.min(Number(descValor), 100)) / 100)
+        : Number(descValor)
+  const descuentoMonto = Math.max(0, Math.min(descBruto, orden.precio))
+  const subtotalLavado = orden.precio - descuentoMonto
+  const totalCobro = subtotalLavado + totalProductos
+  const esCortesia = totalCobro === 0
+
   // Arranca con una sola línea de efectivo por el total — el caso más común es un pago simple.
-  const [lineas, setLineas] = useState<PagoLineaBorrador[]>([nuevaLineaBorrador(totalCobro)])
-  // Ayuda visual para el cajero (cuánto devolver) cuando el pago es un solo efectivo.
+  const [lineas, setLineas] = useState<PagoLineaBorrador[]>([nuevaLineaBorrador(orden.precio + totalProductos)])
+  // Con una sola línea, el monto se deriva del total (única forma de que cuadre) — así el
+  // descuento lo reajusta solo, sin `useEffect`.
+  const lineasEfectivas: PagoLineaBorrador[] =
+    lineas.length === 1 ? [{ ...lineas[0], monto: totalCobro > 0 ? String(totalCobro) : '' }] : lineas
+
   const [montoRecibido, setMontoRecibido] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
-  const cuadra = pagoLineasCuadra(lineas, totalCobro)
-  const soloEfectivo = lineas.length === 1 && lineas[0].metodo === 'efectivo'
+  const descIncompleto = descuentoMonto > 0 && (!descMotivo.trim() || !descAutoriza.trim())
+  const cuadra =
+    !descIncompleto && (esCortesia || pagoLineasCuadra(lineasEfectivas, totalCobro))
+  const soloEfectivo = lineasEfectivas.length === 1 && lineasEfectivas[0].metodo === 'efectivo'
   const cambio = soloEfectivo && montoRecibido ? Number(montoRecibido) - totalCobro : undefined
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    if (!cuadra) {
+    if (descuentoMonto > 0 && (!descMotivo.trim() || !descAutoriza.trim())) {
+      setError('El descuento exige un motivo y quién lo autoriza')
+      return
+    }
+    if (!esCortesia && !pagoLineasCuadra(lineasEfectivas, totalCobro)) {
       setError(`Las líneas de pago deben sumar exactamente ${COP.format(totalCobro)}`)
       return
     }
@@ -1684,9 +1751,18 @@ function CobroModal({
       if (finalizarPrimero) {
         await marcarListo(orden.id)
       }
-      const pagos = borradorAPagos(lineas)
-      await cobrarYEntregarOrden(orden.id, pagos)
-      onCobrado(pagos)
+      const pagos = esCortesia ? [] : borradorAPagos(lineasEfectivas)
+      const descuento =
+        descuentoMonto > 0
+          ? {
+              monto: descuentoMonto,
+              pct: descModo === 'pct' && descValor ? Math.min(Number(descValor), 100) : undefined,
+              motivo: descMotivo.trim(),
+              autorizadoPor: descAutoriza.trim(),
+            }
+          : undefined
+      await cobrarYEntregarOrden(orden.id, pagos, descuento)
+      onCobrado(pagos, descuento ? { monto: descuento.monto, motivo: descuento.motivo } : undefined)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo registrar el cobro')
     } finally {
@@ -1719,37 +1795,114 @@ function CobroModal({
         </div>
 
         <div className="mb-4 flex flex-col gap-1 rounded-lg bg-primary-50 px-3 py-2.5 text-sm">
-          {productosPendientes.length > 0 ? (
-            <>
-              <div className="flex items-center justify-between text-primary-900">
-                <span>Lavado</span>
-                <span>{COP.format(orden.precio)}</span>
-              </div>
-              {productosPendientes.map((v) => (
-                <div key={v.id} className="flex items-center justify-between text-xs text-primary-800">
-                  <span className="truncate">
-                    {productoNombre(v.productoId)} ×{v.cantidad}
-                  </span>
-                  <span>{COP.format(v.total)}</span>
-                </div>
-              ))}
-              <div className="mt-1 flex items-center justify-between border-t border-primary-200 pt-1.5 font-semibold text-primary-900">
-                <span>Total a cobrar</span>
-                <span>{COP.format(totalCobro)}</span>
-              </div>
-            </>
-          ) : (
-            <div className="flex items-center justify-between">
-              <span className="font-medium text-primary-900">Total a cobrar</span>
-              <span className="font-semibold text-primary-900">{COP.format(totalCobro)}</span>
+          <div className="flex items-center justify-between text-primary-900">
+            <span>Lavado</span>
+            <span>{COP.format(orden.precio)}</span>
+          </div>
+          {descuentoMonto > 0 ? (
+            <div className="flex items-center justify-between text-xs font-medium text-danger-700">
+              <span>Descuento{descModo === 'pct' && descValor ? ` (${Math.min(Number(descValor), 100)}%)` : ''}</span>
+              <span>−{COP.format(descuentoMonto)}</span>
             </div>
-          )}
+          ) : null}
+          {productosPendientes.map((v) => (
+            <div key={v.id} className="flex items-center justify-between text-xs text-primary-800">
+              <span className="truncate">
+                {productoNombre(v.productoId)} ×{v.cantidad}
+              </span>
+              <span>{COP.format(v.total)}</span>
+            </div>
+          ))}
+          <div className="mt-1 flex items-center justify-between border-t border-primary-200 pt-1.5 font-semibold text-primary-900">
+            <span>Total a cobrar</span>
+            <span>{COP.format(totalCobro)}</span>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <PagoLineas lineas={lineas} onChange={setLineas} total={totalCobro} />
+          {/* Descuento — cerrado por defecto; el negocio lo absorbe, no toca comisiones */}
+          {descAbierto ? (
+            <div className="flex flex-col gap-3 rounded-lg border border-warning-200 bg-warning-50/50 p-3">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-xs font-semibold text-warning-700">
+                  <Percent size={13} /> Descuento (lo absorbe el negocio)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDescAbierto(false)
+                    setDescValor('')
+                    setDescMotivo('')
+                    setDescAutoriza('')
+                  }}
+                  className="text-xs font-medium text-neutral-500 hover:text-danger-600"
+                >
+                  Quitar
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {(['monto', 'pct'] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setDescModo(m)}
+                    className={`rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
+                      descModo === m
+                        ? 'border-primary-600 bg-primary-50 text-primary-700'
+                        : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
+                    }`}
+                  >
+                    {m === 'monto' ? 'Monto fijo' : 'Porcentaje'}
+                  </button>
+                ))}
+              </div>
+              {descModo === 'monto' ? (
+                <CurrencyInput value={descValor} onChange={setDescValor} placeholder="0" />
+              ) : (
+                <div className="flex items-center gap-2 rounded-lg border border-neutral-300 px-3 py-3 focus-within:border-primary-500 focus-within:ring-1 focus-within:ring-primary-500">
+                  <input
+                    inputMode="numeric"
+                    value={descValor}
+                    onChange={(e) => setDescValor(e.target.value.replace(/\D/g, '').slice(0, 3))}
+                    placeholder="0"
+                    className="w-full min-w-0 bg-transparent text-base outline-none"
+                  />
+                  <span className="shrink-0 text-neutral-400">%</span>
+                </div>
+              )}
+              <input
+                value={descMotivo}
+                onChange={(e) => setDescMotivo(e.target.value)}
+                placeholder="Motivo (amigo, regateo, cortesía…)"
+                className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+              />
+              <input
+                value={descAutoriza}
+                onChange={(e) => setDescAutoriza(e.target.value)}
+                placeholder="Quién lo autoriza"
+                className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+              />
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setDescAbierto(true)}
+              className="flex items-center gap-1.5 self-start rounded-lg border border-dashed border-neutral-300 px-3 py-2 text-xs font-medium text-neutral-600 transition-colors hover:border-warning-400 hover:text-warning-700"
+            >
+              <Percent size={13} /> Aplicar descuento
+            </button>
+          )}
 
-          {soloEfectivo ? (
+          {esCortesia ? (
+            <p className="rounded-lg bg-success-50 px-3 py-3 text-center text-sm font-medium text-success-800">
+              Cortesía total — no se cobra nada. La comisión del lavador se paga igual (la cubre el
+              negocio).
+            </p>
+          ) : (
+            <PagoLineas lineas={lineasEfectivas} onChange={setLineas} total={totalCobro} />
+          )}
+
+          {!esCortesia && soloEfectivo ? (
             <label className="flex flex-col gap-1.5 text-sm">
               <span className="font-medium text-neutral-700">Con cuánto paga (opcional)</span>
               <CurrencyInput value={montoRecibido} onChange={setMontoRecibido} placeholder="0" />
@@ -1769,7 +1922,7 @@ function CobroModal({
             className="flex items-center justify-center gap-2 rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
           >
             <CheckCircle2 size={16} />
-            {saving ? 'Registrando…' : 'Confirmar cobro y entrega'}
+            {saving ? 'Registrando…' : esCortesia ? 'Entregar (cortesía)' : 'Confirmar cobro y entrega'}
           </button>
         </form>
       </div>

@@ -86,8 +86,11 @@ function OrdenesPage() {
     setOrdenes(await fetchOrdenesEnRango(desdeISO, hastaISO))
   }
 
-  // Solo entregadas: en_proceso/listo todavía no se han cobrado, no cuentan como ingreso.
-  const totalIngresos = ordenes.filter((o) => o.estado === 'entregado').reduce((total, o) => total + o.precio, 0)
+  // Solo entregadas: en_proceso/listo todavía no se han cobrado, no cuentan como ingreso. Neto
+  // del descuento (0037) — es lo que realmente entró a caja.
+  const totalIngresos = ordenes
+    .filter((o) => o.estado === 'entregado')
+    .reduce((total, o) => total + o.precio - o.descuento, 0)
   const anuladasEnRango = ordenes.filter((o) => o.estado === 'anulada')
 
   return (
@@ -147,7 +150,21 @@ function OrdenesPage() {
                     {orden.lavadorId ? lavadoresPorId.get(orden.lavadorId) ?? '—' : 'Sin asignar'}
                     {orden.lavadorId2 ? ` + ${lavadoresPorId.get(orden.lavadorId2) ?? '—'}` : ''}
                   </td>
-                  <td className="px-5 py-3 text-neutral-700">{COP.format(orden.precio)}</td>
+                  <td className="px-5 py-3 text-neutral-700">
+                    {orden.descuento > 0 ? (
+                      <span className="flex flex-col">
+                        <span>{COP.format(orden.precio - orden.descuento)}</span>
+                        <span
+                          className="text-xs text-warning-600"
+                          title={orden.descuentoMotivo ? `${orden.descuentoMotivo} · autoriza ${orden.descuentoAutorizadoPor ?? '—'}` : undefined}
+                        >
+                          desc. −{COP.format(orden.descuento)}
+                        </span>
+                      </span>
+                    ) : (
+                      COP.format(orden.precio)
+                    )}
+                  </td>
                   <td className="px-5 py-3 text-neutral-700">
                     {orden.metodoPago ? METODO_PAGO_LABEL[orden.metodoPago] : '—'}
                   </td>

@@ -62,17 +62,33 @@ export function TiquetePrint({ recibo, variant }: { recibo: ReciboData; variant:
         <TiqueteFila label="Referencia" valor={recibo.referenciaPago} />
       ) : null}
 
+      {(recibo.productos && recibo.productos.length > 0) || recibo.descuento ? (
+        <>
+          <div className="tiquete-58__linea" />
+          <p className="tiquete-58__seccion">Cuenta</p>
+          <TiqueteFila label="Lavado" valor={COP.format(recibo.precioLavado ?? recibo.precio)} />
+          {recibo.descuento ? <TiqueteFila label="Descuento" valor={`-${COP.format(recibo.descuento)}`} /> : null}
+          {(recibo.productos ?? []).map((p, i) => (
+            <TiqueteFila key={i} label={`${p.nombre} x${p.cantidad}`} valor={COP.format(p.total)} />
+          ))}
+        </>
+      ) : null}
+
       <div className="tiquete-58__linea-solida" />
 
       <div className="tiquete-58__total">
-        <span>{esPago ? 'TOTAL PAGADO' : 'PRECIO'}</span>
+        <span>{!esPago ? 'PRECIO' : recibo.precio === 0 ? 'CORTESÍA' : 'TOTAL PAGADO'}</span>
         <span>{COP.format(recibo.precio)}</span>
       </div>
 
       <div className="tiquete-58__linea" />
 
       <p className="tiquete-58__aviso">
-        {esPago ? 'Vehículo entregado — pago confirmado.' : 'Se cobra al entregar el vehículo, no ahora.'}
+        {!esPago
+          ? 'Se cobra al entregar el vehículo, no ahora.'
+          : recibo.precio === 0
+            ? 'Vehículo entregado — cortesía, no se cobró.'
+            : 'Vehículo entregado — pago confirmado.'}
       </p>
       <p className="tiquete-58__pie">Gracias por su visita</p>
       <p className="tiquete-58__pie-legal">Factura electrónica: solicítala a gerencia@carwashsm.com</p>

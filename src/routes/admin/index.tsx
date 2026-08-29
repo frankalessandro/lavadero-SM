@@ -88,8 +88,11 @@ function AdminDashboard() {
   const ventasActivasHoy = ventasHoy.filter((v) => v.estado === 'activa')
 
   // Solo lo cobrado hoy (estado entregado) cuenta como ingreso — un vehículo en proceso o
-  // listo todavía no ha entrado dinero a caja por él, aunque ya tenga precio fijado.
-  const ingresosLavadero = entregadasHoy.reduce((total, o) => total + o.precio, 0)
+  // listo todavía no ha entrado dinero a caja por él, aunque ya tenga precio fijado. Neto del
+  // descuento (0037): el negocio absorbe la rebaja, así que el ingreso real del lavado es
+  // `precio − descuento`. Las comisiones NO se tocan (siguen sobre `precio` de lista).
+  const descuentosHoy = entregadasHoy.reduce((total, o) => total + o.descuento, 0)
+  const ingresosLavadero = entregadasHoy.reduce((total, o) => total + o.precio - o.descuento, 0)
   const ingresosParqueadero = resumenParqueadero.dineroHoy
   const ingresosVentas = ventasActivasHoy.reduce((total, v) => total + v.total, 0)
   const ingresosTotales = ingresosLavadero + ingresosParqueadero + ingresosVentas
@@ -232,6 +235,12 @@ function AdminDashboard() {
                 <dt className="text-neutral-500">Ingresos totales</dt>
                 <dd className="font-medium text-neutral-900">{COP.format(ingresosTotales)}</dd>
               </div>
+              {descuentosHoy > 0 ? (
+                <div className="flex items-center justify-between text-xs">
+                  <dt className="text-neutral-400">ya con {COP.format(descuentosHoy)} en descuentos que absorbió el negocio</dt>
+                  <dd className="text-neutral-400">−{COP.format(descuentosHoy)}</dd>
+                </div>
+              ) : null}
               <div className="flex items-center justify-between">
                 <dt className="text-neutral-500">− Comisión de lavadores</dt>
                 <dd className="font-medium text-danger-600">{COP.format(comisionesHoy)}</dd>

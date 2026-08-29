@@ -19,8 +19,14 @@ export interface ReciboData {
   // y `precio` pasa a ser el total combinado.
   productos?: { nombre: string; cantidad: number; total: number }[]
   precioLavado?: number
+  // Descuento sobre el lavado, absorbido por el negocio. `precioLavado` es el precio de lista y
+  // `precio` el total ya con el descuento restado.
+  descuento?: number
+  descuentoMotivo?: string
   precio: number
   fecha: string
+  // Fuerza la variante "pago" aunque no haya método (cortesía total: entregado, cobrado $0).
+  entregada?: boolean
   // Etiqueta-resumen ('mixto' si el cobro se repartió). El desglose real va en `pagos`.
   metodoPago?: MetodoPago
   referenciaPago?: string
@@ -115,10 +121,18 @@ export function ReciboModal({
           ) : null}
           <ReciboRow label={esPago ? 'Fecha de entrega' : 'Fecha de ingreso'} value={FECHA_HORA.format(new Date(recibo.fecha))} />
 
-          {recibo.productos && recibo.productos.length > 0 ? (
+          {(recibo.productos && recibo.productos.length > 0) || recibo.descuento ? (
             <div className="mt-1 flex flex-col gap-1.5 rounded-lg bg-neutral-50 px-3 py-2.5">
               <ReciboRow label="Lavado" value={COP.format(recibo.precioLavado ?? recibo.precio)} />
-              {recibo.productos.map((p, i) => (
+              {recibo.descuento ? (
+                <>
+                  <ReciboRow label="Descuento" value={`−${COP.format(recibo.descuento)}`} />
+                  {recibo.descuentoMotivo ? (
+                    <p className="text-right text-[11px] text-neutral-400">{recibo.descuentoMotivo}</p>
+                  ) : null}
+                </>
+              ) : null}
+              {(recibo.productos ?? []).map((p, i) => (
                 <ReciboRow key={i} label={`${p.nombre} ×${p.cantidad}`} value={COP.format(p.total)} />
               ))}
             </div>
@@ -128,14 +142,18 @@ export function ReciboModal({
             className={`mt-1 flex items-center justify-between rounded-lg px-3 py-3 ${esPago ? 'bg-success-50' : 'bg-primary-50'}`}
           >
             <span className={`text-sm font-medium ${esPago ? 'text-success-900' : 'text-primary-900'}`}>
-              {esPago ? 'Total pagado' : 'Precio'}
+              {!esPago ? 'Precio' : recibo.precio === 0 ? 'Cortesía' : 'Total pagado'}
             </span>
             <span className={`text-xl font-bold ${esPago ? 'text-success-700' : 'text-primary-700'}`}>
               {COP.format(recibo.precio)}
             </span>
           </div>
           <p className="text-center text-xs text-neutral-400">
-            {esPago ? 'Vehículo entregado — pago confirmado.' : 'Se cobra al entregar el vehículo, no ahora.'}
+            {!esPago
+              ? 'Se cobra al entregar el vehículo, no ahora.'
+              : recibo.precio === 0
+                ? 'Vehículo entregado — cortesía, no se cobró.'
+                : 'Vehículo entregado — pago confirmado.'}
           </p>
         </div>
 

@@ -43,6 +43,20 @@ export async function fetchVentasPendientes(): Promise<Venta[]> {
   return ventaSchema.array().parse(data)
 }
 
+// Productos cobrados junto con una orden (ya no 'pendiente' sino 'activa'/'anulada') — para
+// reimprimir la factura de un vehículo ya entregado con su detalle de vitrina completo, no solo
+// el total. Se usa en `abrirTiquete` del tablero de jefe de zona.
+export async function fetchVentasDeOrden(ordenId: string): Promise<Venta[]> {
+  const { data, error } = await db
+    .from('ventas')
+    .select(VENTA_SELECT)
+    .eq('orden_id', ordenId)
+    .neq('estado', 'anulada')
+    .order('consecutivo', { ascending: true })
+  if (error) throw new Error(error.message)
+  return ventaSchema.array().parse(data)
+}
+
 // Para reportes de admin (mismo patrón que fetchOrdenesEnRango).
 export async function fetchVentasEnRango(desdeISO: string, hastaISO: string): Promise<Venta[]> {
   const { data, error } = await db
