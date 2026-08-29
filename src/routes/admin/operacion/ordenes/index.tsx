@@ -1,11 +1,13 @@
 import { useState, type FormEvent } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { Ban, X } from 'lucide-react'
+import { Ban, Wallet, X } from 'lucide-react'
 import { anularOrden, fetchOrdenesEnRango } from '../../../../data/ordenes'
 import { fetchLavadores } from '../../../../data/lavadores'
 import { fetchCombos } from '../../../../data/combos'
 import { anularOrdenInputSchema, type Orden } from '../../../../schemas/orden'
 import { Card } from '../../../../components/layout/Card'
+import { CorregirPagoModal } from '../../../../components/layout/CorregirPagoModal'
+import { METODO_PAGO_LABEL } from '../../../../lib/metodoPago'
 
 type RangoKey = 'hoy' | '7d' | '30d'
 
@@ -64,6 +66,7 @@ function OrdenesPage() {
   const lavadoresPorId = new Map(initial.lavadores.map((l) => [l.id, l.nombre]))
   const combosPorId = new Map(initial.combos.map((c) => [c.id, c.nombre]))
   const [anulando, setAnulando] = useState<Orden | null>(null)
+  const [corrigiendoPago, setCorrigiendoPago] = useState<Orden | null>(null)
 
   async function cambiarRango(key: RangoKey) {
     setRango(key)
@@ -146,11 +149,7 @@ function OrdenesPage() {
                   </td>
                   <td className="px-5 py-3 text-neutral-700">{COP.format(orden.precio)}</td>
                   <td className="px-5 py-3 text-neutral-700">
-                    {orden.metodoPago === 'efectivo'
-                      ? 'Efectivo'
-                      : orden.metodoPago === 'transferencia'
-                        ? 'Transferencia'
-                        : '—'}
+                    {orden.metodoPago ? METODO_PAGO_LABEL[orden.metodoPago] : '—'}
                   </td>
                   <td className="px-5 py-3">
                     <span
@@ -165,7 +164,17 @@ function OrdenesPage() {
                     </span>
                   </td>
                   <td className="px-5 py-3">
-                    <div className="flex justify-end">
+                    <div className="flex justify-end gap-1">
+                      {orden.estado === 'entregado' ? (
+                        <button
+                          type="button"
+                          onClick={() => setCorrigiendoPago(orden)}
+                          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-primary-50 hover:text-primary-700"
+                        >
+                          <Wallet size={14} />
+                          Corregir pago
+                        </button>
+                      ) : null}
                       {orden.estado !== 'anulada' ? (
                         <button
                           type="button"
@@ -221,6 +230,18 @@ function OrdenesPage() {
           onClose={() => setAnulando(null)}
           onAnulada={async () => {
             setAnulando(null)
+            await refrescar()
+          }}
+        />
+      ) : null}
+
+      {corrigiendoPago ? (
+        <CorregirPagoModal
+          target={{ ordenId: corrigiendoPago.id }}
+          referencia={`Orden #${corrigiendoPago.consecutivo} · ${corrigiendoPago.placa}`}
+          onClose={() => setCorrigiendoPago(null)}
+          onCorregido={async () => {
+            setCorrigiendoPago(null)
             await refrescar()
           }}
         />

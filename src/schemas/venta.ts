@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { metodoPagoSchema } from './orden'
+import { metodoPagoBaseSchema, metodoPagoSchema } from './orden'
 
 // `pendiente` = producto cargado a una orden de lavado, aún sin cobrar y sin descontar
 // inventario. Pasa a `activa` (con su salida de stock) cuando se cobra la orden. Ver
@@ -29,12 +29,17 @@ export const ventaSchema = z.object({
   // precio_venta del producto (mismo criterio que ordenes.precio).
   precioUnitario: z.number().int().nonnegative(),
   total: z.number().int().nonnegative(),
+  // Etiqueta-resumen: 'mixto' cuando el cobro se repartió en varios métodos. El detalle vive en
+  // `pagos` (por `venta_grupo_id` en ventas de mostrador).
   metodoPago: metodoPagoSchema,
   referenciaPago: nullableTrimmedString,
   turnoId: nullableTrimmedString,
   // Orden de lavado a la que se cargó el producto (null = venta aparte de mostrador). Cuando
   // está presente, la venta se cobra junto con el lavado al entregar el vehículo.
   ordenId: nullableTrimmedString,
+  // Agrupa las filas de un mismo carrito de mostrador cobrado junto (pago partido a nivel de
+  // carrito). Null para productos cargados a una orden y filas anteriores a 0036.
+  ventaGrupoId: nullableTrimmedString,
   vendidoPor: z.string().trim().min(1),
   estado: estadoVentaSchema,
   motivoAnulacion: nullableTrimmedString,
@@ -43,27 +48,28 @@ export const ventaSchema = z.object({
   creadoEn: z.string(),
 })
 
-export const ventaInputSchema = z
-  .object({
-    productoId: z.string().min(1, 'Selecciona un producto'),
-    cantidad: z.number().int().positive('La cantidad debe ser mayor a cero'),
-    metodoPago: metodoPagoSchema,
-    referenciaPago: z.string().trim().optional(),
-    // Cuando viene, la venta se carga a esa orden como `pendiente` y su método/referencia
-    // reales se definen al cobrar la orden — por eso la referencia no se exige acá en ese caso.
-    ordenId: z.string().uuid().optional(),
-    vendidoPor: z.string().trim().min(1, 'El responsable es obligatorio'),
-  })
-  .refine(
-    (data) =>
-      !!data.ordenId ||
-      (data.metodoPago !== 'transferencia' && data.metodoPago !== 'datafono') ||
-      !!data.referenciaPago,
-    {
-      message: 'La referencia es obligatoria en pagos por transferencia o datáfono',
-      path: ['referenciaPago'],
-    },
-  )
+// Carga de UN producto a una orden de lavado (estado `pendiente`, sin cobro). El método/
+// referencia se definen al cobrar la orden — por eso son opcionales aquí. La venta aparte de
+// mostrador (varias líneas + pago partido) va por `ventaCarritoInputSchema`.
+export const ventaInputSchema = z.object({
+  productoId: z.string().min(1, 'Selecciona un producto'),
+  cantidad: z.number().int().positive('La cantidad debe ser mayor a cero'),
+  metodoPago: metodoPagoBaseSchema.default('efectivo'),
+  referenciaPago: z.string().trim().optional(),
+  ordenId: z.string().uuid(),
+  vendidoPor: z.string().trim().min(1, 'El responsable es obligatorio'),
+})
+
+// Venta aparte de mostrador: varias líneas de producto cobradas juntas con pago partido.
+export const ventaCarritoItemSchema = z.object({
+  productoId: z.string().min(1, 'Selecciona un producto'),
+  cantidad: z.number().int().positive('La cantidad debe ser mayor a cero'),
+})
+
+export const ventaCarritoInputSchema = z.object({
+  items: z.array(ventaCarritoItemSchema).min(1, 'El carrito no tiene productos'),
+  vendidoPor: z.string().trim().min(1, 'El responsable es obligatorio'),
+})
 
 export const anularVentaInputSchema = z.object({
   motivo: z.string().trim().min(3, 'El motivo de anulación es obligatorio'),
@@ -73,4 +79,5 @@ export const anularVentaInputSchema = z.object({
 export type EstadoVenta = z.infer<typeof estadoVentaSchema>
 export type Venta = z.infer<typeof ventaSchema>
 export type VentaInput = z.infer<typeof ventaInputSchema>
+export type VentaCarritoInput = z.infer<typeof ventaCarritoInputSchema>
 export type AnularVentaInput = z.infer<typeof anularVentaInputSchema>

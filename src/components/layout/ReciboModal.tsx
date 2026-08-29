@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
-import type { MetodoPago } from '../../schemas/orden'
+import type { MetodoPago, MetodoPagoBase } from '../../schemas/orden'
+import { METODO_PAGO_LABEL } from '../../lib/metodoPago'
 import logoMark from '../../assets/logo-mark.png'
 import { TiquetePrint } from './TiquetePrint'
 
@@ -20,8 +21,12 @@ export interface ReciboData {
   precioLavado?: number
   precio: number
   fecha: string
+  // Etiqueta-resumen ('mixto' si el cobro se repartió). El desglose real va en `pagos`.
   metodoPago?: MetodoPago
   referenciaPago?: string
+  // Reparto del cobro cuando fue pago partido (más de un método). Si viene, se itemiza en vez de
+  // mostrar un único "Método de pago".
+  pagos?: { metodo: MetodoPagoBase; monto: number; referencia?: string }[]
 }
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
@@ -91,10 +96,23 @@ export function ReciboModal({
             label={recibo.lavadorNombre2 ? 'Lavadores asignados' : 'Lavador asignado'}
             value={recibo.lavadorNombre2 ? `${recibo.lavadorNombre} + ${recibo.lavadorNombre2}` : recibo.lavadorNombre}
           />
-          {esPago && recibo.metodoPago ? (
-            <ReciboRow label="Método de pago" value={recibo.metodoPago === 'efectivo' ? 'Efectivo' : 'Transferencia'} />
+          {esPago && recibo.pagos && recibo.pagos.length > 1 ? (
+            <div className="mt-1 flex flex-col gap-1.5 rounded-lg bg-neutral-50 px-3 py-2.5">
+              <span className="text-xs font-medium uppercase tracking-wide text-neutral-400">Pago partido</span>
+              {recibo.pagos.map((p, i) => (
+                <ReciboRow
+                  key={i}
+                  label={p.referencia ? `${METODO_PAGO_LABEL[p.metodo]} · ${p.referencia}` : METODO_PAGO_LABEL[p.metodo]}
+                  value={COP.format(p.monto)}
+                />
+              ))}
+            </div>
+          ) : esPago && recibo.metodoPago ? (
+            <ReciboRow label="Método de pago" value={METODO_PAGO_LABEL[recibo.metodoPago]} />
           ) : null}
-          {esPago && recibo.referenciaPago ? <ReciboRow label="Referencia" value={recibo.referenciaPago} /> : null}
+          {esPago && (!recibo.pagos || recibo.pagos.length <= 1) && recibo.referenciaPago ? (
+            <ReciboRow label="Referencia" value={recibo.referenciaPago} />
+          ) : null}
           <ReciboRow label={esPago ? 'Fecha de entrega' : 'Fecha de ingreso'} value={FECHA_HORA.format(new Date(recibo.fecha))} />
 
           {recibo.productos && recibo.productos.length > 0 ? (

@@ -1,4 +1,5 @@
 import { db } from '../lib/db'
+import { fetchEfectivoDeTurno } from './pagos'
 import {
   abrirTurnoInputSchema,
   turnoCajaSchema,
@@ -85,30 +86,11 @@ export async function fetchTraspasos(turnoId: string): Promise<TraspasoTurno[]> 
   return traspasoTurnoSchema.array().parse(data)
 }
 
-async function ingresosLavadosEfectivo(turnoId: string): Promise<number> {
-  const { data, error } = await db
-    .from('ordenes')
-    .select('precio')
-    .eq('turno_id', turnoId)
-    .eq('estado', 'entregado')
-    .eq('metodo_pago', 'efectivo')
-  if (error) throw new Error(error.message)
-  return (data ?? []).reduce((total, o) => total + (o.precio as number), 0)
-}
-
-// Ventas de productos de inventario (agua, cerveza, etc.) — se cuentan aparte de los lavados en
-// los indicadores del dashboard, pero suman igual al arqueo del turno de jefe_zona: es la misma
-// caja física. Solo 'activa' (una venta anulada nunca movió dinero real) y efectivo.
-async function ingresosVentasEfectivo(turnoId: string): Promise<number> {
-  const { data, error } = await db
-    .from('ventas')
-    .select('total')
-    .eq('turno_id', turnoId)
-    .eq('estado', 'activa')
-    .eq('metodo_pago', 'efectivo')
-  if (error) throw new Error(error.message)
-  return (data ?? []).reduce((total, v) => total + (v.total as number), 0)
-}
+// Efectivo del turno = suma de las LÍNEAS DE PAGO en efectivo imputadas a ese turno (tabla
+// `pagos`, 0036), no la columna-resumen `metodo_pago` de la orden/venta — un cobro repartido
+// puede tener parte en efectivo y parte no. `fetchEfectivoDeTurno` separa lavados (pagos con
+// orden_id) de ventas de mostrador (pagos con venta_grupo_id); las líneas anuladas —por
+// anulación del cobro o por una corrección de reparto— quedan fuera.
 
 async function gastosDeCaja(turnoId: string): Promise<number> {
   const { data, error } = await db.from('gastos').select('monto').eq('turno_id', turnoId).eq('origen', 'caja')
@@ -125,7 +107,7 @@ export async function calcularValorEsperado(turno: TurnoCaja): Promise<number> {
 
   let ingresos: number
   if (turno.rol === 'jefe_zona') {
-    const [lavados, ventas] = await Promise.all([ingresosLavadosEfectivo(turno.id), ingresosVentasEfectivo(turno.id)])
+    const { lavados, ventas } = await fetchEfectivoDeTurno(turno.id)
     ingresos = lavados + ventas
   } else {
     const estanciasRes = await db
@@ -154,9 +136,12 @@ export interface DesgloseEsperado {
 // (como pidió el negocio), pero ambos suman al mismo total esperado.
 export async function desgloseEsperado(turno: TurnoCaja): Promise<DesgloseEsperado> {
   const gastos = await gastosDeCaja(turno.id)
-  const ingresosLavados = turno.rol === 'jefe_zona' ? await ingresosLavadosEfectivo(turno.id) : 0
-  const ingresosVentas = turno.rol === 'jefe_zona' ? await ingresosVentasEfectivo(turno.id) : 0
-  const total = turno.rol === 'jefe_zona' ? turno.baseInicial + ingresosLavados + ingresosVentas - gastos : await calcularValorEsperado(turno)
+  const { lavados: ingresosLavados, ventas: ingresosVentas } =
+    turno.rol === 'jefe_zona' ? await fetchEfectivoDeTurno(turno.id) : { lavados: 0, ventas: 0 }
+  const total =
+    turno.rol === 'jefe_zona'
+      ? turno.baseInicial + ingresosLavados + ingresosVentas - gastos
+      : await calcularValorEsperado(turno)
   return { base: turno.baseInicial, ingresosLavados, ingresosVentas, gastos, total }
 }
 

@@ -1,5 +1,6 @@
 import { createPortal } from 'react-dom'
 import type { ReciboData } from './ReciboModal'
+import { METODO_PAGO_LABEL } from '../../lib/metodoPago'
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 const FECHA = new Intl.DateTimeFormat('es-CO', { dateStyle: 'short' })
@@ -50,10 +51,16 @@ export function TiquetePrint({ recibo, variant }: { recibo: ReciboData; variant:
         label={recibo.lavadorNombre2 ? 'Lavadores' : 'Lavador'}
         valor={recibo.lavadorNombre2 ? `${recibo.lavadorNombre} + ${recibo.lavadorNombre2}` : recibo.lavadorNombre}
       />
-      {esPago && recibo.metodoPago ? (
-        <TiqueteFila label="Pago" valor={recibo.metodoPago === 'efectivo' ? 'Efectivo' : 'Transferencia'} />
+      {esPago && recibo.pagos && recibo.pagos.length > 1 ? (
+        recibo.pagos.map((p, i) => (
+          <TiqueteFila key={i} label={`Pago ${i + 1} · ${METODO_PAGO_LABEL[p.metodo]}`} valor={COP.format(p.monto)} />
+        ))
+      ) : esPago && recibo.metodoPago ? (
+        <TiqueteFila label="Pago" valor={METODO_PAGO_LABEL[recibo.metodoPago]} />
       ) : null}
-      {esPago && recibo.referenciaPago ? <TiqueteFila label="Referencia" valor={recibo.referenciaPago} /> : null}
+      {esPago && (!recibo.pagos || recibo.pagos.length <= 1) && recibo.referenciaPago ? (
+        <TiqueteFila label="Referencia" valor={recibo.referenciaPago} />
+      ) : null}
 
       <div className="tiquete-58__linea-solida" />
 

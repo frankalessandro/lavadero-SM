@@ -1,17 +1,20 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { ShoppingCart, Receipt, X, Plus, Minus, Trash2 } from 'lucide-react'
+import { ShoppingCart, Receipt, X, Plus, Minus, Trash2, Wallet } from 'lucide-react'
 import { fetchTurnoAbierto } from '../../../data/turnos'
 import { fetchProductosOperativo } from '../../../data/productos'
 import { fetchStockProductosOperativo } from '../../../data/movimientosInventario'
-import { createVenta, anularVenta, fetchVentasHoy } from '../../../data/ventas'
-import { ventaInputSchema, anularVentaInputSchema, type Venta } from '../../../schemas/venta'
+import { createVentaCarrito, anularVenta, fetchVentasHoy } from '../../../data/ventas'
+import { anularVentaInputSchema, type Venta } from '../../../schemas/venta'
 import type { Producto } from '../../../schemas/producto'
-import type { MetodoPago } from '../../../schemas/orden'
+import type { PagoLineaInput } from '../../../schemas/pago'
 import { Card } from '../../../components/layout/Card'
 import { StatCard } from '../../../components/layout/StatCard'
 import { AbrirTurnoPrompt } from '../../../components/layout/TurnoResponsableBanner'
 import { VentaReciboModal, type VentaReciboData } from '../../../components/layout/VentaReciboModal'
+import { CorregirPagoModal } from '../../../components/layout/CorregirPagoModal'
+import { PagoLineas } from '../../../components/layout/PagoLineas'
+import { borradorAPagos, nuevaLineaBorrador, pagoLineasCuadra, type PagoLineaBorrador } from '../../../lib/pagoLineas'
 import { METODO_PAGO_LABEL } from '../../../lib/metodoPago'
 
 async function loadVentas() {
@@ -40,6 +43,8 @@ function VenderPage() {
   const [ventasHoy, setVentasHoy] = useState<Venta[]>(data.ventasHoy)
   const [recibo, setRecibo] = useState<VentaReciboData | null>(null)
   const [anulando, setAnulando] = useState<Venta | null>(null)
+  // Venta (de un carrito) cuyo reparto de pago se está corrigiendo.
+  const [corrigiendo, setCorrigiendo] = useState<Venta | null>(null)
 
   async function refresh() {
     const nuevo = await loadVentas()
@@ -79,7 +84,7 @@ function VenderPage() {
           productosVendibles={productosVendibles}
           stockPorProducto={stockPorProducto}
           responsableSugerido={turno.responsableActual}
-          onVendido={async (ventas) => {
+          onVendido={async (ventas, pagos) => {
             const primera = ventas[0]
             const consecutivos = ventas.map((v) => v.consecutivo)
             setRecibo({
@@ -99,7 +104,11 @@ function VenderPage() {
                       total: v.total,
                     })),
               metodoPago: primera.metodoPago,
-              referenciaPago: primera.referenciaPago,
+              referenciaPago: pagos.length === 1 ? pagos[0].referencia : undefined,
+              pagos:
+                pagos.length > 1
+                  ? pagos.map((p) => ({ metodo: p.metodo, monto: p.monto, referencia: p.referencia }))
+                  : undefined,
               vendidoPor: primera.vendidoPor,
               fecha: primera.creadoEn,
             })
@@ -131,13 +140,24 @@ function VenderPage() {
               <div className="flex shrink-0 flex-col items-end gap-1.5">
                 <span className="text-sm font-semibold text-neutral-900">{COP.format(venta.total)}</span>
                 {venta.estado === 'activa' ? (
-                  <button
-                    type="button"
-                    onClick={() => setAnulando(venta)}
-                    className="text-xs font-medium text-danger-600 transition-colors hover:text-danger-700"
-                  >
-                    Anular
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {venta.ventaGrupoId ? (
+                      <button
+                        type="button"
+                        onClick={() => setCorrigiendo(venta)}
+                        className="flex items-center gap-1 text-xs font-medium text-neutral-500 transition-colors hover:text-primary-700"
+                      >
+                        <Wallet size={12} /> Corregir pago
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => setAnulando(venta)}
+                      className="text-xs font-medium text-danger-600 transition-colors hover:text-danger-700"
+                    >
+                      Anular
+                    </button>
+                  </div>
                 ) : (
                   <span className="inline-flex rounded-full bg-danger-50 px-2 py-0.5 text-xs font-medium text-danger-700">Anulada</span>
                 )}
@@ -151,6 +171,18 @@ function VenderPage() {
       </div>
 
       {recibo ? <VentaReciboModal venta={recibo} onClose={() => setRecibo(null)} /> : null}
+
+      {corrigiendo?.ventaGrupoId ? (
+        <CorregirPagoModal
+          target={{ ventaGrupoId: corrigiendo.ventaGrupoId }}
+          referencia={`Venta de mostrador VTA-${corrigiendo.consecutivo}`}
+          onClose={() => setCorrigiendo(null)}
+          onCorregido={async () => {
+            setCorrigiendo(null)
+            await refresh()
+          }}
+        />
+      ) : null}
 
       {anulando ? (
         <AnularVentaModal
@@ -167,9 +199,9 @@ function VenderPage() {
   )
 }
 
-// Carrito de venta aparte: se arman varias líneas (una fila `ventas` por producto) y se cobran
-// en un solo pago → un solo comprobante combinado. Cada línea va por su propia RPC atómica
-// `registrar_venta` (sin orden), así que una falla no arrastra a las demás.
+// Carrito de venta aparte: varias líneas de producto cobradas juntas con pago partido (1–3
+// medios que deben sumar el total). Todo en una transacción vía `registrar_venta_carrito` —
+// una fila `ventas` por producto + 1–3 filas `pagos` contra un `venta_grupo_id` común.
 function VentaCarrito({
   productosVendibles,
   stockPorProducto,
@@ -179,11 +211,10 @@ function VentaCarrito({
   productosVendibles: Producto[]
   stockPorProducto: Map<string, number>
   responsableSugerido: string
-  onVendido: (ventas: Venta[]) => Promise<void>
+  onVendido: (ventas: Venta[], pagos: PagoLineaInput[]) => Promise<void>
 }) {
   const [carrito, setCarrito] = useState<Map<string, number>>(new Map())
-  const [metodoPago, setMetodoPago] = useState<MetodoPago>('efectivo')
-  const [referenciaPago, setReferenciaPago] = useState('')
+  const [pagoLineas, setPagoLineas] = useState<PagoLineaBorrador[]>([nuevaLineaBorrador()])
   const [vendidoPor, setVendidoPor] = useState(responsableSugerido)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -197,45 +228,47 @@ function VentaCarrito({
     })
   }
 
-  const requiereReferencia = metodoPago === 'transferencia' || metodoPago === 'datafono'
-  const lineas = [...carrito.entries()]
-  const unidades = lineas.reduce((s, [, c]) => s + c, 0)
-  const total = lineas.reduce((s, [id, c]) => {
+  const items = [...carrito.entries()]
+  const unidades = items.reduce((s, [, c]) => s + c, 0)
+  const total = items.reduce((s, [id, c]) => {
     const p = productosVendibles.find((x) => x.id === id)
     return s + (p?.precioVenta ?? 0) * c
   }, 0)
 
+  // Con una sola línea de pago su monto ES el total del carrito (única forma de que cuadre), así
+  // que se deriva en vez de guardarse — sin esto habría que teclearlo en el caso simple. Con 2 o
+  // 3 líneas cada monto se edita a mano.
+  const pagoLineasEfectivas: PagoLineaBorrador[] =
+    pagoLineas.length === 1
+      ? [{ ...pagoLineas[0], monto: total > 0 ? String(total) : '' }]
+      : pagoLineas
+
+  const cuadra = total > 0 && pagoLineasCuadra(pagoLineasEfectivas, total)
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    if (lineas.length === 0) return
-    if (requiereReferencia && !referenciaPago.trim()) {
-      setError('La referencia es obligatoria en pagos por transferencia o datáfono')
-      return
-    }
+    if (items.length === 0) return
     if (!vendidoPor.trim()) {
       setError('El responsable es obligatorio')
       return
     }
+    if (!cuadra) {
+      setError(`Las líneas de pago deben sumar exactamente ${COP.format(total)}`)
+      return
+    }
     setError(null)
     setSaving(true)
-    const hechas: Venta[] = []
     try {
-      for (const [productoId, cantidad] of lineas) {
-        const parsed = ventaInputSchema.parse({
-          productoId,
-          cantidad,
-          metodoPago,
-          referenciaPago: requiereReferencia ? referenciaPago.trim() : undefined,
-          vendidoPor: vendidoPor.trim(),
-        })
-        hechas.push(await createVenta(parsed))
-      }
+      const pagos = borradorAPagos(pagoLineasEfectivas)
+      const hechas = await createVentaCarrito(
+        { items: items.map(([productoId, cantidad]) => ({ productoId, cantidad })), vendidoPor: vendidoPor.trim() },
+        pagos,
+      )
       setCarrito(new Map())
-      setReferenciaPago('')
-      await onVendido(hechas)
+      setPagoLineas([nuevaLineaBorrador()])
+      await onVendido(hechas, pagos)
     } catch (err) {
-      const base = err instanceof Error ? err.message : 'No se pudo registrar la venta'
-      setError(hechas.length > 0 ? `${base}. Se registraron ${hechas.length} de ${lineas.length} líneas — revisa "Ventas de hoy".` : base)
+      setError(err instanceof Error ? err.message : 'No se pudo registrar la venta')
     } finally {
       setSaving(false)
     }
@@ -300,7 +333,7 @@ function VentaCarrito({
           ) : null}
         </div>
 
-        {lineas.length > 0 ? (
+        {items.length > 0 ? (
           <button
             type="button"
             onClick={() => setCarrito(new Map())}
@@ -310,36 +343,11 @@ function VentaCarrito({
           </button>
         ) : null}
 
-        <div className="flex flex-col gap-1.5 text-sm">
-          <span className="font-medium text-neutral-700">Método de pago</span>
-          <div className="grid grid-cols-3 gap-2">
-            {(['efectivo', 'transferencia', 'datafono'] as const).map((value) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setMetodoPago(value)}
-                className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
-                  metodoPago === value
-                    ? 'border-primary-600 bg-primary-50 text-primary-700'
-                    : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
-                }`}
-              >
-                {METODO_PAGO_LABEL[value]}
-              </button>
-            ))}
+        {items.length > 0 ? (
+          <div className="flex flex-col gap-1.5 text-sm">
+            <span className="font-medium text-neutral-700">Cómo paga</span>
+            <PagoLineas lineas={pagoLineasEfectivas} onChange={setPagoLineas} total={total} />
           </div>
-        </div>
-
-        {requiereReferencia ? (
-          <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium text-neutral-700">Referencia</span>
-            <input
-              value={referenciaPago}
-              onChange={(e) => setReferenciaPago(e.target.value)}
-              placeholder="Número de comprobante"
-              className="rounded-lg border border-neutral-300 px-3 py-3 text-base outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-            />
-          </label>
         ) : null}
 
         <label className="flex flex-col gap-1.5 text-sm">
@@ -356,12 +364,12 @@ function VentaCarrito({
 
         <button
           type="submit"
-          disabled={saving || lineas.length === 0}
+          disabled={saving || items.length === 0 || !cuadra}
           className="flex items-center justify-center gap-2 rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
         >
           {saving
             ? 'Registrando…'
-            : lineas.length === 0
+            : items.length === 0
               ? 'Elige productos'
               : `Cobrar ${unidades} · ${COP.format(total)}`}
         </button>
@@ -424,6 +432,9 @@ function AnularVentaModal({
         <p className="mb-5 text-xs text-neutral-500">
           Esta acción no se puede deshacer. El stock se repone automáticamente y la venta queda visible en
           reportes con el motivo y quién la anuló (control antifraude).
+          {venta.ventaGrupoId
+            ? ' Esta venta se cobró junto con otras en un mismo comprobante: se anulará el comprobante completo.'
+            : ''}
         </p>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-5">

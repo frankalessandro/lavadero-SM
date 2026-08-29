@@ -52,13 +52,17 @@ import { fetchStockProductosOperativo } from '../../data/movimientosInventario'
 import { createVenta, anularVenta, fetchVentasPendientes } from '../../data/ventas'
 import { anularVentaInputSchema, type Venta } from '../../schemas/venta'
 import type { Producto } from '../../schemas/producto'
-import { clienteInfoInputSchema, cobroInputSchema, type MetodoPago, type Orden } from '../../schemas/orden'
+import { clienteInfoInputSchema, type Orden } from '../../schemas/orden'
+import type { PagoLineaInput } from '../../schemas/pago'
 import { StatCard } from '../../components/layout/StatCard'
 import { Card } from '../../components/layout/Card'
 import { CustomSelect } from '../../components/layout/CustomSelect'
 import { ReciboModal, type ReciboData } from '../../components/layout/ReciboModal'
 import { ConfirmModal } from '../../components/layout/ConfirmModal'
 import { CurrencyInput } from '../../components/layout/CurrencyInput'
+import { PagoLineas } from '../../components/layout/PagoLineas'
+import { borradorAPagos, nuevaLineaBorrador, pagoLineasCuadra, type PagoLineaBorrador } from '../../lib/pagoLineas'
+import { CorregirPagoModal } from '../../components/layout/CorregirPagoModal'
 import { ContactoModal } from '../../components/layout/ContactoModal'
 import { LavadoAnimation } from '../../components/layout/LavadoAnimation'
 import { BarChart } from '../../components/layout/BarChart'
@@ -189,6 +193,8 @@ function JefeZonaDashboard() {
   const [finalizando, setFinalizando] = useState<Orden | null>(null)
   // Corrige un "Finalizar lavado" por equivocación — vuelve la orden a en_proceso.
   const [volviendoAProceso, setVolviendoAProceso] = useState<Orden | null>(null)
+  // Orden cuyo reparto de pago se está corrigiendo (solo entregadas).
+  const [corrigiendoPago, setCorrigiendoPago] = useState<Orden | null>(null)
   const [recibo, setRecibo] = useState<ReciboData | null>(null)
   // Solo se activa al cobrar (handleCobrado) — al reabrir un tiquete ya emitido (abrirTiquete)
   // no queremos disparar la impresión sola cada vez que alguien solo quiere verlo.
@@ -414,7 +420,7 @@ function JefeZonaDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entregadasHoy])
 
-  async function handleCobrado(orden: Orden, metodoPago: MetodoPago, referenciaPago?: string) {
+  async function handleCobrado(orden: Orden, pagos: PagoLineaInput[]) {
     // Se capturan ANTES del refresh: tras cobrar dejan de estar 'pendiente' y salen del mapa.
     const productos = (ventasPendientesPorOrden.get(orden.id) ?? []).map((v) => ({
       nombre: productoNombre(v.productoId),
@@ -422,6 +428,9 @@ function JefeZonaDashboard() {
       total: v.total,
     }))
     const totalProductos = productos.reduce((suma, p) => suma + p.total, 0)
+    // Etiqueta-resumen para el recibo: método único si todas las líneas comparten método, si no
+    // 'mixto'. El desglose real va en `pagos`.
+    const metodos = new Set(pagos.map((p) => p.metodo))
     setRecibo({
       consecutivo: orden.consecutivo,
       placa: orden.placa,
@@ -435,8 +444,9 @@ function JefeZonaDashboard() {
       precioLavado: productos.length > 0 ? orden.precio : undefined,
       precio: orden.precio + totalProductos,
       fecha: new Date().toISOString(),
-      metodoPago,
-      referenciaPago,
+      metodoPago: metodos.size === 1 ? [...metodos][0] : 'mixto',
+      referenciaPago: pagos.length === 1 ? pagos[0].referencia : undefined,
+      pagos: pagos.length > 1 ? pagos.map((p) => ({ metodo: p.metodo, monto: p.monto, referencia: p.referencia })) : undefined,
     })
     setReciboAutoPrint(true)
     setCobrando(null)
@@ -794,6 +804,7 @@ function JefeZonaDashboard() {
           lavadorNombre={lavadorNombre}
           tipoNombre={(id) => tipoVehiculo(id)?.nombre ?? '—'}
           onVerTiquete={abrirTiquete}
+          onCorregirPago={setCorrigiendoPago}
         />
       )}
 
@@ -804,7 +815,19 @@ function JefeZonaDashboard() {
           productosPendientes={ventasPendientesPorOrden.get(cobrando.orden.id) ?? []}
           productoNombre={productoNombre}
           onClose={() => setCobrando(null)}
-          onCobrado={(metodoPago, referenciaPago) => handleCobrado(cobrando.orden, metodoPago, referenciaPago)}
+          onCobrado={(pagos) => handleCobrado(cobrando.orden, pagos)}
+        />
+      ) : null}
+
+      {corrigiendoPago ? (
+        <CorregirPagoModal
+          target={{ ordenId: corrigiendoPago.id }}
+          referencia={`Orden #${corrigiendoPago.consecutivo} · ${corrigiendoPago.placa}`}
+          onClose={() => setCorrigiendoPago(null)}
+          onCorregido={async () => {
+            setCorrigiendoPago(null)
+            await refresh()
+          }}
         />
       ) : null}
 
@@ -1209,12 +1232,14 @@ function EntregadosHoyTable({
   lavadorNombre,
   tipoNombre,
   onVerTiquete,
+  onCorregirPago,
 }: {
   entregadasHoy: Orden[]
   comboNombre: (id: string | undefined) => string
   lavadorNombre: (id: string | undefined) => string
   tipoNombre: (id: string) => string
   onVerTiquete: (orden: Orden) => void
+  onCorregirPago: (orden: Orden) => void
 }) {
   const ordenadas = [...entregadasHoy].sort((a, b) => b.consecutivo - a.consecutivo)
   return (
@@ -1246,9 +1271,19 @@ function EntregadosHoyTable({
                 {orden.lavadorId2 ? ` + ${lavadorNombre(orden.lavadorId2)}` : ''}
               </td>
               <td className="px-5 py-3 font-medium text-neutral-900">{COP.format(orden.precio)}</td>
-              <td className="px-5 py-3 capitalize text-neutral-700">{orden.metodoPago ?? '—'}</td>
+              <td className="px-5 py-3 text-neutral-700">
+                {orden.metodoPago ? METODO_PAGO_LABEL[orden.metodoPago] : '—'}
+              </td>
               <td className="px-5 py-3">
-                <div className="flex justify-end">
+                <div className="flex justify-end gap-1">
+                  <button
+                    type="button"
+                    onClick={() => onCorregirPago(orden)}
+                    className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-primary-100 hover:text-primary-700"
+                  >
+                    <Wallet size={14} />
+                    Corregir pago
+                  </button>
                   <button
                     type="button"
                     onClick={() => onVerTiquete(orden)}
@@ -1622,27 +1657,25 @@ function CobroModal({
   productosPendientes: Venta[]
   productoNombre: (id: string) => string
   onClose: () => void
-  onCobrado: (metodoPago: MetodoPago, referenciaPago?: string) => void
+  onCobrado: (pagos: PagoLineaInput[]) => void
 }) {
-  const [metodoPago, setMetodoPago] = useState<MetodoPago>('efectivo')
-  const [referenciaPago, setReferenciaPago] = useState('')
-  // Solo ayuda visual para el cajero (cuánto devolver) — no es parte de `cobroInputSchema`, no
-  // se persiste en la orden.
+  const totalProductos = productosPendientes.reduce((suma, v) => suma + v.total, 0)
+  const totalCobro = orden.precio + totalProductos
+  // Arranca con una sola línea de efectivo por el total — el caso más común es un pago simple.
+  const [lineas, setLineas] = useState<PagoLineaBorrador[]>([nuevaLineaBorrador(totalCobro)])
+  // Ayuda visual para el cajero (cuánto devolver) cuando el pago es un solo efectivo.
   const [montoRecibido, setMontoRecibido] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const totalProductos = productosPendientes.reduce((suma, v) => suma + v.total, 0)
-  const totalCobro = orden.precio + totalProductos
-  const cambio = montoRecibido ? Number(montoRecibido) - totalCobro : undefined
+
+  const cuadra = pagoLineasCuadra(lineas, totalCobro)
+  const soloEfectivo = lineas.length === 1 && lineas[0].metodo === 'efectivo'
+  const cambio = soloEfectivo && montoRecibido ? Number(montoRecibido) - totalCobro : undefined
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    const parsed = cobroInputSchema.safeParse({
-      metodoPago,
-      referenciaPago: referenciaPago || undefined,
-    })
-    if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? 'Datos inválidos')
+    if (!cuadra) {
+      setError(`Las líneas de pago deben sumar exactamente ${COP.format(totalCobro)}`)
       return
     }
     setError(null)
@@ -1651,8 +1684,9 @@ function CobroModal({
       if (finalizarPrimero) {
         await marcarListo(orden.id)
       }
-      await cobrarYEntregarOrden(orden.id, parsed.data)
-      onCobrado(parsed.data.metodoPago, parsed.data.referenciaPago)
+      const pagos = borradorAPagos(lineas)
+      await cobrarYEntregarOrden(orden.id, pagos)
+      onCobrado(pagos)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo registrar el cobro')
     } finally {
@@ -1662,7 +1696,7 @@ function CobroModal({
 
   return (
     <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="w-full max-w-sm rounded-t-2xl bg-white p-5 shadow-card-hover sm:rounded-2xl sm:p-6">
+      <div className="max-h-[92vh] w-full max-w-sm overflow-y-auto rounded-t-2xl bg-white p-5 shadow-card-hover sm:rounded-2xl sm:p-6">
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h3 className="text-base font-semibold text-neutral-900">Cobrar y entregar</h3>
@@ -1713,48 +1747,15 @@ function CobroModal({
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium text-neutral-700">Método de pago</span>
-            <div className="grid grid-cols-3 gap-2">
-              {(['efectivo', 'transferencia', 'datafono'] as const).map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setMetodoPago(value)}
-                  className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
-                    metodoPago === value
-                      ? 'border-primary-600 bg-primary-50 text-primary-700'
-                      : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
-                  }`}
-                >
-                  {METODO_PAGO_LABEL[value]}
-                </button>
-              ))}
-            </div>
-          </div>
+          <PagoLineas lineas={lineas} onChange={setLineas} total={totalCobro} />
 
-          {metodoPago === 'transferencia' || metodoPago === 'datafono' ? (
+          {soloEfectivo ? (
             <label className="flex flex-col gap-1.5 text-sm">
-              <span className="font-medium text-neutral-700">Referencia</span>
-              <input
-                autoFocus
-                value={referenciaPago}
-                onChange={(e) => setReferenciaPago(e.target.value)}
-                placeholder="Comprobante"
-                className="rounded-lg border border-neutral-300 px-3 py-3 text-base outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-              />
-            </label>
-          ) : null}
-
-          {metodoPago === 'efectivo' ? (
-            <label className="flex flex-col gap-1.5 text-sm">
-              <span className="font-medium text-neutral-700">Con cuánto paga</span>
+              <span className="font-medium text-neutral-700">Con cuánto paga (opcional)</span>
               <CurrencyInput value={montoRecibido} onChange={setMontoRecibido} placeholder="0" />
               {cambio !== undefined ? (
                 <span className={`text-xs font-medium ${cambio < 0 ? 'text-danger-600' : 'text-neutral-500'}`}>
-                  {cambio < 0
-                    ? `Falta ${COP.format(Math.abs(cambio))}`
-                    : `Devolver ${COP.format(cambio)}`}
+                  {cambio < 0 ? `Falta ${COP.format(Math.abs(cambio))}` : `Devolver ${COP.format(cambio)}`}
                 </span>
               ) : null}
             </label>
@@ -1764,7 +1765,7 @@ function CobroModal({
 
           <button
             type="submit"
-            disabled={saving}
+            disabled={saving || !cuadra}
             className="flex items-center justify-center gap-2 rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
           >
             <CheckCircle2 size={16} />

@@ -2,9 +2,12 @@ import { useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { ClipboardCheck, ClipboardList, Scale } from 'lucide-react'
 import { fetchTurnos } from '../../../../data/turnos'
+import { fetchCorreccionesEnRango, type CorreccionReparto } from '../../../../data/pagos'
 import type { RolCaja, TurnoCaja } from '../../../../schemas/turnoCaja'
 import { Card } from '../../../../components/layout/Card'
 import { StatCard } from '../../../../components/layout/StatCard'
+import { METODO_PAGO_LABEL } from '../../../../lib/metodoPago'
+import type { MetodoPago } from '../../../../schemas/orden'
 
 type FiltroKey = 'todos' | 'jefe_zona' | 'vigilante'
 
@@ -31,10 +34,33 @@ function fetchByFiltro(filtro: FiltroKey): Promise<TurnoCaja[]> {
   return fetchTurnos(filtro)
 }
 
+function ultimosNDias(dias: number): { desdeISO: string; hastaISO: string } {
+  const ahora = new Date()
+  const hoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate())
+  const desde = new Date(hoy)
+  desde.setDate(desde.getDate() - (dias - 1))
+  const hasta = new Date(hoy)
+  hasta.setDate(hasta.getDate() + 1)
+  return { desdeISO: desde.toISOString(), hastaISO: hasta.toISOString() }
+}
+
 export const Route = createFileRoute('/admin/operacion/turnos/')({
-  loader: () => fetchByFiltro('todos'),
+  loader: async () => {
+    const { desdeISO, hastaISO } = ultimosNDias(30)
+    const [turnos, correcciones] = await Promise.all([
+      fetchByFiltro('todos'),
+      fetchCorreccionesEnRango(desdeISO, hastaISO),
+    ])
+    return { turnos, correcciones }
+  },
   component: TurnosPage,
 })
+
+function repartoTexto(lineas: { metodoPago: string; monto: number }[]): string {
+  return lineas
+    .map((l) => `${METODO_PAGO_LABEL[l.metodoPago as MetodoPago] ?? l.metodoPago} ${COP.format(l.monto)}`)
+    .join(' + ')
+}
 
 function diferenciaClassName(diferencia: number | undefined): string {
   if (diferencia === undefined) return 'text-neutral-400'
@@ -52,7 +78,8 @@ function formatDiferencia(diferencia: number | undefined): string {
 function TurnosPage() {
   const initial = Route.useLoaderData()
   const [filtro, setFiltro] = useState<FiltroKey>('todos')
-  const [turnos, setTurnos] = useState(initial)
+  const [turnos, setTurnos] = useState(initial.turnos)
+  const correcciones: CorreccionReparto[] = initial.correcciones
   const [loading, setLoading] = useState(false)
 
   async function cambiarFiltro(key: FiltroKey) {
@@ -189,6 +216,52 @@ function TurnosPage() {
           </table>
         </div>
       </Card>
+
+      <div>
+        <h2 className="text-base font-semibold text-neutral-900">Correcciones de reparto de pago</h2>
+        <p className="mb-3 text-sm text-neutral-500">
+          Últimos 30 días. Solo cambia cómo se repartió un cobro entre efectivo/transferencia/datáfono — el
+          total nunca cambia. Si el turno de ese cobro ya estaba cerrado, su arqueo quedó congelado y esta es
+          la única traza del ajuste.
+        </p>
+        <Card className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
+                  <th className="px-5 py-3">Fecha</th>
+                  <th className="px-5 py-3">Cobro</th>
+                  <th className="px-5 py-3">Reparto anterior</th>
+                  <th className="px-5 py-3">Reparto corregido</th>
+                  <th className="px-5 py-3">Motivo</th>
+                  <th className="px-5 py-3">Quién</th>
+                </tr>
+              </thead>
+              <tbody>
+                {correcciones.map((c, i) => (
+                  <tr key={i} className="border-b border-neutral-100 last:border-0">
+                    <td className="px-5 py-3 text-neutral-700">{new Date(c.fecha).toLocaleString('es-CO')}</td>
+                    <td className="px-5 py-3 text-neutral-700">
+                      {c.ordenId ? 'Orden de lavado' : 'Venta de mostrador'}
+                    </td>
+                    <td className="px-5 py-3 text-neutral-500 line-through">{repartoTexto(c.antes)}</td>
+                    <td className="px-5 py-3 font-medium text-neutral-900">{repartoTexto(c.despues)}</td>
+                    <td className="px-5 py-3 text-neutral-500">{c.motivo}</td>
+                    <td className="px-5 py-3 text-neutral-700">{c.corregidoPor}</td>
+                  </tr>
+                ))}
+                {correcciones.length === 0 ? (
+                  <tr>
+                    <td className="px-5 py-6 text-center text-neutral-400" colSpan={6}>
+                      Sin correcciones de reparto en los últimos 30 días.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </div>
     </div>
   )
 }

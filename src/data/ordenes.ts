@@ -2,15 +2,14 @@ import { db } from '../lib/db'
 import {
   anularOrdenInputSchema,
   clienteInfoInputSchema,
-  cobroInputSchema,
   ordenInputSchema,
   ordenSchema,
   type AnularOrdenInput,
   type ClienteInfoInput,
-  type CobroInput,
   type Orden,
   type OrdenInput,
 } from '../schemas/orden'
+import type { PagoLineaInput } from '../schemas/pago'
 import { registrarAsignacion } from './lavadores'
 import { fetchConfiguracion } from './configuracion'
 import { fetchTurnoAbierto } from './turnos'
@@ -404,17 +403,16 @@ export async function editarInfoCliente(id: string, input: ClienteInfoInput): Pr
 // movimiento pertenece al turno en que se registró, y el cobro es el movimiento de dinero real
 // — no el registro del vehículo, que puede haber pasado en un turno anterior).
 //
-// Va por la RPC `cobrar_orden` (0035_venta_asociada_a_orden.sql), no por un UPDATE suelto: si
-// la orden tiene productos de nevera cargados (`ventas` en estado 'pendiente'), la entrega y la
-// liquidación de esos productos —pasarlos a 'activa' y descontar su stock— tienen que quedar en
-// la misma transacción. El tiempo de espera y el turno los calcula la función.
-export async function cobrarYEntregarOrden(id: string, input: CobroInput): Promise<Orden> {
-  const parsed = cobroInputSchema.parse(input)
+// Va por la RPC `cobrar_orden` (0036_pago_partido.sql), no por un UPDATE suelto: la entrega de la
+// orden, sus líneas de pago (tabla `pagos`, 1–3 por cobro), y la liquidación de los productos de
+// nevera cargados (`ventas` 'pendiente' → 'activa' + salida de stock) tienen que quedar en la
+// misma transacción. La RPC valida que las líneas sumen EXACTO el total (lavado + productos), la
+// referencia por línea, y calcula tiempo de espera + turno. `pagos` es el reparto por método.
+export async function cobrarYEntregarOrden(id: string, pagos: PagoLineaInput[]): Promise<Orden> {
   const { data, error } = await db
     .rpc('cobrar_orden', {
       p_orden_id: id,
-      p_metodo_pago: parsed.metodoPago,
-      p_referencia_pago: parsed.referenciaPago ?? null,
+      p_pagos: pagos.map((l) => ({ metodo: l.metodo, monto: l.monto, referencia: l.referencia ?? null })),
     })
     .select(ORDEN_SELECT)
     .single()

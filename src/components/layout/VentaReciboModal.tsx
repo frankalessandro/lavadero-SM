@@ -1,6 +1,7 @@
 import { X } from 'lucide-react'
 import { createPortal } from 'react-dom'
-import type { MetodoPago } from '../../schemas/orden'
+import type { MetodoPago, MetodoPagoBase } from '../../schemas/orden'
+import { METODO_PAGO_LABEL } from '../../lib/metodoPago'
 
 export interface VentaReciboItem {
   nombre: string
@@ -22,6 +23,8 @@ export interface VentaReciboData {
   items?: VentaReciboItem[]
   metodoPago: MetodoPago
   referenciaPago?: string
+  // Reparto del cobro cuando fue pago partido (más de un método).
+  pagos?: { metodo: MetodoPagoBase; monto: number; referencia?: string }[]
   vendidoPor: string
   fecha: string
 }
@@ -33,9 +36,7 @@ function refTexto(venta: VentaReciboData): string {
 }
 
 function metodoLabel(metodo: MetodoPago): string {
-  if (metodo === 'efectivo') return 'Efectivo'
-  if (metodo === 'datafono') return 'Datáfono'
-  return 'Transferencia'
+  return METODO_PAGO_LABEL[metodo]
 }
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
@@ -80,8 +81,23 @@ export function VentaReciboModal({ venta, onClose }: { venta: VentaReciboData; o
               <VentaReciboRow label="Precio unitario" value={COP.format(venta.precioUnitario)} />
             </>
           )}
-          <VentaReciboRow label="Método de pago" value={metodoLabel(venta.metodoPago)} />
-          {venta.referenciaPago ? <VentaReciboRow label="Referencia" value={venta.referenciaPago} /> : null}
+          {venta.pagos && venta.pagos.length > 1 ? (
+            <div className="flex flex-col gap-1.5 rounded-lg bg-neutral-50 px-3 py-2.5">
+              <span className="text-xs font-medium uppercase tracking-wide text-neutral-400">Pago partido</span>
+              {venta.pagos.map((p, i) => (
+                <VentaReciboRow
+                  key={i}
+                  label={p.referencia ? `${METODO_PAGO_LABEL[p.metodo]} · ${p.referencia}` : METODO_PAGO_LABEL[p.metodo]}
+                  value={COP.format(p.monto)}
+                />
+              ))}
+            </div>
+          ) : (
+            <>
+              <VentaReciboRow label="Método de pago" value={metodoLabel(venta.metodoPago)} />
+              {venta.referenciaPago ? <VentaReciboRow label="Referencia" value={venta.referenciaPago} /> : null}
+            </>
+          )}
           <VentaReciboRow label="Vendido por" value={venta.vendidoPor} />
           <VentaReciboRow label="Fecha" value={FECHA_HORA.format(new Date(venta.fecha))} />
 
@@ -176,16 +192,27 @@ function VentaTicketPrint({ venta }: { venta: VentaReciboData }) {
           </div>
         </>
       )}
-      <div className="tiquete-58__fila">
-        <span className="tiquete-58__fila-label">Pago</span>
-        <span className="tiquete-58__fila-valor">{metodoLabel(venta.metodoPago)}</span>
-      </div>
-      {venta.referenciaPago ? (
-        <div className="tiquete-58__fila">
-          <span className="tiquete-58__fila-label">Referencia</span>
-          <span className="tiquete-58__fila-valor">{venta.referenciaPago}</span>
-        </div>
-      ) : null}
+      {venta.pagos && venta.pagos.length > 1 ? (
+        venta.pagos.map((p, i) => (
+          <div className="tiquete-58__fila" key={i}>
+            <span className="tiquete-58__fila-label">Pago {i + 1} · {METODO_PAGO_LABEL[p.metodo]}</span>
+            <span className="tiquete-58__fila-valor">{COP.format(p.monto)}</span>
+          </div>
+        ))
+      ) : (
+        <>
+          <div className="tiquete-58__fila">
+            <span className="tiquete-58__fila-label">Pago</span>
+            <span className="tiquete-58__fila-valor">{metodoLabel(venta.metodoPago)}</span>
+          </div>
+          {venta.referenciaPago ? (
+            <div className="tiquete-58__fila">
+              <span className="tiquete-58__fila-label">Referencia</span>
+              <span className="tiquete-58__fila-valor">{venta.referenciaPago}</span>
+            </div>
+          ) : null}
+        </>
+      )}
 
       <div className="tiquete-58__linea-solida" />
 

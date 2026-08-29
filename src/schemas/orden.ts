@@ -5,7 +5,13 @@ import { z } from 'zod'
 // para el arqueo (ver calcularValorEsperado en src/data/turnos.ts). Cuánto de lo cobrado por
 // datáfono llega neto a la cuenta (descuento de la pasarela) es una configuración pendiente,
 // todavía no modelada — por ahora se registra el monto bruto cobrado, igual que transferencia.
-export const metodoPagoSchema = z.enum(['efectivo', 'transferencia', 'datafono'])
+// Métodos de pago reales (los que puede tener una LÍNEA de pago). Se usan en el reparto de un
+// cobro partido (src/schemas/pago.ts), en parqueadero y en la venta de un solo producto.
+export const metodoPagoBaseSchema = z.enum(['efectivo', 'transferencia', 'datafono'])
+// Etiqueta-resumen guardada en `ordenes.metodo_pago` / `ventas.metodo_pago`: el método real
+// cuando el cobro tuvo uno solo, o 'mixto' cuando se repartió en varios. El detalle por método
+// (para arqueo/dashboards) sale de la tabla `pagos`, nunca de esta columna.
+export const metodoPagoSchema = z.enum(['efectivo', 'transferencia', 'datafono', 'mixto'])
 export const estadoOrdenSchema = z.enum(['en_proceso', 'listo', 'entregado', 'anulada'])
 
 // Postgres devuelve `null` (no `undefined`) en las columnas nullable sin valor —
@@ -159,22 +165,16 @@ export const clienteInfoInputSchema = z.object({
   clienteCorreo: z.string().trim().email('Correo inválido').optional(),
 })
 
-// Cobro + entrega (M3: no se entrega sin haberse cobrado).
-export const cobroInputSchema = z
-  .object({
-    metodoPago: metodoPagoSchema,
-    referenciaPago: z.string().trim().optional(),
-  })
-  .refine((data) => (data.metodoPago !== 'transferencia' && data.metodoPago !== 'datafono') || !!data.referenciaPago, {
-    message: 'La referencia es obligatoria en pagos por transferencia o datáfono',
-    path: ['referenciaPago'],
-  })
+// El cobro + entrega (M3) ya no lleva un método suelto: el reparto de pago vive en
+// src/schemas/pago.ts (`cobroPagosInputSchema`) y se persiste en la tabla `pagos`.
 
 export type OrdenServicioAdicional = z.infer<typeof ordenServicioAdicionalSchema>
 export type Orden = z.infer<typeof ordenSchema>
 export type OrdenInput = z.infer<typeof ordenInputSchema>
-export type CobroInput = z.infer<typeof cobroInputSchema>
 export type ClienteInfoInput = z.infer<typeof clienteInfoInputSchema>
 export type AnularOrdenInput = z.infer<typeof anularOrdenInputSchema>
+// Incluye 'mixto' — es el tipo de la columna-resumen. Para una línea de pago real usa
+// `MetodoPagoBase`.
 export type MetodoPago = z.infer<typeof metodoPagoSchema>
+export type MetodoPagoBase = z.infer<typeof metodoPagoBaseSchema>
 export type EstadoOrden = z.infer<typeof estadoOrdenSchema>

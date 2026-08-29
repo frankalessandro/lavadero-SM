@@ -7,7 +7,8 @@ import { fetchGastos, fetchTotalGastosPorCategoria } from '../../data/gastos'
 import { fetchComisionesPendientes } from '../../data/liquidaciones'
 import { fetchComisionesPendientesJefeZona } from '../../data/liquidacionesJefeZona'
 import { fetchVentasHoy, fetchCostoMercanciaVendida } from '../../data/ventas'
-import type { MetodoPago } from '../../schemas/orden'
+import { fetchPagosHoy } from '../../data/pagos'
+import type { MetodoPagoBase } from '../../schemas/orden'
 import { StatCard } from '../../components/layout/StatCard'
 import { Card } from '../../components/layout/Card'
 import { BarChart } from '../../components/layout/BarChart'
@@ -28,6 +29,7 @@ async function loadDashboard() {
     comisionesPendientes,
     comisionesPendientesJefeZona,
     ventasHoy,
+    pagosHoy,
   ] = await Promise.all([
     fetchOrdenesHoy(),
     fetchOrdenesEntregadasHoy(),
@@ -38,6 +40,7 @@ async function loadDashboard() {
     fetchComisionesPendientes(),
     fetchComisionesPendientesJefeZona(),
     fetchVentasHoy(),
+    fetchPagosHoy(),
   ])
   // Depende de las ventas activas del día, así que no puede ir en el Promise.all de arriba: el
   // costo se busca por los ids de esas ventas (una sola query, no una por venta).
@@ -54,6 +57,7 @@ async function loadDashboard() {
     comisionesPendientes,
     comisionesPendientesJefeZona,
     ventasHoy,
+    pagosHoy,
     costoMercancia,
   }
 }
@@ -76,6 +80,7 @@ function AdminDashboard() {
     comisionesPendientes,
     comisionesPendientesJefeZona,
     ventasHoy,
+    pagosHoy,
     costoMercancia,
   } = Route.useLoaderData()
   const lavadoresActivos = lavadores.filter((l) => l.activo).length
@@ -89,20 +94,24 @@ function AdminDashboard() {
   const ingresosVentas = ventasActivasHoy.reduce((total, v) => total + v.total, 0)
   const ingresosTotales = ingresosLavadero + ingresosParqueadero + ingresosVentas
 
-  const ingresosPorMetodo = entregadasHoy.reduce(
-    (acc, o) => {
-      if (o.metodoPago) acc[o.metodoPago] += o.precio
+  // Ingresos por método reales = suma de las LÍNEAS DE PAGO vigentes (tabla `pagos`, 0036), no la
+  // columna-resumen `metodo_pago` — un cobro repartido tiene parte en efectivo y parte no. Se
+  // separan lavados (pagos con ordenId) de ventas de mostrador (pagos con ventaGrupoId).
+  const pagosVigentesHoy = pagosHoy.filter((p) => !p.anulado)
+  const ingresosPorMetodo = pagosVigentesHoy.reduce(
+    (acc, p) => {
+      if (p.ordenId) acc[p.metodoPago] += p.monto
       return acc
     },
-    { efectivo: 0, transferencia: 0, datafono: 0 } as Record<MetodoPago, number>,
+    { efectivo: 0, transferencia: 0, datafono: 0 } as Record<MetodoPagoBase, number>,
   )
 
-  const ventasPorMetodo = ventasActivasHoy.reduce(
-    (acc, v) => {
-      acc[v.metodoPago] += v.total
+  const ventasPorMetodo = pagosVigentesHoy.reduce(
+    (acc, p) => {
+      if (p.ventaGrupoId) acc[p.metodoPago] += p.monto
       return acc
     },
-    { efectivo: 0, transferencia: 0, datafono: 0 } as Record<MetodoPago, number>,
+    { efectivo: 0, transferencia: 0, datafono: 0 } as Record<MetodoPagoBase, number>,
   )
 
   const totalGastosHoy = gastosHoy.reduce((total, g) => total + g.monto, 0)
