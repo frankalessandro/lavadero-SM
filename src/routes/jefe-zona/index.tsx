@@ -41,6 +41,7 @@ import {
   cobrarYEntregarOrden,
   reasignarLavador,
   editarInfoCliente,
+  cambiarTipoOrden,
   marcarNotificado,
 } from '../../data/ordenes'
 import { fetchLavadores } from '../../data/lavadores'
@@ -54,6 +55,7 @@ import { createVenta, anularVenta, fetchVentasPendientes, fetchVentasDeOrden } f
 import { anularVentaInputSchema, type Venta } from '../../schemas/venta'
 import type { Producto } from '../../schemas/producto'
 import { clienteInfoInputSchema, type Orden } from '../../schemas/orden'
+import type { TipoVehiculo } from '../../schemas/tipoVehiculo'
 import type { PagoLineaInput } from '../../schemas/pago'
 import { StatCard } from '../../components/layout/StatCard'
 import { Card } from '../../components/layout/Card'
@@ -868,6 +870,7 @@ function JefeZonaDashboard() {
       {editandoCliente ? (
         <EditarClienteModal
           orden={editandoCliente}
+          tiposVehiculo={tiposVehiculo}
           onClose={() => setEditandoCliente(null)}
           onGuardado={async () => {
             setEditandoCliente(null)
@@ -1569,10 +1572,12 @@ function ReasignarModal({
 
 function EditarClienteModal({
   orden,
+  tiposVehiculo,
   onClose,
   onGuardado,
 }: {
   orden: Orden
+  tiposVehiculo: TipoVehiculo[]
   onClose: () => void
   onGuardado: () => Promise<void>
 }) {
@@ -1580,8 +1585,17 @@ function EditarClienteModal({
   const [clienteNombre, setClienteNombre] = useState(orden.clienteNombre)
   const [clienteTelefono, setClienteTelefono] = useState(orden.clienteTelefono ?? '')
   const [clienteCorreo, setClienteCorreo] = useState(orden.clienteCorreo ?? '')
+  const [tipoId, setTipoId] = useState(orden.tipoVehiculoId)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+
+  // Solo tipos de la misma categoría que el actual — cambiar de categoría rompería el combo
+  // (auto ↔ camioneta ↔ camioneta de platón, no auto → moto).
+  const categoriaActual = tiposVehiculo.find((t) => t.id === orden.tipoVehiculoId)?.categoria
+  const opcionesTipo = tiposVehiculo.filter(
+    (t) => t.activo && (categoriaActual ? t.categoria === categoriaActual : true),
+  )
+  const tipoCambio = tipoId !== orden.tipoVehiculoId
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -1599,6 +1613,10 @@ function EditarClienteModal({
     setSaving(true)
     try {
       await editarInfoCliente(orden.id, parsed.data)
+      // El tipo va aparte: recalcula precio + comisiones (regla 1), por eso es su propia RPC.
+      if (tipoCambio) {
+        await cambiarTipoOrden(orden.id, tipoId)
+      }
       await onGuardado()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo guardar el cambio')
@@ -1659,6 +1677,21 @@ function EditarClienteModal({
               onChange={(event) => setClienteCorreo(event.target.value)}
               className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
             />
+          </label>
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="font-medium text-neutral-700">Tipo de vehículo</span>
+            <CustomSelect
+              size="sm"
+              value={tipoId}
+              onChange={setTipoId}
+              placeholder="Selecciona…"
+              options={opcionesTipo.map((t) => ({ value: t.id, label: t.nombre }))}
+            />
+            {tipoCambio ? (
+              <span className="text-xs font-medium text-warning-600">
+                Recalcula el precio del lavado y las comisiones al guardar.
+              </span>
+            ) : null}
           </label>
         </div>
         {error ? <p className="mt-3 text-xs text-danger-600">{error}</p> : null}

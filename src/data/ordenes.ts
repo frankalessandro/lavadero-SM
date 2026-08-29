@@ -376,10 +376,27 @@ export async function marcarNotificado(id: string, notificado: boolean): Promise
   return mapOrdenRow(data as unknown as Record<string, unknown>)
 }
 
+// Cambiar el tipo de vehículo de una orden ANTES de cobrar (se registró "auto" y era
+// "camioneta" / "camioneta de platón", etc.). Va por la RPC `cambiar_tipo_orden`
+// (0038_cambiar_tipo_orden.sql), no por un UPDATE suelto: cambiar el tipo cambia la tarifa
+// (regla 1), así que la función recalcula `precio`, las dos comisiones y el precio de cada
+// servicio adicional al nuevo tipo, todo atómico. Solo permite tipos de la misma categoría que
+// el combo y falla ("todo o nada") si al combo o a algún adicional le falta el precio para el
+// nuevo tipo. Solo con la orden en `en_proceso` / `listo`.
+export async function cambiarTipoOrden(id: string, tipoVehiculoId: string): Promise<Orden> {
+  const { data, error } = await db
+    .rpc('cambiar_tipo_orden', { p_orden_id: id, p_tipo_vehiculo_id: tipoVehiculoId })
+    .select(ORDEN_SELECT)
+    .single()
+  if (error) throw new Error(error.message)
+  return mapOrdenRow(data as unknown as Record<string, unknown>)
+}
+
 // Corrige un dato de contacto o la placa mal tomados en recepción mientras el vehículo sigue
-// en_proceso o listo — combo/tipo/lavador no se tocan aquí, esos definen el servicio ya
-// registrado y cobrado. No hay guarda de estado a nivel de base de datos (mismo criterio que
-// reasignarLavador): la UI solo ofrece la acción en esas dos columnas del tablero.
+// en_proceso o listo — combo/lavador no se tocan aquí. El tipo de vehículo sí se puede corregir,
+// pero por `cambiarTipoOrden` (recalcula la tarifa), no por este UPDATE plano. No hay guarda de
+// estado a nivel de base de datos (mismo criterio que reasignarLavador): la UI solo ofrece la
+// acción en esas dos columnas del tablero.
 export async function editarInfoCliente(id: string, input: ClienteInfoInput): Promise<Orden> {
   const parsed = clienteInfoInputSchema.parse(input)
   const { data, error } = await db
