@@ -37,14 +37,22 @@ export function CorregirPagoModal({
   const [cargando, setCargando] = useState(true)
   const [saving, setSaving] = useState(false)
 
+  // Dependemos de los ids primitivos, no del objeto `target`: los llamadores lo pasan como
+  // literal nuevo en cada render (`target={{ ordenId: ... }}`), y algunos —el tablero de jefe de
+  // zona— re-renderizan cada segundo por su reloj en vivo. Con `[target]` este efecto se re-
+  // disparaba en cada tick y pisaba las líneas que el usuario estaba editando ("se vuelve al
+  // valor original y no logro editarlo").
+  const ordenId = 'ordenId' in target ? target.ordenId : null
+  const ventaGrupoId = 'ventaGrupoId' in target ? target.ventaGrupoId : null
+
   useEffect(() => {
     let vivo = true
     ;(async () => {
       try {
         const pagos =
-          'ordenId' in target
-            ? await fetchPagosDeOrden(target.ordenId)
-            : await fetchPagosDeGrupo(target.ventaGrupoId)
+          ordenId != null
+            ? await fetchPagosDeOrden(ordenId)
+            : await fetchPagosDeGrupo(ventaGrupoId as string)
         if (!vivo) return
         setTotalVigente(pagos.reduce((s, p) => s + p.monto, 0))
         setLineas(
@@ -65,7 +73,7 @@ export function CorregirPagoModal({
     return () => {
       vivo = false
     }
-  }, [target])
+  }, [ordenId, ventaGrupoId])
 
   const cuadra = totalVigente != null && pagoLineasCuadra(lineas, totalVigente)
 
