@@ -16,6 +16,7 @@ import {
   fetchComisionesPendientesJefeZona,
   fetchLiquidacionesJefeZona,
   fetchMontoPeriodoJefeZona,
+  fetchOrdenesPendientesJefeZona,
   fetchCantidadOrdenesLiquidacionJefeZona,
   fetchResumenPeriodoJefeZona,
   generarLiquidacionJefeZona,
@@ -41,6 +42,10 @@ import { ConfirmModal } from '../../../../components/layout/ConfirmModal'
 import { BarChart } from '../../../../components/layout/BarChart'
 import { ColillaLiquidacionModal, type ColillaLiquidacionData } from '../../../../components/layout/ColillaLiquidacionModal'
 import { ColillaJefeZonaModal, type ColillaJefeZonaData } from '../../../../components/layout/ColillaJefeZonaModal'
+import {
+  DetalleOrdenesJefeZonaModal,
+  type DetalleOrdenJefeZonaFila,
+} from '../../../../components/layout/DetalleOrdenesJefeZonaModal'
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 const FECHA = new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium' })
@@ -131,6 +136,10 @@ function LiquidacionesPage() {
   } | null>(null)
   const [confirmandoPagoJefeZona, setConfirmandoPagoJefeZona] = useState<LiquidacionJefeZona | null>(null)
   const [colillaJefeZona, setColillaJefeZona] = useState<ColillaJefeZonaData | null>(null)
+  const [cargandoDetalleJefeZona, setCargandoDetalleJefeZona] = useState<string | null>(null)
+  const [detalleJefeZona, setDetalleJefeZona] = useState<{ responsable: string; filas: DetalleOrdenJefeZonaFila[] } | null>(
+    null,
+  )
 
   // Lavadores y jefe de patio son el MISMO flujo (pendientes → generar diaria/semanal → colilla →
   // marcar pagada) con distinto sujeto; antes vivían como cuatro secciones apiladas en esta misma
@@ -395,6 +404,33 @@ function LiquidacionesPage() {
       await refresh()
     } finally {
       setPagandoJefeZona(null)
+    }
+  }
+
+  async function handleVerDetalleJefeZona(responsable: string) {
+    setError(null)
+    setCargandoDetalleJefeZona(responsable)
+    try {
+      const ordenes = await fetchOrdenesPendientesJefeZona(responsable)
+      const comboNombrePorId = new Map(combos.map((c) => [c.id, c.nombre] as const))
+      const tipoNombrePorId = new Map(tiposVehiculo.map((t) => [t.id, t.nombre] as const))
+      setDetalleJefeZona({
+        responsable,
+        filas: ordenes.map((o) => ({
+          consecutivo: o.consecutivo,
+          creadoEn: o.creadoEn,
+          placa: o.placa,
+          tipoNombre: tipoNombrePorId.get(o.tipoVehiculoId) ?? '—',
+          comboNombre: o.comboId ? (comboNombrePorId.get(o.comboId) ?? 'Combo eliminado') : 'Sin combo',
+          adicionales: o.adicionales,
+          precio: o.precio,
+          comisionJefeZona: o.comisionJefeZona,
+        })),
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo cargar el detalle de órdenes')
+    } finally {
+      setCargandoDetalleJefeZona(null)
     }
   }
 
@@ -719,6 +755,16 @@ function LiquidacionesPage() {
                     </div>
                   </div>
                   <p className="text-xl font-semibold text-neutral-900">{COP.format(comision.montoPendiente)}</p>
+                  <button
+                    type="button"
+                    disabled={cargandoDetalleJefeZona === comision.responsable}
+                    onClick={() => handleVerDetalleJefeZona(comision.responsable)}
+                    className="-mt-1 self-start text-xs font-medium text-primary-700 transition-colors hover:text-primary-800 disabled:opacity-50"
+                  >
+                    {cargandoDetalleJefeZona === comision.responsable
+                      ? 'Cargando…'
+                      : `Ver ${comision.cantidadOrdenes} orden${comision.cantidadOrdenes === 1 ? '' : 'es'} sin liquidar`}
+                  </button>
                   <div className="grid grid-cols-2 gap-2">
                     {(['diaria', 'semanal'] as const).map((periodicidad) => {
                       const key = `${comision.responsable}:${periodicidad}`
@@ -849,6 +895,14 @@ function LiquidacionesPage() {
       ) : null}
 
       {colillaJefeZona ? <ColillaJefeZonaModal colilla={colillaJefeZona} onClose={() => setColillaJefeZona(null)} /> : null}
+
+      {detalleJefeZona ? (
+        <DetalleOrdenesJefeZonaModal
+          responsable={detalleJefeZona.responsable}
+          filas={detalleJefeZona.filas}
+          onClose={() => setDetalleJefeZona(null)}
+        />
+      ) : null}
 
       {confirmandoPagoJefeZona ? (
         <ConfirmModal
