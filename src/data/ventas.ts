@@ -12,7 +12,7 @@ import {
 import type { PagoLineaInput } from '../schemas/pago'
 
 const VENTA_SELECT =
-  'id, consecutivo, productoId:producto_id, cantidad, precioUnitario:precio_unitario, total, metodoPago:metodo_pago, referenciaPago:referencia_pago, turnoId:turno_id, ordenId:orden_id, ventaGrupoId:venta_grupo_id, vendidoPor:vendido_por, estado, motivoAnulacion:motivo_anulacion, anuladaPor:anulada_por, anuladaEn:anulada_en, creadoEn:creado_en'
+  'id, consecutivo, productoId:producto_id, cantidad, precioUnitario:precio_unitario, total, metodoPago:metodo_pago, referenciaPago:referencia_pago, turnoId:turno_id, ordenId:orden_id, cuentaId:cuenta_id, ventaGrupoId:venta_grupo_id, vendidoPor:vendido_por, estado, motivoAnulacion:motivo_anulacion, anuladaPor:anulada_por, anuladaEn:anulada_en, creadoEn:creado_en'
 
 function inicioDeHoyISO(): string {
   const ahora = new Date()
@@ -57,6 +57,19 @@ export async function fetchVentasDeOrden(ordenId: string): Promise<Venta[]> {
   return ventaSchema.array().parse(data)
 }
 
+// Productos cargados a una cuenta abierta que todavía no se ha cerrado (pendientes) o que ya se
+// cobraron al cerrarla (activas) — para pintar el carrito de una cuenta y el recibo al cerrarla.
+export async function fetchVentasDeCuenta(cuentaId: string): Promise<Venta[]> {
+  const { data, error } = await db
+    .from('ventas')
+    .select(VENTA_SELECT)
+    .eq('cuenta_id', cuentaId)
+    .neq('estado', 'anulada')
+    .order('consecutivo', { ascending: true })
+  if (error) throw new Error(error.message)
+  return ventaSchema.array().parse(data)
+}
+
 // Para reportes de admin (mismo patrón que fetchOrdenesEnRango).
 export async function fetchVentasEnRango(desdeISO: string, hastaISO: string): Promise<Venta[]> {
   const { data, error } = await db
@@ -80,8 +93,9 @@ export async function fetchVentasEnRango(desdeISO: string, hastaISO: string): Pr
 // real); el `parse` de acá sigue siendo el que da los mensajes de campo en el formulario.
 // Con `ordenId`, la RPC crea la venta como `pendiente` (sin turno, sin mover stock) cargada a
 // esa orden de lavado; el cobro y el descuento de inventario ocurren después, al entregar el
-// vehículo (`cobrar_orden` en src/data/ordenes.ts). Sin `ordenId`, es la venta aparte de
-// siempre: cobro en el acto.
+// vehículo (`cobrar_orden` en src/data/ordenes.ts). Con `cuentaId`, mismo criterio pero cargada a
+// una cuenta abierta (lavador/acompañante/transeúnte sin vehículo) — se liquida al cerrarla
+// (`cerrarCuenta` en src/data/cuentas.ts). Exactamente uno de los dos (validado en el schema).
 export async function createVenta(input: VentaInput): Promise<Venta> {
   const parsed = ventaInputSchema.parse(input)
   const { data, error } = await db
@@ -91,7 +105,8 @@ export async function createVenta(input: VentaInput): Promise<Venta> {
       p_metodo_pago: parsed.metodoPago,
       p_referencia_pago: parsed.referenciaPago ?? null,
       p_vendido_por: parsed.vendidoPor,
-      p_orden_id: parsed.ordenId,
+      p_orden_id: parsed.ordenId ?? null,
+      p_cuenta_id: parsed.cuentaId ?? null,
     })
     .select(VENTA_SELECT)
     .single()

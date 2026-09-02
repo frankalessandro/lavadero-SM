@@ -2,7 +2,7 @@ import { db } from '../lib/db'
 import { pagoSchema, type Pago, type PagoLineaInput } from '../schemas/pago'
 
 const PAGO_SELECT =
-  'id, ordenId:orden_id, ventaGrupoId:venta_grupo_id, metodoPago:metodo_pago, monto, referenciaPago:referencia_pago, turnoId:turno_id, anulado, esCorreccion:es_correccion, motivoCorreccion:motivo_correccion, corregidoPor:corregido_por, corregidoEn:corregido_en, creadoEn:creado_en'
+  'id, ordenId:orden_id, ventaGrupoId:venta_grupo_id, cuentaId:cuenta_id, metodoPago:metodo_pago, monto, referenciaPago:referencia_pago, turnoId:turno_id, anulado, esCorreccion:es_correccion, motivoCorreccion:motivo_correccion, corregidoPor:corregido_por, corregidoEn:corregido_en, creadoEn:creado_en'
 
 function inicioDeHoyISO(): string {
   const ahora = new Date()
