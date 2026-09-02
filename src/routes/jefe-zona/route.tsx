@@ -52,7 +52,7 @@ function JefeZonaLayout() {
       />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar
-          title="Lavadero"
+          title="Panel de control"
           avatarInitial="J"
           onLogout={signOut}
           onMenuClick={() => setMenuOpen(true)}

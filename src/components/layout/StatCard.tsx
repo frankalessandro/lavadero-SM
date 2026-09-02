@@ -11,12 +11,23 @@ interface StatCardProps {
    *  en vez de un tooltip, para que quepa una explicación completa (ej. qué SÍ y qué NO incluye
    *  "Caja del día") sin depender de hover, que no existe en celular/tablet. */
   info?: { title: string; description: string }
+  /** Si viene, la tarjeta entera se vuelve clicable (ej. "Caja del día" abre un modal con el
+   *  desglose) — mutuamente excluyente con `info` en la práctica, el click reemplaza al tooltip. */
+  onClick?: () => void
 }
 
-export function StatCard({ label, value, hint, icon: Icon, info }: StatCardProps) {
+export function StatCard({ label, value, hint, icon: Icon, info, onClick }: StatCardProps) {
   const [mostrandoInfo, setMostrandoInfo] = useState(false)
   return (
-    <div className="relative flex items-center gap-4 rounded-2xl border border-neutral-200 bg-white p-2 shadow-card transition-shadow hover:shadow-card-hover">
+    <div
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (onClick && (e.key === 'Enter' || e.key === ' ')) onClick()
+      }}
+      className={`relative flex items-center gap-4 rounded-2xl border border-neutral-200 bg-white p-2 shadow-card transition-shadow hover:shadow-card-hover ${onClick ? 'cursor-pointer' : ''}`}
+    >
       <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
         <Icon size={20} strokeWidth={2} />
       </span>
