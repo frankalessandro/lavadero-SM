@@ -1,6 +1,6 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { Package, Droplet, AlertTriangle, PackageSearch, ShoppingBag } from 'lucide-react'
+import { Package, Droplet, AlertTriangle, PackageSearch, ShoppingBag, X } from 'lucide-react'
 import { fetchTurnoAbierto } from '../../../data/turnos'
 import { fetchProductosOperativo } from '../../../data/productos'
 import {
@@ -13,6 +13,29 @@ import type { Producto } from '../../../schemas/producto'
 import { Card } from '../../../components/layout/Card'
 import { StatCard } from '../../../components/layout/StatCard'
 import { CustomSelect } from '../../../components/layout/CustomSelect'
+import { nivelStock, ordenarPorNivelStock, NIVEL_LABEL, NIVEL_BADGE_CLASS, STOCK_BAJO_MAX, STOCK_MEDIO_MAX } from '../../../lib/nivelStock'
+
+// Hoja inferior en móvil, centrada en desktop — mismo patrón que src/routes/vigilante/index.tsx,
+// es la convención del repo para formularios modales nuevos en pantallas operativas mobile-first.
+function ModalSheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  return (
+    <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
+      <div className="custom-scroll max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-t-2xl bg-white p-5 shadow-card-hover sm:rounded-2xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-neutral-900">{title}</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  )
+}
 
 async function loadStock() {
   const [turno, productos, stock, movimientos] = await Promise.all([
@@ -50,6 +73,7 @@ function StockPage() {
   const [productos] = useState<Producto[]>(data.productos)
   const [stock, setStock] = useState(data.stock)
   const [movimientos, setMovimientos] = useState(data.movimientos)
+  const [movimientoFormOpen, setMovimientoFormOpen] = useState(false)
 
   async function refresh() {
     const nuevo = await loadStock()
@@ -72,32 +96,67 @@ function StockPage() {
   // cobra al cliente); con precio de venta es lo que hay en la nevera para vender. Mismo criterio
   // que ya usa /jefe-zona/ventas para decidir qué aparece como vendible — no se agregó una
   // columna de categoría aparte porque este campo ya distingue exactamente eso.
-  const insumos = productosActivos.filter((p) => p.precioVenta == null)
-  const vendibles = productosActivos.filter((p) => p.precioVenta != null)
-  const bajoMinimo = productosActivos.filter((p) => (stockPorProducto.get(p.id) ?? 0) < p.stockMinimo)
+  const insumos = ordenarPorNivelStock(
+    productosActivos.filter((p) => p.precioVenta == null),
+    (p) => stockPorProducto.get(p.id) ?? 0,
+  )
+  const vendibles = ordenarPorNivelStock(
+    productosActivos.filter((p) => p.precioVenta != null),
+    (p) => stockPorProducto.get(p.id) ?? 0,
+  )
+  const porNivel = {
+    bajo: productosActivos.filter((p) => nivelStock(stockPorProducto.get(p.id) ?? 0) === 'bajo'),
+    medio: productosActivos.filter((p) => nivelStock(stockPorProducto.get(p.id) ?? 0) === 'medio'),
+    bueno: productosActivos.filter((p) => nivelStock(stockPorProducto.get(p.id) ?? 0) === 'bueno'),
+  }
 
   return (
     <div className="flex flex-col gap-6 text-left">
-      <p className="px-1 text-sm text-neutral-500">
-        Insumos de lavado (jabón, cera, etc.) y productos de nevera para vender — mismo catálogo, registra acá
-        el consumo o reposición del día a día. Costos y valorización solo los ve Admin.
-      </p>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <StatCard label="Productos activos" value={String(productosActivos.length)} icon={Package} />
-        <StatCard
-          label="Bajo stock mínimo"
-          value={String(bajoMinimo.length)}
-          hint={bajoMinimo.length > 0 ? bajoMinimo.map((p) => p.nombre).join(', ') : undefined}
-          icon={AlertTriangle}
-        />
+      <div className="flex items-start justify-between gap-3 px-1">
+        <p className="text-sm text-neutral-500">
+          Insumos de lavado (jabón, cera, etc.) y productos de nevera para vender — mismo catálogo, registra acá
+          el consumo o reposición del día a día. Costos y valorización solo los ve Admin.
+        </p>
+        <button
+          type="button"
+          onClick={() => setMovimientoFormOpen(true)}
+          className="flex shrink-0 items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700"
+        >
+          <PackageSearch size={16} />
+          Movimiento
+        </button>
       </div>
 
-      <MovimientoForm
-        productos={productosActivos}
-        responsableSugerido={turno?.responsableActual ?? ''}
-        onSaved={refresh}
-      />
+      <StatCard label="Productos activos" value={String(productosActivos.length)} icon={Package} />
+
+      <div className="grid grid-cols-3 gap-3">
+        {(
+          [
+            { nivel: 'bajo' as const, hint: `≤ ${STOCK_BAJO_MAX} unid.` },
+            { nivel: 'medio' as const, hint: `≤ ${STOCK_MEDIO_MAX} unid.` },
+            { nivel: 'bueno' as const, hint: `> ${STOCK_MEDIO_MAX} unid.` },
+          ] as const
+        ).map(({ nivel, hint }) => (
+          <div key={nivel} className={`rounded-2xl border border-neutral-200 p-3 shadow-card ${NIVEL_BADGE_CLASS[nivel]}`}>
+            <p className="text-xs font-medium opacity-80">{NIVEL_LABEL[nivel]}</p>
+            <p className="text-xl font-semibold">{porNivel[nivel].length}</p>
+            <p className="text-[11px] opacity-70">{hint}</p>
+          </div>
+        ))}
+      </div>
+
+      {movimientoFormOpen ? (
+        <ModalSheet title="Registrar movimiento" onClose={() => setMovimientoFormOpen(false)}>
+          <MovimientoForm
+            productos={productosActivos}
+            responsableSugerido={turno?.responsableActual ?? ''}
+            onSaved={async () => {
+              setMovimientoFormOpen(false)
+              await refresh()
+            }}
+          />
+        </ModalSheet>
+      ) : null}
 
       <StockTable
         titulo="Insumos de lavado"
@@ -199,7 +258,8 @@ function StockTable({
         <tbody>
           {productos.map((producto) => {
             const stockActual = stockPorProducto.get(producto.id) ?? 0
-            const bajoMin = stockActual < producto.stockMinimo
+            const nivel = nivelStock(stockActual)
+            const bajoMin = nivel === 'bajo'
             return (
               <tr key={producto.id} className="border-b border-neutral-100 last:border-0">
                 <td className="px-5 py-3">
@@ -214,13 +274,11 @@ function StockTable({
                   </td>
                 ) : null}
                 <td className="px-5 py-3">
-                  {bajoMin ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-danger-50 px-2.5 py-1 text-xs font-medium text-danger-700">
-                      <AlertTriangle size={11} /> Stock bajo
-                    </span>
-                  ) : (
-                    <span className="text-xs text-neutral-400">—</span>
-                  )}
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${NIVEL_BADGE_CLASS[nivel]}`}
+                  >
+                    {bajoMin ? <AlertTriangle size={11} /> : null} {NIVEL_LABEL[nivel]}
+                  </span>
                 </td>
               </tr>
             )
@@ -293,12 +351,7 @@ function MovimientoForm({
   }
 
   return (
-    <Card>
-      <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-neutral-900">
-        <PackageSearch size={16} className="text-primary-500" />
-        Registrar movimiento
-      </h3>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-5">
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="font-medium text-neutral-700">Producto</span>
           <CustomSelect
@@ -407,6 +460,5 @@ function MovimientoForm({
           {saving ? 'Guardando…' : 'Registrar movimiento'}
         </button>
       </form>
-    </Card>
   )
 }

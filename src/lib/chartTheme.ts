@@ -23,7 +23,8 @@ export const CHART_COLORS = {
   primary: '#1c7fd6', // --color-primary-600
   primarySoft: '#eff8ff', // --color-primary-50
   success: '#16a34a', // --color-success-600 — segunda categoría cuando de verdad hay 2 series (ej. línea de negocio)
-  danger: '#dc2626', // --color-danger-600 — solo para estado (bajo stock mínimo), nunca como "serie 2"
+  warning: '#d97706', // --color-warning-600 — solo para estado (nivel de stock medio), nunca como "serie 2"
+  danger: '#dc2626', // --color-danger-600 — solo para estado (nivel de stock bajo), nunca como "serie 2"
   grid: '#e2e8f0', // --color-neutral-200 — gridlines recesivas
   text: '#64748b', // --color-neutral-500 — texto de ejes/tooltip
   surface: '#ffffff',
