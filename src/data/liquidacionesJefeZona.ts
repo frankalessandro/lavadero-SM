@@ -46,6 +46,61 @@ export async function fetchComisionesPendientesJefeZona(): Promise<ComisionPendi
     .sort((a, b) => b.montoPendiente - a.montoPendiente)
 }
 
+export interface OrdenPendienteJefeZona {
+  id: string
+  consecutivo: number
+  creadoEn: string
+  placa: string
+  tipoVehiculoId: string
+  comboId?: string
+  // Nombres de los servicios sueltos agregados encima del combo (o todo lo que lleva la orden si
+  // no hay combo) — el combo se resuelve aparte en la pantalla, que ya tiene el catálogo cargado.
+  adicionales: string[]
+  precio: number
+  comisionJefeZona: number
+}
+
+// Detalle línea por línea de lo que este responsable tiene sin liquidar — para el modal que se
+// abre desde su tarjeta de "Comisiones pendientes". Mismo filtro que fetchComisionesPendientesJefeZona
+// (responsable + sin liquidacion_jefe_zona_id + no anulada), pero trayendo el desglose de cada orden
+// en vez del acumulado. La comisión es por orden (3% del precio de lista), no por cada servicio suelto.
+export async function fetchOrdenesPendientesJefeZona(responsable: string): Promise<OrdenPendienteJefeZona[]> {
+  const { data, error } = await db
+    .from('ordenes')
+    .select(
+      'id, consecutivo, creadoEn:creado_en, placa, tipoVehiculoId:tipo_vehiculo_id, comboId:combo_id, precio, comisionJefeZona:comision_jefe_zona, serviciosAdicionales:orden_servicios(servicios(nombre))',
+    )
+    .eq('jefe_zona_responsable', responsable)
+    .is('liquidacion_jefe_zona_id', null)
+    .neq('estado', 'anulada')
+    .order('creado_en', { ascending: false })
+  if (error) throw new Error(error.message)
+
+  return (
+    data as unknown as {
+      id: string
+      consecutivo: number
+      creadoEn: string
+      placa: string
+      tipoVehiculoId: string
+      comboId: string | null
+      precio: number
+      comisionJefeZona: number
+      serviciosAdicionales: { servicios: { nombre: string } | null }[]
+    }[]
+  ).map((row) => ({
+    id: row.id,
+    consecutivo: row.consecutivo,
+    creadoEn: row.creadoEn,
+    placa: row.placa,
+    tipoVehiculoId: row.tipoVehiculoId,
+    comboId: row.comboId ?? undefined,
+    adicionales: (row.serviciosAdicionales ?? []).map((s) => s.servicios?.nombre ?? '').filter(Boolean),
+    precio: row.precio,
+    comisionJefeZona: row.comisionJefeZona,
+  }))
+}
+
 export interface ResumenPeriodoJefeZona {
   responsable: string
   cantidadOrdenes: number
