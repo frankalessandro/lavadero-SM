@@ -517,7 +517,10 @@ function MovimientoForm({
   const [tipo, setTipo] = useState<TipoMovimientoInventario>('entrada')
   const [direccionAjuste, setDireccionAjuste] = useState<'aumento' | 'disminucion'>('aumento')
   const [cantidad, setCantidad] = useState('')
-  const [costoUnitario, setCostoUnitario] = useState('')
+  // Los proveedores varían y el precio de compra no es fijo — en vez de pedir el costo por
+  // unidad (obliga a hacer la cuenta a mano cada vez), se pide lo que realmente se pagó por toda
+  // la compra y el sistema divide entre la cantidad para sacar el costo unitario solo.
+  const [valorTotal, setValorTotal] = useState('')
   const [proveedor, setProveedor] = useState('')
   const [motivo, setMotivo] = useState('')
   const [responsable, setResponsable] = useState('')
@@ -527,10 +530,14 @@ function MovimientoForm({
   function reset() {
     setProductoId('')
     setCantidad('')
-    setCostoUnitario('')
+    setValorTotal('')
     setProveedor('')
     setMotivo('')
   }
+
+  const cantidadNum = Number(cantidad) || 0
+  const costoUnitarioCalculado =
+    tipo === 'entrada' && valorTotal && cantidadNum > 0 ? Math.round(Number(valorTotal) / cantidadNum) : undefined
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -542,7 +549,7 @@ function MovimientoForm({
       productoId,
       tipo,
       cantidad: cantidadConSigno,
-      costoUnitario: tipo === 'entrada' && costoUnitario ? Number(costoUnitario) : undefined,
+      costoUnitario: costoUnitarioCalculado,
       proveedor: tipo === 'entrada' ? proveedor || undefined : undefined,
       motivo: motivo || undefined,
       responsable,
@@ -651,9 +658,14 @@ function MovimientoForm({
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <label className="flex flex-col gap-1.5 text-sm">
               <span className="font-medium text-neutral-700">
-                Costo unitario <span className="font-normal text-neutral-400">(opcional)</span>
+                Valor total de la compra <span className="font-normal text-neutral-400">(opcional)</span>
               </span>
-              <CurrencyInput size="sm" prefix="$" value={costoUnitario} onChange={setCostoUnitario} />
+              <CurrencyInput size="sm" prefix="$" value={valorTotal} onChange={setValorTotal} />
+              <span className="text-xs text-neutral-400">
+                {costoUnitarioCalculado != null
+                  ? `≈ ${COP.format(costoUnitarioCalculado)} por unidad (÷ ${cantidadNum})`
+                  : 'Lo que pagaste en total — el costo por unidad se calcula solo.'}
+              </span>
             </label>
             <label className="flex flex-col gap-1.5 text-sm">
               <span className="font-medium text-neutral-700">
