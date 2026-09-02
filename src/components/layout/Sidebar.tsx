@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import type { ComponentType } from 'react'
-import logoFull from '../../assets/logo-full-mark.png'
+import logoIsotipo from '../../assets/logo-isotipo.png'
 
 export interface NavItem {
   to: string
@@ -35,9 +35,9 @@ function SidebarContent({
 }) {
   return (
     <>
-      <div className="flex flex-col items-center gap-2 px-6 pt-7 pb-6">
-        <img src={logoFull} alt="Carwash SM" className="h-32 w-32 shrink-0 object-contain" />
-        <span className="font-display text-lg font-bold tracking-tight text-primary-700">Carwash SM</span>
+      <div className="flex items-center gap-2.5 px-6 pt-7 pb-6">
+        <img src={logoIsotipo} alt="" className="h-9 w-9 shrink-0 object-contain" />
+        <span className="text-base font-semibold tracking-tight text-neutral-900">Carwash SM</span>
       </div>
 
       <nav className="flex flex-1 flex-col gap-1 px-3">

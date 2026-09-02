@@ -33,7 +33,9 @@ export function Topbar({ title, avatarInitial, onLogout, onMenuClick, responsabl
             <Menu size={20} />
           </button>
         ) : null}
-        <h1 className="truncate font-display text-xl font-bold tracking-tight text-primary-700">{title}</h1>
+        <h1 className="truncate bg-gradient-to-r from-primary-700 via-primary-600 to-primary-400 bg-clip-text text-xl font-bold tracking-tight text-transparent">
+          {title}
+        </h1>
       </div>
       <div className="flex shrink-0 items-center gap-3">
         {responsable ? (

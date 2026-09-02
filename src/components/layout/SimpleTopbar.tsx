@@ -17,7 +17,7 @@ export function SimpleTopbar({ title, onLogout }: SimpleTopbarProps) {
     <header className="mx-auto flex w-full max-w-2xl items-center justify-between gap-4 px-1 pt-4 pb-2">
       <div className="flex items-center gap-2.5">
         <img src={logoMark} alt="Carwash SM" className="size-7 shrink-0 object-contain" />
-        <h1 className="font-display text-lg font-bold tracking-tight text-primary-700">{title}</h1>
+        <h1 className="text-lg font-semibold tracking-tight text-neutral-900">{title}</h1>
       </div>
       <button
         type="button"
