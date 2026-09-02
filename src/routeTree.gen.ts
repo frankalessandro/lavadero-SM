@@ -30,6 +30,7 @@ import { Route as AdminConfiguracionIndexRouteImport } from './routes/admin/conf
 import { Route as AdminDineroIndexRouteImport } from './routes/admin/dinero/index'
 import { Route as AdminOperacionIndexRouteImport } from './routes/admin/operacion/index'
 import { Route as AdminPersonalIndexRouteImport } from './routes/admin/personal/index'
+import { Route as AdminRentabilidadIndexRouteImport } from './routes/admin/rentabilidad/index'
 import { Route as JefeZonaAsistenciaIndexRouteImport } from './routes/jefe-zona/asistencia/index'
 import { Route as JefeZonaCajaIndexRouteImport } from './routes/jefe-zona/caja/index'
 import { Route as JefeZonaInventarioIndexRouteImport } from './routes/jefe-zona/inventario/index'
@@ -153,6 +154,11 @@ const AdminPersonalIndexRoute = AdminPersonalIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AdminPersonalRouteRoute,
 } as any)
+const AdminRentabilidadIndexRoute = AdminRentabilidadIndexRouteImport.update({
+  id: '/rentabilidad/',
+  path: '/rentabilidad/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
 const JefeZonaAsistenciaIndexRoute = JefeZonaAsistenciaIndexRouteImport.update({
   id: '/asistencia/',
   path: '/asistencia/',
@@ -273,6 +279,7 @@ export interface FileRoutesByFullPath {
   '/admin/dinero/': typeof AdminDineroIndexRoute
   '/admin/operacion/': typeof AdminOperacionIndexRoute
   '/admin/personal/': typeof AdminPersonalIndexRoute
+  '/admin/rentabilidad/': typeof AdminRentabilidadIndexRoute
   '/jefe-zona/asistencia/': typeof JefeZonaAsistenciaIndexRoute
   '/jefe-zona/caja/': typeof JefeZonaCajaIndexRoute
   '/jefe-zona/inventario/': typeof JefeZonaInventarioIndexRoute
@@ -305,6 +312,7 @@ export interface FileRoutesByTo {
   '/admin/dinero': typeof AdminDineroIndexRoute
   '/admin/operacion': typeof AdminOperacionIndexRoute
   '/admin/personal': typeof AdminPersonalIndexRoute
+  '/admin/rentabilidad': typeof AdminRentabilidadIndexRoute
   '/jefe-zona/asistencia': typeof JefeZonaAsistenciaIndexRoute
   '/jefe-zona/caja': typeof JefeZonaCajaIndexRoute
   '/jefe-zona/inventario': typeof JefeZonaInventarioIndexRoute
@@ -346,6 +354,7 @@ export interface FileRoutesById {
   '/admin/dinero/': typeof AdminDineroIndexRoute
   '/admin/operacion/': typeof AdminOperacionIndexRoute
   '/admin/personal/': typeof AdminPersonalIndexRoute
+  '/admin/rentabilidad/': typeof AdminRentabilidadIndexRoute
   '/jefe-zona/asistencia/': typeof JefeZonaAsistenciaIndexRoute
   '/jefe-zona/caja/': typeof JefeZonaCajaIndexRoute
   '/jefe-zona/inventario/': typeof JefeZonaInventarioIndexRoute
@@ -388,6 +397,7 @@ export interface FileRouteTypes {
     | '/admin/dinero/'
     | '/admin/operacion/'
     | '/admin/personal/'
+    | '/admin/rentabilidad/'
     | '/jefe-zona/asistencia/'
     | '/jefe-zona/caja/'
     | '/jefe-zona/inventario/'
@@ -420,6 +430,7 @@ export interface FileRouteTypes {
     | '/admin/dinero'
     | '/admin/operacion'
     | '/admin/personal'
+    | '/admin/rentabilidad'
     | '/jefe-zona/asistencia'
     | '/jefe-zona/caja'
     | '/jefe-zona/inventario'
@@ -460,6 +471,7 @@ export interface FileRouteTypes {
     | '/admin/dinero/'
     | '/admin/operacion/'
     | '/admin/personal/'
+    | '/admin/rentabilidad/'
     | '/jefe-zona/asistencia/'
     | '/jefe-zona/caja/'
     | '/jefe-zona/inventario/'
@@ -638,6 +650,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/personal/'
       preLoaderRoute: typeof AdminPersonalIndexRouteImport
       parentRoute: typeof AdminPersonalRouteRoute
+    }
+    '/admin/rentabilidad/': {
+      id: '/admin/rentabilidad/'
+      path: '/rentabilidad'
+      fullPath: '/admin/rentabilidad/'
+      preLoaderRoute: typeof AdminRentabilidadIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
     }
     '/jefe-zona/asistencia/': {
       id: '/jefe-zona/asistencia/'
@@ -836,6 +855,7 @@ interface AdminRouteRouteChildren {
   AdminPersonalRouteRoute: typeof AdminPersonalRouteRouteWithChildren
   AdminIndexRoute: typeof AdminIndexRoute
   AdminConfiguracionIndexRoute: typeof AdminConfiguracionIndexRoute
+  AdminRentabilidadIndexRoute: typeof AdminRentabilidadIndexRoute
 }
 
 const AdminRouteRouteChildren: AdminRouteRouteChildren = {
@@ -845,6 +865,7 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminPersonalRouteRoute: AdminPersonalRouteRouteWithChildren,
   AdminIndexRoute: AdminIndexRoute,
   AdminConfiguracionIndexRoute: AdminConfiguracionIndexRoute,
+  AdminRentabilidadIndexRoute: AdminRentabilidadIndexRoute,
 }
 
 const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(

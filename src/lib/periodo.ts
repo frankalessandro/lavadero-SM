@@ -1,6 +1,6 @@
 export type ModoPeriodo = 'dia' | 'semana' | 'mes'
 
-function fechaLocalISO(d: Date): string {
+export function fechaLocalISO(d: Date): string {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const dia = String(d.getDate()).padStart(2, '0')
@@ -15,7 +15,7 @@ function sumarDias(fecha: Date, dias: number): Date {
 
 // Lunes de la semana calendario del ancla (domingo cuenta como el último día de la semana que
 // empezó el lunes anterior) — mismo criterio que ya usa /jefe-zona/asistencia.
-function lunesDeLaSemana(fecha: Date): Date {
+export function lunesDeLaSemana(fecha: Date): Date {
   const copia = new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate())
   const diaSemana = copia.getDay()
   const offset = diaSemana === 0 ? -6 : 1 - diaSemana

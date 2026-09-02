@@ -69,6 +69,21 @@ export async function fetchOrdenesEntregadasHoy(): Promise<Orden[]> {
   return (data as Record<string, unknown>[]).map(mapOrdenRow)
 }
 
+// Como fetchOrdenesEntregadasHoy pero para un rango arbitrario — filtra por `entregada_en`
+// (cuándo entró la plata), no por `creado_en`. Fuente de "ingresos del lavadero" en el histórico
+// de rentabilidad (/admin/rentabilidad).
+export async function fetchOrdenesEntregadasEnRango(desdeISO: string, hastaISO: string): Promise<Orden[]> {
+  const { data, error } = await db
+    .from('ordenes')
+    .select(ORDEN_SELECT)
+    .eq('estado', 'entregado')
+    .gte('entregada_en', desdeISO)
+    .lt('entregada_en', hastaISO)
+    .order('entregada_en', { ascending: true })
+  if (error) throw new Error(error.message)
+  return (data as Record<string, unknown>[]).map(mapOrdenRow)
+}
+
 // Para reportes (M8/M11): trae órdenes cuya fecha de creación cae en [desdeISO, hastaISO).
 export async function fetchOrdenesEnRango(desdeISO: string, hastaISO: string): Promise<Orden[]> {
   const { data, error } = await db
