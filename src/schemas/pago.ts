@@ -29,6 +29,10 @@ export const pagoSchema = z.object({
     .string()
     .nullish()
     .transform((v) => v ?? undefined),
+  cuentaId: z
+    .string()
+    .nullish()
+    .transform((v) => v ?? undefined),
   metodoPago: metodoPagoBaseSchema,
   monto: z.number().int().positive(),
   referenciaPago: z

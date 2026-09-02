@@ -52,7 +52,7 @@ export function DetalleOrdenesJefeZonaModal({ responsable, filas, onClose }: Pro
           </button>
         </div>
 
-        <div className="mt-5 -mx-1 flex-1 overflow-y-auto">
+        <div className="custom-scroll mt-5 -mx-1 flex-1 overflow-y-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">

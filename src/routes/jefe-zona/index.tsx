@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import {
   Droplets,
-  ClipboardList,
   Users,
   Wallet,
   ArrowRight,
@@ -28,10 +27,14 @@ import {
   BellRing,
   Undo2,
   Plus,
-  Minus,
   Trash2,
   CupSoda,
   Percent,
+  Landmark,
+  CreditCard,
+  UserCheck,
+  UserX,
+  BedDouble,
 } from 'lucide-react'
 import {
   fetchOrdenesHoy,
@@ -52,7 +55,9 @@ import { fetchTurnoAbierto } from '../../data/turnos'
 import { fetchProductosOperativo } from '../../data/productos'
 import { fetchStockProductosOperativo } from '../../data/movimientosInventario'
 import { createVenta, anularVenta, fetchVentasPendientes, fetchVentasDeOrden } from '../../data/ventas'
-import { anularVentaInputSchema, type Venta } from '../../schemas/venta'
+import { fetchPagosHoy } from '../../data/pagos'
+import type { Venta } from '../../schemas/venta'
+import type { Pago } from '../../schemas/pago'
 import type { Producto } from '../../schemas/producto'
 import { clienteInfoInputSchema, type Orden } from '../../schemas/orden'
 import type { TipoVehiculo } from '../../schemas/tipoVehiculo'
@@ -68,6 +73,8 @@ import { borradorAPagos, nuevaLineaBorrador, pagoLineasCuadra, type PagoLineaBor
 import { CorregirPagoModal } from '../../components/layout/CorregirPagoModal'
 import { ContactoModal } from '../../components/layout/ContactoModal'
 import { LavadoAnimation } from '../../components/layout/LavadoAnimation'
+import { AgregarProductoModal } from '../../components/layout/AgregarProductoModal'
+import { QuitarProductoModal } from '../../components/layout/QuitarProductoModal'
 import { BarChart } from '../../components/layout/BarChart'
 import { METODO_PAGO_LABEL } from '../../lib/metodoPago'
 
@@ -92,6 +99,7 @@ async function loadDashboard() {
     productos,
     stock,
     ventasPendientes,
+    pagosHoy,
   ] = await Promise.all([
     fetchOrdenesHoy(),
     fetchOrdenesEntregadasHoy(),
@@ -104,6 +112,7 @@ async function loadDashboard() {
     fetchProductosOperativo(),
     fetchStockProductosOperativo(),
     fetchVentasPendientes(),
+    fetchPagosHoy(),
   ])
   return {
     ordenesHoy,
@@ -117,6 +126,7 @@ async function loadDashboard() {
     productos,
     stock,
     ventasPendientes,
+    pagosHoy,
   }
 }
 
@@ -182,6 +192,7 @@ function JefeZonaDashboard() {
   // Productos de nevera cargados a órdenes que todavía no se cobran (estado 'pendiente'). Se
   // agrupan por orden para el chip de cada tarjeta y para sumarlos al total del cobro.
   const [ventasPendientes, setVentasPendientes] = useState<Venta[]>(data.ventasPendientes)
+  const [pagosHoy, setPagosHoy] = useState<Pago[]>(data.pagosHoy)
   const [agregandoProductoA, setAgregandoProductoA] = useState<Orden | null>(null)
   const [quitandoProducto, setQuitandoProducto] = useState<Venta | null>(null)
   // `finalizarPrimero`: cuando se cobra directo desde una orden en_proceso (cliente esperando en
@@ -207,6 +218,7 @@ function JefeZonaDashboard() {
   // permiten reabrir e imprimir el tiquete de cualquier orden, en cualquier estado.
   const [vista, setVista] = useState<'seguimiento' | 'entregados'>('seguimiento')
   const [viendoDetalle, setViendoDetalle] = useState<Orden | null>(null)
+  const [viendoCajaDesglose, setViendoCajaDesglose] = useState(false)
 
   // Reloj compartido para el contador en vivo de cada tarjeta — un solo interval en vez de
   // uno por tarjeta, se limpia al desmontar el dashboard. Se guarda como estado (no un simple
@@ -219,18 +231,20 @@ function JefeZonaDashboard() {
   }, [])
 
   async function refresh() {
-    const [nuevasOrdenes, nuevasEntregadas, nuevoTurno, nuevoStock, nuevasPendientes] = await Promise.all([
+    const [nuevasOrdenes, nuevasEntregadas, nuevoTurno, nuevoStock, nuevasPendientes, nuevosPagos] = await Promise.all([
       fetchOrdenesHoy(),
       fetchOrdenesEntregadasHoy(),
       fetchTurnoAbierto('jefe_zona'),
       fetchStockProductosOperativo(),
       fetchVentasPendientes(),
+      fetchPagosHoy(),
     ])
     setOrdenesHoy(nuevasOrdenes)
     setEntregadasHoy(nuevasEntregadas)
     setTurno(nuevoTurno)
     setStock(nuevoStock)
     setVentasPendientes(nuevasPendientes)
+    setPagosHoy(nuevosPagos)
     router.invalidate()
   }
 
@@ -320,8 +334,6 @@ function JefeZonaDashboard() {
   const enProcesoLista = ordenesHoy.filter((o) => o.estado === 'en_proceso')
   const listoLista = ordenesHoy.filter((o) => o.estado === 'listo')
   const anuladasHoyLista = ordenesHoy.filter((o) => o.estado === 'anulada')
-  const lavadoresActivos = lavadores.filter((l) => l.activo).length
-
   // Buscador por placa + filtro por lavador (seguimiento y entregados hoy) — ambos se combinan.
   // Coincidencia de placa parcial, sin distinguir mayúsculas/minúsculas. "Sin asignar" filtra las
   // órdenes sin lavador (ver M2). Solo filtra lo que se muestra; las listas sin filtrar (arriba)
@@ -366,8 +378,25 @@ function JefeZonaDashboard() {
   const proximoEnRotacion = ordenRotacion.find(
     (l) => presentesHoyIds.has(l.id) && l.id !== descansaHoyId && !ocupadosIds.has(l.id),
   )
-  // Solo lo cobrado hoy — un vehículo registrado hoy pero no entregado no cuenta como plata en caja.
-  const cajaDelDia = entregadasHoy.reduce((total, o) => total + o.precio, 0)
+  // Desglose de "Lavadores en turno": mismos Sets ya calculados arriba para la cola de rotación,
+  // sin ningún fetch nuevo. "Disponible" = mismo criterio de elegibilidad de suggestNextLavador.
+  const lavadoresDisponibles = lavadores.filter(
+    (l) => l.activo && presentesHoyIds.has(l.id) && l.id !== descansaHoyId && !ocupadosIds.has(l.id),
+  ).length
+  const lavadoresSinLlegada = lavadores.filter((l) => l.activo && !presentesHoyIds.has(l.id)).length
+
+  // Caja del día desglosada: mismo criterio de clasificación que fetchEfectivoDeTurno (src/data/
+  // pagos.ts) — orden_id presente = lavado, ausente = producto (mostrador o cuenta abierta, da
+  // igual para este desglose, las dos son vitrina). Solo líneas vigentes (no anuladas).
+  const pagosVigentesHoy = pagosHoy.filter((p) => !p.anulado)
+  const totalCajaHoy = pagosVigentesHoy.reduce((s, p) => s + p.monto, 0)
+  const cajaPorMetodo = {
+    efectivo: pagosVigentesHoy.filter((p) => p.metodoPago === 'efectivo').reduce((s, p) => s + p.monto, 0),
+    transferencia: pagosVigentesHoy.filter((p) => p.metodoPago === 'transferencia').reduce((s, p) => s + p.monto, 0),
+    datafono: pagosVigentesHoy.filter((p) => p.metodoPago === 'datafono').reduce((s, p) => s + p.monto, 0),
+  }
+  const cajaLavados = pagosVigentesHoy.filter((p) => p.ordenId).reduce((s, p) => s + p.monto, 0)
+  const cajaProductos = totalCajaHoy - cajaLavados
 
   // Tiempo de lavado de hoy (M3), por combo y por lavador — mide solo el lavado en sí
   // (creado→listo, `tiempoLavadoSegundos`), no el ciclo completo. Antes se calculaba como
@@ -513,25 +542,19 @@ function JefeZonaDashboard() {
         </Link>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <StatCard
           label="Lavados de hoy"
           value={String(ordenesHoy.filter((o) => o.estado !== 'anulada').length)}
           hint={anuladasHoyLista.length > 0 ? `${anuladasHoyLista.length} anulada${anuladasHoyLista.length === 1 ? '' : 's'} — no cuenta aquí` : undefined}
           icon={Droplets}
         />
-        <StatCard label="En proceso / listos" value={String(enProcesoLista.length + listoLista.length)} icon={ClipboardList} />
-        <StatCard label="Lavadores activos" value={String(lavadoresActivos)} icon={Users} />
         <StatCard
           label="Caja del día"
-          value={COP.format(cajaDelDia)}
-          hint="Solo lo cobrado — sin arqueo (M5)"
+          value={COP.format(totalCajaHoy)}
+          hint="Toca para ver el desglose"
           icon={Wallet}
-          info={{
-            title: 'Qué es "Caja del día"',
-            description:
-              'Suma el precio de todas las órdenes de lavado entregadas HOY (cobradas), sin importar el método de pago (efectivo, transferencia o datáfono) — un vehículo registrado hoy pero que todavía no se entrega/cobra no cuenta acá.\n\nNo es el arqueo del turno: no resta gastos ni distingue el método de pago (eso solo importa para el conteo físico de caja, que se hace en /jefe-zona/caja al cerrar turno — ni transferencia ni datáfono son efectivo físico). Tampoco incluye parqueadero, que se cobra y se arquea aparte con el vigilante.',
-          }}
+          onClick={() => setViendoCajaDesglose(true)}
         />
       </div>
 
@@ -551,75 +574,69 @@ function JefeZonaDashboard() {
         </Card>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {/* Uso de escritorio: caja a la vista, sin salir del dashboard */}
-        <Card className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <span
-              className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${
-                turno ? 'bg-success-50 text-success-700' : 'bg-warning-50 text-warning-700'
-              }`}
-            >
-              {turno ? <LockOpen size={18} strokeWidth={2} /> : <Lock size={18} strokeWidth={2} />}
-            </span>
-            <div>
-              <p className="text-sm font-semibold text-neutral-900">
-                {turno ? `Turno abierto — ${turno.responsableActual}` : 'No hay turno abierto'}
-              </p>
-              <p className="text-xs text-neutral-500">
-                {turno ? `Desde las ${new Date(turno.abiertoEn).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' })} · base ${COP.format(turno.baseInicial)}` : 'Ábrelo para que el arqueo cuadre al cierre.'}
-              </p>
-            </div>
+      {/* 3 tarjetas compactas en vez de 2 grandes — antes "Lavadores en turno" cargaba también la
+          cola completa de rotación y quedaba alta; se separa el nombre del próximo en su propia
+          tarjeta (es el dato que más se consulta de un vistazo) y se gana espacio vertical. */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Card className="flex items-center gap-3">
+          <span
+            className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${
+              turno ? 'bg-success-50 text-success-700' : 'bg-warning-50 text-warning-700'
+            }`}
+          >
+            {turno ? <LockOpen size={18} strokeWidth={2} /> : <Lock size={18} strokeWidth={2} />}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-neutral-900">
+              {turno ? turno.responsableActual : 'Sin turno abierto'}
+            </p>
+            <p className="truncate text-xs text-neutral-500">
+              {turno ? `Base ${COP.format(turno.baseInicial)}` : 'Ábrelo para que el arqueo cuadre al cierre.'}
+            </p>
           </div>
           <Link
             to="/jefe-zona/caja"
-            className="whitespace-nowrap rounded-lg border border-neutral-200 px-3 py-2 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
+            className="shrink-0 whitespace-nowrap rounded-lg border border-neutral-200 px-3 py-2 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
           >
             {turno ? 'Ir a caja' : 'Abrir turno'}
           </Link>
         </Card>
 
-        {/* Misma cola que sugiere /recepcion al recibir un vehículo (regla de negocio 9) —
-            mostrar el orden completo, no solo el primero, para que quede claro por qué se
-            sugiere a ese lavador y no a otro. */}
-        <Card className="flex flex-col gap-3">
-          <div className="flex items-center gap-3">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
-              <Repeat size={18} strokeWidth={2} />
+        <Card className="flex flex-col gap-2">
+          <p className="flex items-center gap-1.5 text-sm font-semibold text-neutral-900">
+            <Users size={15} className="text-primary-500" />
+            Lavadores en turno
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            <span className="inline-flex items-center gap-1 rounded-full bg-success-50 px-2 py-1 text-xs font-medium text-success-700">
+              <UserCheck size={12} /> {lavadoresDisponibles} disponible{lavadoresDisponibles === 1 ? '' : 's'}
             </span>
-            <div>
-              <p className="text-sm font-semibold text-neutral-900">
-                {proximoEnRotacion ? `Próximo en rotación: ${proximoEnRotacion.nombre}` : 'Nadie disponible ahora mismo'}
-              </p>
-              <p className="text-xs text-neutral-500">
-                Por orden de llegada, entre quienes marcaron asistencia hoy y no descansan (M9).
-              </p>
-            </div>
+            <span className="inline-flex items-center gap-1 rounded-full bg-warning-50 px-2 py-1 text-xs font-medium text-warning-700">
+              <SprayCan size={12} /> {ocupadosIds.size} ocupado{ocupadosIds.size === 1 ? '' : 's'}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-2 py-1 text-xs font-medium text-neutral-600">
+              <BedDouble size={12} /> {descansosHoy.length} descansa{descansosHoy.length === 1 ? '' : 'n'}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-danger-50 px-2 py-1 text-xs font-medium text-danger-700">
+              <UserX size={12} /> {lavadoresSinLlegada} sin llegada
+            </span>
           </div>
-          {ordenRotacion.length > 0 ? (
-            <ol className="flex flex-wrap gap-1.5">
-              {ordenRotacion.map((lavador) => {
-                const descansaHoy = lavador.id === descansaHoyId
-                const presente = presentesHoyIds.has(lavador.id)
-                const ocupado = ocupadosIds.has(lavador.id)
-                const esProximo = lavador.id === proximoEnRotacion?.id
-                const etiqueta = descansaHoy ? 'descansa hoy' : !presente ? 'sin llegada' : ocupado ? 'ocupado' : undefined
-                return (
-                  <li
-                    key={lavador.id}
-                    className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${
-                      esProximo ? 'bg-primary-50 text-primary-700' : etiqueta ? 'bg-neutral-50 text-neutral-400' : 'bg-neutral-50 text-neutral-500'
-                    }`}
-                  >
-                    {lavador.nombre}
-                    {etiqueta ? <span className="italic">({etiqueta})</span> : null}
-                  </li>
-                )
-              })}
-            </ol>
-          ) : null}
+        </Card>
+
+        {/* Misma cola que sugiere /recepcion al recibir un vehículo (regla de negocio 9). */}
+        <Card className="flex items-center gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
+            <Repeat size={18} strokeWidth={2} />
+          </span>
+          <div className="min-w-0">
+            <p className="text-xs text-neutral-500">Próximo en cola</p>
+            <p className="truncate text-sm font-semibold text-neutral-900">
+              {proximoEnRotacion ? proximoEnRotacion.nombre : 'Nadie disponible'}
+            </p>
+          </div>
         </Card>
       </div>
+
 
       {/* Tiempo de lavado — solo tiene sentido como chart cuando hay varios combos/lavadores que
           comparar; con 1–2 nada más un número es más claro que una barra. Full-width para que
@@ -658,7 +675,7 @@ function JefeZonaDashboard() {
                   <ul className="flex flex-col gap-1.5 text-sm">
                     {promedios.porCombo.map((p) => (
                       <li key={p.nombre} className="flex items-center justify-between gap-2">
-                        <span className="truncate text-neutral-600">{p.nombre}</span>
+                        <span className="min-w-0 truncate text-neutral-600">{p.nombre}</span>
                         <span className="shrink-0 font-medium text-neutral-900">{formatMinutos(p.promedio)}</span>
                       </li>
                     ))}
@@ -678,7 +695,7 @@ function JefeZonaDashboard() {
                   <ul className="flex flex-col gap-1.5 text-sm">
                     {promedios.porLavador.map((p) => (
                       <li key={p.nombre} className="flex items-center justify-between gap-2">
-                        <span className="truncate text-neutral-600">{p.nombre}</span>
+                        <span className="min-w-0 truncate text-neutral-600">{p.nombre}</span>
                         <span className="shrink-0 font-medium text-neutral-900">{formatMinutos(p.promedio)}</span>
                       </li>
                     ))}
@@ -690,58 +707,82 @@ function JefeZonaDashboard() {
         </Card>
       ) : null}
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <label className="relative flex items-center">
-          <Search size={16} className="pointer-events-none absolute left-3 text-neutral-400" />
-          <input
-            value={busquedaPlaca}
-            onChange={(e) => setBusquedaPlaca(e.target.value)}
-            placeholder="Buscar por placa…"
-            className="w-full rounded-lg border border-neutral-300 py-2.5 pl-9 pr-3 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500 sm:max-w-xs"
-          />
-        </label>
-        <div className="sm:max-w-56">
-          <CustomSelect
-            size="sm"
-            value={lavadorFiltro}
-            onChange={setLavadorFiltro}
-            placeholder="Todos los lavadores"
-            options={[
-              { value: 'todos', label: 'Todos los lavadores' },
-              { value: 'sin_asignar', label: 'Sin asignar' },
-              ...lavadores.map((l) => ({ value: l.id, label: l.nombre })),
-            ]}
-          />
+      {/* Sin tarjeta blanca a propósito — son controles flotantes sobre el fondo de la página,
+          no una sección con contenido propio. Seguimiento/Entregados a un lado, buscador+filtro
+          al otro — se apilan en celular, justify-between los separa en pantallas anchas. */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        {/* Seguimiento (M3) vs. entregados hoy — ambas vistas permiten reabrir/imprimir el
+            tiquete de cualquier orden, sin importar el estado. */}
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setVista('seguimiento')}
+            className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+              vista === 'seguimiento'
+                ? 'border-primary-600 bg-primary-50 text-primary-700'
+                : 'border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50'
+            }`}
+          >
+            <SprayCan size={15} />
+            Seguimiento
+          </button>
+          <button
+            type="button"
+            onClick={() => setVista('entregados')}
+            className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+              vista === 'entregados'
+                ? 'border-primary-600 bg-primary-50 text-primary-700'
+                : 'border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50'
+            }`}
+          >
+            <ClipboardCheck size={15} />
+            Entregados hoy ({entregadasHoy.length})
+          </button>
+          {busquedaPlaca || lavadorFiltro !== 'todos' ? (
+            <span className="text-xs font-medium text-neutral-500">
+              {vista === 'seguimiento'
+                ? `${enProcesoFiltrada.length + listoFiltrada.length} resultado${enProcesoFiltrada.length + listoFiltrada.length === 1 ? '' : 's'}`
+                : `${entregadasFiltradas.length} resultado${entregadasFiltradas.length === 1 ? '' : 's'}`}
+            </span>
+          ) : null}
         </div>
-      </div>
 
-      {/* Seguimiento (M3) vs. entregados hoy — ambas vistas permiten reabrir/imprimir el
-          tiquete de cualquier orden, sin importar el estado. */}
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => setVista('seguimiento')}
-          className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-            vista === 'seguimiento'
-              ? 'border-primary-600 bg-primary-50 text-primary-700'
-              : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
-          }`}
-        >
-          <SprayCan size={15} />
-          Seguimiento
-        </button>
-        <button
-          type="button"
-          onClick={() => setVista('entregados')}
-          className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-            vista === 'entregados'
-              ? 'border-primary-600 bg-primary-50 text-primary-700'
-              : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
-          }`}
-        >
-          <ClipboardCheck size={15} />
-          Entregados hoy ({entregadasHoy.length})
-        </button>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <label className="relative flex items-center">
+            <Search size={16} className="pointer-events-none absolute left-3 text-neutral-400" />
+            <input
+              value={busquedaPlaca}
+              onChange={(e) => setBusquedaPlaca(e.target.value)}
+              placeholder="Buscar por placa…"
+              className="w-full rounded-lg border border-neutral-300 bg-white py-2.5 pl-9 pr-3 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500 sm:w-48"
+            />
+          </label>
+          <div className="sm:w-48">
+            <CustomSelect
+              size="sm"
+              value={lavadorFiltro}
+              onChange={setLavadorFiltro}
+              placeholder="Todos los lavadores"
+              options={[
+                { value: 'todos', label: 'Todos los lavadores' },
+                { value: 'sin_asignar', label: 'Sin asignar' },
+                ...lavadores.map((l) => ({ value: l.id, label: l.nombre })),
+              ]}
+            />
+          </div>
+          {busquedaPlaca || lavadorFiltro !== 'todos' ? (
+            <button
+              type="button"
+              onClick={() => {
+                setBusquedaPlaca('')
+                setLavadorFiltro('todos')
+              }}
+              className="flex shrink-0 items-center gap-1 self-start rounded-lg px-2 py-1.5 text-xs font-medium text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-danger-600 sm:self-auto"
+            >
+              <X size={13} /> Limpiar
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {vista === 'seguimiento' ? (
@@ -947,11 +988,12 @@ function JefeZonaDashboard() {
 
       {agregandoProductoA ? (
         <AgregarProductoModal
-          orden={agregandoProductoA}
+          titulo="Agregar productos"
+          subtitulo={`${agregandoProductoA.placa} · #${agregandoProductoA.consecutivo} — se cobran al entregar`}
           productos={productosVendibles}
           stockPorProducto={stockPorProducto}
           onClose={() => setAgregandoProductoA(null)}
-          onAgregar={handleAgregarProducto}
+          onAgregar={(productoId, cantidad) => handleAgregarProducto(agregandoProductoA, productoId, cantidad)}
         />
       ) : null}
 
@@ -963,6 +1005,95 @@ function JefeZonaDashboard() {
           onQuitar={handleQuitarProducto}
         />
       ) : null}
+
+      {viendoCajaDesglose ? (
+        <CajaDesgloseModal
+          total={totalCajaHoy}
+          hayPagos={pagosVigentesHoy.length > 0}
+          porMetodo={cajaPorMetodo}
+          lavados={cajaLavados}
+          productos={cajaProductos}
+          onClose={() => setViendoCajaDesglose(false)}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+// Antes vivía como tarjeta a ancho completo siempre visible — se movió a modal para que el
+// dashboard no tenga que cargar con el desglose completo de memoria; el StatCard de arriba ya
+// da el total glanceable, esto es para cuando de verdad hace falta el detalle.
+function CajaDesgloseModal({
+  total,
+  hayPagos,
+  porMetodo,
+  lavados,
+  productos,
+  onClose,
+}: {
+  total: number
+  hayPagos: boolean
+  porMetodo: { efectivo: number; transferencia: number; datafono: number }
+  lavados: number
+  productos: number
+  onClose: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-[2px]">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-card-hover">
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-success-50 text-success-700">
+              <Wallet size={18} strokeWidth={2} />
+            </span>
+            <div>
+              <h3 className="text-base font-semibold text-neutral-900">Caja del día — desglose</h3>
+              <p className="text-xs text-neutral-500">Solo cobros de hoy, líneas vigentes (sin anuladas).</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="mb-4 rounded-lg bg-success-50 px-3 py-3 text-center">
+          <p className="text-xl font-bold text-success-700">{COP.format(total)}</p>
+        </div>
+
+        {!hayPagos ? (
+          <p className="py-4 text-center text-sm text-neutral-400">Todavía no hay cobros hoy.</p>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <p className="text-xs font-medium text-neutral-500">Por método</p>
+              <CajaFila icon={Banknote} label="Efectivo" valor={porMetodo.efectivo} />
+              <CajaFila icon={Landmark} label="Transferencia" valor={porMetodo.transferencia} />
+              <CajaFila icon={CreditCard} label="Datáfono" valor={porMetodo.datafono} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <p className="text-xs font-medium text-neutral-500">Por línea</p>
+              <CajaFila icon={Droplets} label="Lavados" valor={lavados} />
+              <CajaFila icon={CupSoda} label="Productos" valor={productos} />
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function CajaFila({ icon: Icon, label, valor }: { icon: typeof Banknote; label: string; valor: number }) {
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-lg bg-neutral-50 px-2.5 py-2 text-sm">
+      <span className="flex min-w-0 items-center gap-1.5 text-neutral-600">
+        <Icon size={14} className="shrink-0 text-neutral-400" />
+        <span className="truncate">{label}</span>
+      </span>
+      <span className="shrink-0 font-medium text-neutral-900">{COP.format(valor)}</span>
     </div>
   )
 }
@@ -1051,7 +1182,7 @@ function OrdenCard({
           </div>
           <p className="mt-0.5 flex items-center gap-1.5 text-sm font-medium text-neutral-700">
             <UserRound size={14} className="shrink-0 text-neutral-400" />
-            <span className="truncate">{orden.clienteNombre}</span>
+            <span className="min-w-0 truncate">{orden.clienteNombre}</span>
           </p>
 
           <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-neutral-500">
@@ -1108,7 +1239,7 @@ function OrdenCard({
           <ul className="flex flex-col gap-0.5">
             {productosPendientes.map((v) => (
               <li key={v.id} className="flex items-center justify-between gap-2 text-xs text-neutral-600">
-                <span className="truncate">
+                <span className="min-w-0 truncate">
                   {productoNombre(v.productoId)} <span className="text-neutral-400">×{v.cantidad}</span>
                 </span>
                 <span className="flex shrink-0 items-center gap-2">
@@ -1134,7 +1265,7 @@ function OrdenCard({
       ) : null}
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-neutral-100 bg-white/60 px-3 py-2">
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           {onAgregarProducto ? (
             <button
               type="button"
@@ -1198,7 +1329,7 @@ function OrdenCard({
           ) : null}
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
           <span className="rounded-md bg-success-50 px-2 py-1 text-sm font-bold text-success-700">
             {COP.format(orden.precio)}
           </span>
@@ -1268,7 +1399,8 @@ function EntregadosHoyTable({
 }) {
   const ordenadas = [...entregadasHoy].sort((a, b) => b.consecutivo - a.consecutivo)
   return (
-    <Card className="p-0">
+    <Card className="overflow-hidden p-0">
+      <div className="custom-scroll overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
@@ -1341,6 +1473,7 @@ function EntregadosHoyTable({
           ) : null}
         </tbody>
       </table>
+      </div>
     </Card>
   )
 }
@@ -1627,7 +1760,10 @@ function EditarClienteModal({
 
   return (
     <div className="fixed inset-0 z-20 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-[2px]">
-      <form onSubmit={handleSubmit} className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-card-hover">
+      <form
+        onSubmit={handleSubmit}
+        className="custom-scroll max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-2xl bg-white p-6 shadow-card-hover"
+      >
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-base font-semibold text-neutral-900">Editar datos del cliente</h3>
           <button
@@ -1805,7 +1941,7 @@ function CobroModal({
 
   return (
     <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="max-h-[92vh] w-full max-w-sm overflow-y-auto rounded-t-2xl bg-white p-5 shadow-card-hover sm:rounded-2xl sm:p-6">
+      <div className="custom-scroll max-h-[92vh] w-full max-w-sm overflow-y-auto rounded-t-2xl bg-white p-5 shadow-card-hover sm:max-w-md sm:rounded-2xl sm:p-6 lg:max-w-lg">
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h3 className="text-base font-semibold text-neutral-900">Cobrar y entregar</h3>
@@ -1840,10 +1976,10 @@ function CobroModal({
           ) : null}
           {productosPendientes.map((v) => (
             <div key={v.id} className="flex items-center justify-between text-xs text-primary-800">
-              <span className="truncate">
+              <span className="min-w-0 truncate">
                 {productoNombre(v.productoId)} ×{v.cantidad}
               </span>
-              <span>{COP.format(v.total)}</span>
+              <span className="shrink-0">{COP.format(v.total)}</span>
             </div>
           ))}
           <div className="mt-1 flex items-center justify-between border-t border-primary-200 pt-1.5 font-semibold text-primary-900">
@@ -1957,236 +2093,6 @@ function CobroModal({
             <CheckCircle2 size={16} />
             {saving ? 'Registrando…' : esCortesia ? 'Entregar (cortesía)' : 'Confirmar cobro y entrega'}
           </button>
-        </form>
-      </div>
-    </div>
-  )
-}
-
-// Cargar productos de nevera a un vehículo en espera — se acumulan como 'pendiente' y se cobran
-// junto con el lavado al entregar. Hoja anclada abajo en móvil (mismo patrón que CobroModal),
-// grilla de productos como botones grandes + carrito con steppers.
-function AgregarProductoModal({
-  orden,
-  productos,
-  stockPorProducto,
-  onClose,
-  onAgregar,
-}: {
-  orden: Orden
-  productos: Producto[]
-  stockPorProducto: Map<string, number>
-  onClose: () => void
-  onAgregar: (orden: Orden, productoId: string, cantidad: number) => Promise<void>
-}) {
-  const [carrito, setCarrito] = useState<Map<string, number>>(new Map())
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-
-  function setCantidad(productoId: string, cantidad: number) {
-    setCarrito((prev) => {
-      const siguiente = new Map(prev)
-      if (cantidad <= 0) siguiente.delete(productoId)
-      else siguiente.set(productoId, cantidad)
-      return siguiente
-    })
-  }
-
-  const lineas = [...carrito.entries()]
-  const total = lineas.reduce((suma, [id, cant]) => {
-    const p = productos.find((x) => x.id === id)
-    return suma + (p?.precioVenta ?? 0) * cant
-  }, 0)
-
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault()
-    if (lineas.length === 0) return
-    setError(null)
-    setSaving(true)
-    try {
-      for (const [productoId, cantidad] of lineas) {
-        await onAgregar(orden, productoId, cantidad)
-      }
-      onClose()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo agregar el producto')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="flex max-h-[90vh] w-full max-w-sm flex-col rounded-t-2xl bg-white p-5 shadow-card-hover sm:rounded-2xl sm:p-6">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-semibold text-neutral-900">Agregar productos</h3>
-            <p className="text-xs text-neutral-500">
-              {orden.placa} · #{orden.consecutivo} — se cobran al entregar
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="flex min-h-0 flex-col gap-4">
-          <div className="grid min-h-0 grid-cols-2 gap-2 overflow-y-auto">
-            {productos.map((p) => {
-              const stock = stockPorProducto.get(p.id) ?? 0
-              const cant = carrito.get(p.id) ?? 0
-              const agotado = stock <= 0
-              return (
-                <div
-                  key={p.id}
-                  className={`flex flex-col gap-1.5 rounded-lg border p-2.5 text-left transition-colors ${
-                    cant > 0 ? 'border-primary-500 bg-primary-50' : 'border-neutral-200'
-                  } ${agotado ? 'opacity-50' : ''}`}
-                >
-                  <button
-                    type="button"
-                    disabled={agotado}
-                    onClick={() => setCantidad(p.id, cant + 1)}
-                    className="text-left disabled:cursor-not-allowed"
-                  >
-                    <span className="block text-sm font-medium text-neutral-800">{p.nombre}</span>
-                    <span className="block text-xs text-neutral-500">
-                      {COP.format(p.precioVenta ?? 0)} · stock {stock}
-                    </span>
-                  </button>
-                  {cant > 0 ? (
-                    <div className="flex items-center justify-between rounded-md bg-white px-1 py-0.5">
-                      <button
-                        type="button"
-                        onClick={() => setCantidad(p.id, cant - 1)}
-                        className="flex size-6 items-center justify-center rounded text-neutral-600 hover:bg-neutral-100"
-                      >
-                        <Minus size={13} />
-                      </button>
-                      <span className="text-sm font-semibold text-neutral-900">{cant}</span>
-                      <button
-                        type="button"
-                        onClick={() => setCantidad(p.id, cant + 1)}
-                        className="flex size-6 items-center justify-center rounded text-neutral-600 hover:bg-neutral-100"
-                      >
-                        <Plus size={13} />
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-              )
-            })}
-            {productos.length === 0 ? (
-              <p className="col-span-2 py-6 text-center text-xs text-neutral-400">
-                No hay productos con precio de venta configurado.
-              </p>
-            ) : null}
-          </div>
-
-          {error ? <p className="text-xs text-danger-600">{error}</p> : null}
-
-          <button
-            type="submit"
-            disabled={saving || lineas.length === 0}
-            className="flex items-center justify-center gap-2 rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
-          >
-            <Plus size={16} />
-            {saving
-              ? 'Agregando…'
-              : lineas.length === 0
-                ? 'Elige productos'
-                : `Agregar ${lineas.reduce((s, [, c]) => s + c, 0)} · ${COP.format(total)}`}
-          </button>
-        </form>
-      </div>
-    </div>
-  )
-}
-
-// Quitar un producto ya cargado a una orden antes de cobrar (regla de negocio 13: se anula con
-// motivo, no se borra — queda visible en reportes). Como nunca descontó stock, no hay reverso.
-function QuitarProductoModal({
-  venta,
-  productoNombre,
-  onClose,
-  onQuitar,
-}: {
-  venta: Venta
-  productoNombre: string
-  onClose: () => void
-  onQuitar: (venta: Venta, motivo: string) => Promise<void>
-}) {
-  const [motivo, setMotivo] = useState('Quitado antes de cobrar')
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault()
-    const parsed = anularVentaInputSchema.pick({ motivo: true }).safeParse({ motivo })
-    if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? 'Indica un motivo')
-      return
-    }
-    setError(null)
-    setSaving(true)
-    try {
-      await onQuitar(venta, parsed.data.motivo)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo quitar el producto')
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-[2px]">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-card-hover">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-neutral-900">
-            Quitar {productoNombre} ×{venta.cantidad}
-          </h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-        <p className="mb-4 text-xs text-neutral-500">
-          Queda anulado con el motivo, visible en reportes (control antifraude). No afecta el stock.
-        </p>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium text-neutral-700">Motivo</span>
-            <textarea
-              autoFocus
-              value={motivo}
-              onChange={(e) => setMotivo(e.target.value)}
-              rows={2}
-              className="resize-none rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-            />
-          </label>
-          {error ? <p className="text-xs text-danger-600">{error}</p> : null}
-          <div className="flex justify-end gap-2 border-t border-neutral-100 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg px-4 py-2 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-100"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-lg bg-danger-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-danger-700 disabled:opacity-60"
-            >
-              {saving ? 'Quitando…' : 'Quitar producto'}
-            </button>
-          </div>
         </form>
       </div>
     </div>

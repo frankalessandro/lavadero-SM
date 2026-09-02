@@ -527,7 +527,7 @@ function ReceptionForm({
             }}
             onBlur={handlePlacaBlur}
             maxLength={6}
-            placeholder="MAQ068"
+            placeholder="Placa de vehículo"
             className="rounded-lg border border-neutral-300 px-3 py-3 font-mono text-base uppercase outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
           />
         </label>

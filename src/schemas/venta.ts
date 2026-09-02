@@ -34,11 +34,15 @@ export const ventaSchema = z.object({
   metodoPago: metodoPagoSchema,
   referenciaPago: nullableTrimmedString,
   turnoId: nullableTrimmedString,
-  // Orden de lavado a la que se cargó el producto (null = venta aparte de mostrador). Cuando
-  // está presente, la venta se cobra junto con el lavado al entregar el vehículo.
+  // Orden de lavado a la que se cargó el producto (null = venta aparte de mostrador o cuenta
+  // abierta). Cuando está presente, la venta se cobra junto con el lavado al entregar el vehículo.
   ordenId: nullableTrimmedString,
+  // Cuenta abierta a nombre de alguien sin vehículo (lavador, acompañante, transeúnte) a la que
+  // se cargó el producto (null = venta aparte o cargada a una orden). Mutuamente excluyente con
+  // ordenId — ver 0041_cuentas_abiertas.sql.
+  cuentaId: nullableTrimmedString,
   // Agrupa las filas de un mismo carrito de mostrador cobrado junto (pago partido a nivel de
-  // carrito). Null para productos cargados a una orden y filas anteriores a 0036.
+  // carrito). Null para productos cargados a una orden/cuenta y filas anteriores a 0036.
   ventaGrupoId: nullableTrimmedString,
   vendidoPor: z.string().trim().min(1),
   estado: estadoVentaSchema,
@@ -48,17 +52,24 @@ export const ventaSchema = z.object({
   creadoEn: z.string(),
 })
 
-// Carga de UN producto a una orden de lavado (estado `pendiente`, sin cobro). El método/
-// referencia se definen al cobrar la orden — por eso son opcionales aquí. La venta aparte de
-// mostrador (varias líneas + pago partido) va por `ventaCarritoInputSchema`.
-export const ventaInputSchema = z.object({
-  productoId: z.string().min(1, 'Selecciona un producto'),
-  cantidad: z.number().int().positive('La cantidad debe ser mayor a cero'),
-  metodoPago: metodoPagoBaseSchema.default('efectivo'),
-  referenciaPago: z.string().trim().optional(),
-  ordenId: z.string().uuid(),
-  vendidoPor: z.string().trim().min(1, 'El responsable es obligatorio'),
-})
+// Carga de UN producto a una orden de lavado O a una cuenta abierta (estado `pendiente`, sin
+// cobro) — exactamente uno de los dos destinos. El método/referencia se definen al cobrar la
+// orden o cerrar la cuenta — por eso son opcionales aquí. La venta aparte de mostrador (varias
+// líneas + pago partido) va por `ventaCarritoInputSchema`.
+export const ventaInputSchema = z
+  .object({
+    productoId: z.string().min(1, 'Selecciona un producto'),
+    cantidad: z.number().int().positive('La cantidad debe ser mayor a cero'),
+    metodoPago: metodoPagoBaseSchema.default('efectivo'),
+    referenciaPago: z.string().trim().optional(),
+    ordenId: z.string().uuid().optional(),
+    cuentaId: z.string().uuid().optional(),
+    vendidoPor: z.string().trim().min(1, 'El responsable es obligatorio'),
+  })
+  .refine((data) => Boolean(data.ordenId) !== Boolean(data.cuentaId), {
+    message: 'La venta pendiente debe ir a una orden o a una cuenta, no ambas ni ninguna',
+    path: ['ordenId'],
+  })
 
 // Venta aparte de mostrador: varias líneas de producto cobradas juntas con pago partido.
 export const ventaCarritoItemSchema = z.object({

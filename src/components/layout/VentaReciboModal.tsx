@@ -2,6 +2,7 @@ import { X } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import type { MetodoPago, MetodoPagoBase } from '../../schemas/orden'
 import { METODO_PAGO_LABEL } from '../../lib/metodoPago'
+import logoIsotipo from '../../assets/logo-isotipo.png'
 
 export interface VentaReciboItem {
   nombre: string
@@ -27,6 +28,9 @@ export interface VentaReciboData {
   pagos?: { metodo: MetodoPagoBase; monto: number; referencia?: string }[]
   vendidoPor: string
   fecha: string
+  // Nombre de la cuenta abierta que se cerró para generar este comprobante (lavador, acompañante,
+  // transeúnte sin vehículo) — ver 0041_cuentas_abiertas.sql. Ausente en ventas de mostrador.
+  titular?: string
 }
 
 function refTexto(venta: VentaReciboData): string {
@@ -48,7 +52,7 @@ const FECHA_HORA = new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium', timeS
 export function VentaReciboModal({ venta, onClose }: { venta: VentaReciboData; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-neutral-900/50 p-0 backdrop-blur-sm sm:items-center sm:p-6">
-      <div className="flex max-h-full w-full max-w-sm flex-col overflow-y-auto rounded-t-2xl bg-white shadow-card-hover sm:rounded-2xl">
+      <div className="custom-scroll flex max-h-full w-full max-w-sm flex-col overflow-y-auto rounded-t-2xl bg-white shadow-card-hover sm:rounded-2xl">
         <div className="h-2 bg-success-600" />
         <div className="flex items-center justify-between px-6 pt-6">
           <p className="text-sm font-semibold text-neutral-900">Carwash SM</p>
@@ -68,6 +72,7 @@ export function VentaReciboModal({ venta, onClose }: { venta: VentaReciboData; o
         </div>
 
         <div className="flex flex-col gap-2.5 px-6 py-5 text-sm">
+          {venta.titular ? <VentaReciboRow label="Cuenta" value={venta.titular} /> : null}
           {venta.items && venta.items.length > 0 ? (
             <div className="flex flex-col gap-1.5 rounded-lg bg-neutral-50 px-3 py-2.5">
               {venta.items.map((it, i) => (
@@ -150,9 +155,9 @@ function VentaTicketPrint({ venta }: { venta: VentaReciboData }) {
   const fecha = new Date(venta.fecha)
   return createPortal(
     <div className="tiquete-58">
-      <p className="tiquete-58__marca">Carwash SM</p>
+      <img src={logoIsotipo} alt="" className="tiquete-58__logo" />
       <p className="tiquete-58__tagline">Lavadero · Parqueadero</p>
-      <p className="tiquete-58__titulo">Comprobante de venta</p>
+      <p className="tiquete-58__nit-titulo">NIT 1113661734-4 · Comprobante de venta</p>
 
       <div className="tiquete-58__linea-solida" />
 
@@ -167,6 +172,12 @@ function VentaTicketPrint({ venta }: { venta: VentaReciboData }) {
 
       <div className="tiquete-58__linea" />
 
+      {venta.titular ? (
+        <div className="tiquete-58__fila">
+          <span className="tiquete-58__fila-label">Cuenta</span>
+          <span className="tiquete-58__fila-valor">{venta.titular}</span>
+        </div>
+      ) : null}
       {venta.items && venta.items.length > 0 ? (
         venta.items.map((it, i) => (
           <div className="tiquete-58__fila" key={i}>

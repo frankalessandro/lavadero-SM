@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom'
 import type { ReciboData } from './ReciboModal'
 import { METODO_PAGO_LABEL } from '../../lib/metodoPago'
+import logoIsotipo from '../../assets/logo-isotipo.png'
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 const FECHA = new Intl.DateTimeFormat('es-CO', { dateStyle: 'short' })
@@ -16,9 +17,11 @@ export function TiquetePrint({ recibo, variant }: { recibo: ReciboData; variant:
 
   return createPortal(
     <div className="tiquete-58">
-      <p className="tiquete-58__marca">Carwash SM</p>
+      <img src={logoIsotipo} alt="" className="tiquete-58__logo" />
       <p className="tiquete-58__tagline">Lavadero · Parqueadero</p>
-      <p className="tiquete-58__titulo">{esPago ? 'Comprobante de pago' : 'Comprobante de ingreso'}</p>
+      <p className="tiquete-58__nit-titulo">
+        NIT 1113661734-4 · {esPago ? 'Comprobante de pago' : 'Comprobante de ingreso'}
+      </p>
 
       <div className="tiquete-58__linea-solida" />
 
@@ -81,14 +84,12 @@ export function TiquetePrint({ recibo, variant }: { recibo: ReciboData; variant:
         <span>{COP.format(recibo.precio)}</span>
       </div>
 
-      <div className="tiquete-58__linea" />
-
       <p className="tiquete-58__aviso">
         {!esPago
-          ? 'Se cobra al entregar el vehículo, no ahora.'
+          ? 'Se cobra al entregar.'
           : recibo.precio === 0
-            ? 'Vehículo entregado — cortesía, no se cobró.'
-            : 'Vehículo entregado — pago confirmado.'}
+            ? 'Entregado — cortesía, sin cobro.'
+            : 'Entregado — pago confirmado.'}
       </p>
       <p className="tiquete-58__pie">Gracias por su visita</p>
       <p className="tiquete-58__pie-legal">Factura electrónica: solicítala a gerencia@carwashsm.com</p>

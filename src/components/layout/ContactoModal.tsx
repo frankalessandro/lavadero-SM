@@ -74,8 +74,8 @@ export function ContactoModal({
                 href={`mailto:${correo}`}
                 className="flex items-center gap-2.5 rounded-lg bg-neutral-50 px-3 py-2.5 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-100"
               >
-                <Mail size={16} />
-                {correo}
+                <Mail size={16} className="shrink-0" />
+                <span className="min-w-0 truncate">{correo}</span>
               </a>
             ) : null}
           </div>

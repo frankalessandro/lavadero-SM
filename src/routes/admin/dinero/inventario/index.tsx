@@ -25,8 +25,16 @@ import { CustomSelect } from '../../../../components/layout/CustomSelect'
 import { ConfirmModal } from '../../../../components/layout/ConfirmModal'
 import { CurrencyInput } from '../../../../components/layout/CurrencyInput'
 import { BarChart } from '../../../../components/layout/BarChart'
-import { CHART_COLORS } from '../../../../lib/chartTheme'
 import { METODO_PAGO_LABEL } from '../../../../lib/metodoPago'
+import {
+  nivelStock,
+  ordenarPorNivelStock,
+  NIVEL_LABEL,
+  NIVEL_BADGE_CLASS,
+  NIVEL_CHART_COLOR,
+  STOCK_BAJO_MAX,
+  STOCK_MEDIO_MAX,
+} from '../../../../lib/nivelStock'
 
 function hace30DiasISO(): string {
   const fecha = new Date()
@@ -72,6 +80,7 @@ function InventarioPage() {
   const [ventas, setVentas] = useState(data.ventas)
   const [editing, setEditing] = useState<Producto | null>(null)
   const [formOpen, setFormOpen] = useState(false)
+  const [movimientoFormOpen, setMovimientoFormOpen] = useState(false)
   const [confirmando, setConfirmando] = useState<Producto | null>(null)
 
   async function refresh() {
@@ -102,13 +111,25 @@ function InventarioPage() {
   const productoNombre = (id: string) => productos.find((p) => p.id === id)?.nombre ?? '—'
 
   const productosActivos = productos.filter((p) => p.activo)
-  const bajoMinimo = productosActivos.filter((p) => (stockPorProducto.get(p.id)?.stock ?? 0) < p.stockMinimo)
+  const stockDeProducto = (p: Producto) => stockPorProducto.get(p.id)?.stock ?? 0
+  const porNivel = {
+    bajo: productosActivos.filter((p) => nivelStock(stockDeProducto(p)) === 'bajo'),
+    medio: productosActivos.filter((p) => nivelStock(stockDeProducto(p)) === 'medio'),
+    bueno: productosActivos.filter((p) => nivelStock(stockDeProducto(p)) === 'bueno'),
+  }
   const valorizacionTotal = stock.reduce((total, s) => total + s.valorizacion, 0)
   // Mismo criterio que /jefe-zona/inventario: sin precio_venta = insumo de uso interno (jabón,
   // cera), con precio_venta = producto de nevera para vender. Incluye inactivos (igual que la
-  // tabla única de antes) para no perder visibilidad de productos recién inactivados.
-  const productosInsumos = productos.filter((p) => p.precioVenta == null)
-  const productosVendibles = productos.filter((p) => p.precioVenta != null)
+  // tabla única de antes) para no perder visibilidad de productos recién inactivados. Ordenados
+  // con lo urgente (nivel bajo) arriba.
+  const productosInsumos = ordenarPorNivelStock(
+    productos.filter((p) => p.precioVenta == null),
+    stockDeProducto,
+  )
+  const productosVendibles = ordenarPorNivelStock(
+    productos.filter((p) => p.precioVenta != null),
+    stockDeProducto,
+  )
 
   return (
     <div className="flex flex-col gap-6 text-left">
@@ -117,31 +138,51 @@ function InventarioPage() {
           <h2 className="text-base font-semibold text-neutral-900">Inventario</h2>
           <p className="text-sm text-neutral-500">Insumos de lavado y productos de nevera, movimientos manuales y valorización.</p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setEditing(null)
-            setFormOpen(true)
-          }}
-          className="flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700"
-        >
-          <Plus size={16} />
-          Nuevo producto
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setMovimientoFormOpen(true)}
+            className="flex items-center gap-2 rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
+          >
+            <PackageSearch size={16} />
+            Registrar movimiento
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setEditing(null)
+              setFormOpen(true)
+            }}
+            className="flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700"
+          >
+            <Plus size={16} />
+            Nuevo producto
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <StatCard label="Productos activos" value={String(productosActivos.length)} icon={Boxes} />
-        <StatCard
-          label="Bajo stock mínimo"
-          value={String(bajoMinimo.length)}
-          hint={bajoMinimo.length > 0 ? bajoMinimo.map((p) => p.nombre).join(', ') : undefined}
-          icon={AlertTriangle}
-        />
         <StatCard label="Valorización total" value={COP.format(valorizacionTotal)} hint="Costo promedio de entradas" icon={Coins} />
       </div>
 
-      <MovimientoForm productos={productosActivos} onSaved={refresh} />
+      <div className="grid grid-cols-3 gap-3">
+        {(
+          [
+            { nivel: 'bajo' as const, hint: `≤ ${STOCK_BAJO_MAX} unidades` },
+            { nivel: 'medio' as const, hint: `≤ ${STOCK_MEDIO_MAX} unidades` },
+            { nivel: 'bueno' as const, hint: `> ${STOCK_MEDIO_MAX} unidades` },
+          ] as const
+        ).map(({ nivel, hint }) => (
+          <div key={nivel} className={`rounded-2xl border border-neutral-200 p-4 shadow-card ${NIVEL_BADGE_CLASS[nivel]}`}>
+            <p className="text-xs font-medium opacity-80">{NIVEL_LABEL[nivel]}</p>
+            <p className="text-xl font-semibold">{porNivel[nivel].length}</p>
+            <p className="text-xs opacity-70" title={porNivel[nivel].map((p) => p.nombre).join(', ') || undefined}>
+              {hint}
+            </p>
+          </div>
+        ))}
+      </div>
 
       {productosActivos.length > 2 ? (
         <Card className="text-left">
@@ -149,9 +190,7 @@ function InventarioPage() {
           <BarChart
             labels={productosActivos.map((p) => p.nombre)}
             data={productosActivos.map((p) => stockPorProducto.get(p.id)?.stock ?? 0)}
-            colors={productosActivos.map((p) =>
-              (stockPorProducto.get(p.id)?.stock ?? 0) < p.stockMinimo ? CHART_COLORS.danger : CHART_COLORS.primary,
-            )}
+            colors={productosActivos.map((p) => NIVEL_CHART_COLOR[nivelStock(stockPorProducto.get(p.id)?.stock ?? 0)])}
             height={Math.max(120, productosActivos.length * 36)}
           />
         </Card>
@@ -287,6 +326,17 @@ function InventarioPage() {
         </table>
       </Card>
 
+      {movimientoFormOpen ? (
+        <MovimientoForm
+          productos={productosActivos}
+          onClose={() => setMovimientoFormOpen(false)}
+          onSaved={async () => {
+            setMovimientoFormOpen(false)
+            await refresh()
+          }}
+        />
+      ) : null}
+
       {formOpen ? (
         <ProductoForm
           producto={editing}
@@ -373,7 +423,8 @@ function StockTable({
           {productos.map((producto) => {
             const s = stockPorProducto.get(producto.id)
             const stockActual = s?.stock ?? 0
-            const bajoMin = stockActual < producto.stockMinimo
+            const nivel = nivelStock(stockActual)
+            const bajoMin = nivel === 'bajo'
             return (
               <tr key={producto.id} className="border-b border-neutral-100 transition-colors last:border-0 hover:bg-primary-50/40">
                 <td className="px-5 py-3">
@@ -406,17 +457,15 @@ function StockTable({
                   </td>
                 ) : null}
                 <td className="px-5 py-3">
-                  {bajoMin ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-danger-50 px-2.5 py-1 text-xs font-medium text-danger-700">
-                      <AlertTriangle size={11} /> Stock bajo
+                  {producto.activo ? (
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${NIVEL_BADGE_CLASS[nivel]}`}
+                    >
+                      {bajoMin ? <AlertTriangle size={11} /> : null} {NIVEL_LABEL[nivel]}
                     </span>
                   ) : (
-                    <span
-                      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
-                        producto.activo ? 'bg-success-50 text-success-700' : 'bg-neutral-100 text-neutral-500'
-                      }`}
-                    >
-                      {producto.activo ? 'Activo' : 'Inactivo'}
+                    <span className="inline-flex rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-500">
+                      Inactivo
                     </span>
                   )}
                 </td>
@@ -455,7 +504,15 @@ function StockTable({
   )
 }
 
-function MovimientoForm({ productos, onSaved }: { productos: Producto[]; onSaved: () => Promise<void> }) {
+function MovimientoForm({
+  productos,
+  onClose,
+  onSaved,
+}: {
+  productos: Producto[]
+  onClose: () => void
+  onSaved: () => Promise<void>
+}) {
   const [productoId, setProductoId] = useState('')
   const [tipo, setTipo] = useState<TipoMovimientoInventario>('entrada')
   const [direccionAjuste, setDireccionAjuste] = useState<'aumento' | 'disminucion'>('aumento')
@@ -508,11 +565,21 @@ function MovimientoForm({ productos, onSaved }: { productos: Producto[]; onSaved
   }
 
   return (
-    <Card>
-      <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-neutral-900">
-        <PackageSearch size={16} className="text-primary-500" />
-        Registrar movimiento
-      </h3>
+    <div className="fixed inset-0 z-20 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-[2px]">
+      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-card-hover sm:p-7">
+        <div className="mb-5 flex items-center justify-between">
+          <h3 className="flex items-center gap-2 text-base font-semibold text-neutral-900">
+            <PackageSearch size={16} className="text-primary-500" />
+            Registrar movimiento
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
+          >
+            <X size={18} />
+          </button>
+        </div>
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
           <label className="flex flex-col gap-1.5 text-sm">
@@ -636,7 +703,8 @@ function MovimientoForm({ productos, onSaved }: { productos: Producto[]; onSaved
           </button>
         </div>
       </form>
-    </Card>
+      </div>
+    </div>
   )
 }
 

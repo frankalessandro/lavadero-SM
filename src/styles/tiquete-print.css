@@ -44,12 +44,24 @@
     box-sizing: border-box;
   }
 
-  .tiquete-58__marca {
+  .tiquete-58__logo {
+    display: block;
+    height: 17mm;
+    width: 17mm;
+    margin: 0 auto 1mm;
+    object-fit: contain;
+  }
+
+  /* NIT + "Comprobante de X" en un solo renglón de texto (no flex — a este ancho, dos bloques
+   * separados casi siempre terminan partiéndose en dos líneas) en vez de dos párrafos apilados,
+   * para ahorrar papel. Sin mayúsculas/negrita fuerte a propósito: eso ensancha el texto y es
+   * justo lo que hace falta evitar para que quepa completo. */
+  .tiquete-58__nit-titulo {
     text-align: center;
-    font-size: 17px;
-    font-weight: 800;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
+    white-space: nowrap;
+    font-size: 8px;
+    font-weight: 600;
+    margin-top: 1.5mm;
   }
 
   .tiquete-58__tagline {
@@ -128,9 +140,10 @@
 
   .tiquete-58__aviso {
     text-align: center;
-    font-size: 11px;
+    white-space: nowrap;
+    font-size: 10px;
     font-weight: 600;
-    margin-top: 2mm;
+    margin-top: 1mm;
   }
 
   .tiquete-58__pie {
