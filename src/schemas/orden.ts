@@ -22,16 +22,18 @@ const nullableTrimmedString = z
   .nullish()
   .transform((value) => value ?? undefined)
 
-// Placa colombiana: carro = 3 letras + 3 números (ej. MAQ068), moto = 3 letras + 2 números + 1
-// letra (ej. ZCD24D) — mismo patrón para ambas categorías porque acá no se sabe todavía si el
-// tipo elegido es auto o moto (se valida antes de eso). Sin espacios/guiones/símbolos.
+// Placa colombiana: carro = 3 letras + 3 números (ej. ABC123), moto = 3 letras + 2 números + 1
+// letra (ej. HPN04G) — algunas motos no llevan esa cuarta letra final y quedan con el mismo
+// patrón que un carro (3 letras + 3 números), por eso ambos formatos son válidos para cualquier
+// categoría acá: todavía no se sabe si el tipo elegido es auto o moto (se valida antes de eso).
+// Sin espacios/guiones/símbolos.
 export const placaSchema = z
   .string()
   .trim()
   .toUpperCase()
   .regex(
     /^[A-Z]{3}(?:[0-9]{3}|[0-9]{2}[A-Z])$/,
-    'Placa inválida — carro: 3 letras y 3 números (ej. MAQ068), moto: 3 letras, 2 números y 1 letra (ej. ZCD24D)',
+    'Placa inválida — carro: 3 letras y 3 números (ej. ABC123), moto: 3 letras, 2 números y 1 letra opcional (ej. HPN04G o HPN045)',
   )
 
 const nullableTimestamp = z
