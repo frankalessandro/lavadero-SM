@@ -293,8 +293,13 @@ code {
   scrollbar-width: thin;
   scrollbar-color: var(--color-neutral-300) transparent;
 }
+/* `height` es obligatorio además de `width`: al declarar ::-webkit-scrollbar, el navegador deja de
+   usar su tamaño por defecto en AMBOS ejes, así que sin esta línea la barra HORIZONTAL queda de 0px
+   y un contenedor con scroll en X se vuelve inarrastrable con el mouse (le pasó a la tabla ancha de
+   "Ingresos del lavadero" en /admin/rentabilidad). */
 .custom-scroll::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
 .custom-scroll::-webkit-scrollbar-track {
   background: transparent;

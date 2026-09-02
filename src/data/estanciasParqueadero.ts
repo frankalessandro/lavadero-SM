@@ -39,6 +39,26 @@ export async function fetchResumenHoy(): Promise<{ vehiculosAdentro: number; din
   return { vehiculosAdentro: adentroRes.count ?? 0, dineroHoy }
 }
 
+// Salidas (con cobro) cuya `hora_salida` cae en [desdeISO, hastaISO) — fuente de "ingresos de
+// parqueadero" en el histórico de rentabilidad (/admin/rentabilidad). Se trae `horaSalida`
+// para poder agrupar el cobro por día calendario local.
+export async function fetchSalidasParqueaderoEnRango(
+  desdeISO: string,
+  hastaISO: string,
+): Promise<{ cobro: number; horaSalida: string }[]> {
+  const { data, error } = await db
+    .from('estancias_parqueadero')
+    .select('cobro, horaSalida:hora_salida')
+    .eq('estado', 'fuera')
+    .gte('hora_salida', desdeISO)
+    .lt('hora_salida', hastaISO)
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as { cobro: number | null; horaSalida: string }[]).map((e) => ({
+    cobro: e.cobro ?? 0,
+    horaSalida: e.horaSalida,
+  }))
+}
+
 // Mensualidad y fijo 24h no cobran por movimiento individual — se facturan aparte (mensualidad)
 // o ya están cubiertos (fijo) — regla de negocio 17. La tarifa viene de M1 (admin), no hardcodeada.
 export async function cobroPorModalidad(modalidad: ModalidadParqueadero): Promise<number> {

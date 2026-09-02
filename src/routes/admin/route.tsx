@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { createFileRoute, Outlet, redirect } from '@tanstack/react-router'
-import { LayoutDashboard, ClipboardList, Coins, Package, Users, Settings } from 'lucide-react'
+import { LayoutDashboard, TrendingUp, ClipboardList, Coins, Package, Users, Settings } from 'lucide-react'
 import { Sidebar, type NavItem } from '../../components/layout/Sidebar'
 import { Topbar } from '../../components/layout/Topbar'
 import { signOut } from '../../lib/auth'
@@ -25,6 +25,7 @@ export const Route = createFileRoute('/admin')({
 // pestañas hijas; Dashboard y Configuración se quedan en exacto (son ruta única).
 const NAV_ITEMS: NavItem[] = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/admin/rentabilidad', label: 'Rentabilidad', icon: TrendingUp },
   { to: '/admin/operacion', label: 'Operación', icon: ClipboardList, exact: false },
   { to: '/admin/dinero', label: 'Dinero', icon: Coins, exact: false },
   { to: '/admin/catalogo', label: 'Catálogo y precios', icon: Package, exact: false },

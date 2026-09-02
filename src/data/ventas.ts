@@ -182,3 +182,31 @@ export async function fetchCostoMercanciaVendida(ventaIds: string[]): Promise<Co
   }
   return { costo, ventasSinCosto: ventaIds.length - conCosto.size }
 }
+
+// Como fetchCostoMercanciaVendida pero desglosado por venta, para poder repartir el costo por día
+// en el histórico de rentabilidad (/admin/rentabilidad). Misma query y misma regla
+// (`costo_unitario` nulo o 0 → la venta no tiene costo registrado). Una venta puede tener varias
+// salidas (carrito de varios productos), así que se acumulan por `venta_id`.
+export async function fetchCostoMercanciaVendidaPorVenta(
+  ventaIds: string[],
+): Promise<Map<string, { costo: number; tieneCosto: boolean }>> {
+  const resultado = new Map<string, { costo: number; tieneCosto: boolean }>()
+  if (ventaIds.length === 0) return resultado
+  const { data, error } = await db
+    .from('movimientos_inventario')
+    .select('venta_id, cantidad, costo_unitario')
+    .eq('tipo', 'salida')
+    .in('venta_id', ventaIds)
+  if (error) throw new Error(error.message)
+
+  const salidas = (data ?? []) as { venta_id: string; cantidad: number; costo_unitario: number | null }[]
+  for (const salida of salidas) {
+    const actual = resultado.get(salida.venta_id) ?? { costo: 0, tieneCosto: false }
+    if (salida.costo_unitario != null && salida.costo_unitario !== 0) {
+      actual.costo += Math.abs(salida.cantidad) * salida.costo_unitario
+      actual.tieneCosto = true
+    }
+    resultado.set(salida.venta_id, actual)
+  }
+  return resultado
+}
