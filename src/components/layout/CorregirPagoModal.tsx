@@ -102,7 +102,7 @@ export function CorregirPagoModal({
 
   return (
     <div className="fixed inset-0 z-30 flex items-end justify-center bg-neutral-900/40 p-0 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white p-6 shadow-card-hover sm:rounded-2xl sm:p-7">
+      <div className="custom-scroll max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white p-6 shadow-card-hover sm:rounded-2xl sm:p-7">
         <div className="mb-4 flex items-start justify-between">
           <div>
             <h3 className="text-base font-semibold text-neutral-900">Corregir reparto del pago</h3>
