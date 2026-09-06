@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { Plus, Receipt, Settings2, X } from 'lucide-react'
 import {
@@ -168,6 +168,10 @@ function GastoForm({ categorias, onSaved }: { categorias: CategoriaGasto[]; onSa
   const [origen, setOrigen] = useState<'caja' | 'otro'>('caja')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  // Guard síncrono contra doble envío: setSaving(true) no bloquea los clics/Enter
+  // que se encolan antes del re-render, y cada uno dispara su propio createGasto
+  // (así se colaron 13 "Café para clientes" idénticos). El ref sí corta en el acto.
+  const enVuelo = useRef(false)
 
   function reset() {
     setFecha(hoyISO())
@@ -180,6 +184,7 @@ function GastoForm({ categorias, onSaved }: { categorias: CategoriaGasto[]; onSa
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    if (enVuelo.current) return
     const parsed = gastoInputSchema.safeParse({
       fecha,
       categoriaId,
@@ -193,12 +198,14 @@ function GastoForm({ categorias, onSaved }: { categorias: CategoriaGasto[]; onSa
       return
     }
     setError(null)
+    enVuelo.current = true
     setSaving(true)
     try {
       await createGasto(parsed.data)
       reset()
       await onSaved()
     } finally {
+      enVuelo.current = false
       setSaving(false)
     }
   }
@@ -308,21 +315,25 @@ function CategoriasModal({
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [confirmando, setConfirmando] = useState<CategoriaGasto | null>(null)
+  const enVuelo = useRef(false)
 
   async function handleCrear(event: FormEvent) {
     event.preventDefault()
+    if (enVuelo.current) return
     const parsed = categoriaGastoInputSchema.safeParse({ nombre })
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Datos inválidos')
       return
     }
     setError(null)
+    enVuelo.current = true
     setSaving(true)
     try {
       await createCategoriaGasto(parsed.data)
       setNombre('')
       await onChanged()
     } finally {
+      enVuelo.current = false
       setSaving(false)
     }
   }
