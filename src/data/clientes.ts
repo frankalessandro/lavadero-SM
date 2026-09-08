@@ -1,4 +1,10 @@
 import { db } from '../lib/db'
+import { fetchOrdenesPorPlaca } from './ordenes'
+import { fetchPagosDeOrdenes } from './pagos'
+import { fetchVentasDeOrdenes } from './ventas'
+import type { Orden } from '../schemas/orden'
+import type { Pago } from '../schemas/pago'
+import type { Venta } from '../schemas/venta'
 
 // No hay tabla `clientes` — el registro de contacto vive por orden (M2, ya existente).
 // Esta vista agrega `ordenes` por placa para obtener un "expediente" de cliente: quién es,
@@ -57,4 +63,35 @@ export async function fetchClientes(): Promise<ClienteResumen[]> {
     })
   }
   return Array.from(porPlaca.values())
+}
+
+// Expediente completo de un cliente (por placa): todas sus órdenes —incluidas las anuladas— con
+// el desglose de pago partido y los productos vendidos en cada una. Una consulta por tabla, no
+// una por orden.
+export interface ExpedienteCliente {
+  ordenes: Orden[]
+  pagosPorOrden: Map<string, Pago[]>
+  productosPorOrden: Map<string, Venta[]>
+}
+
+export async function fetchExpedienteCliente(placa: string): Promise<ExpedienteCliente> {
+  const ordenes = await fetchOrdenesPorPlaca(placa)
+  const ids = ordenes.map((o) => o.id)
+  const [pagos, ventas] = await Promise.all([fetchPagosDeOrdenes(ids), fetchVentasDeOrdenes(ids)])
+
+  const pagosPorOrden = new Map<string, Pago[]>()
+  for (const p of pagos) {
+    if (!p.ordenId) continue
+    const lista = pagosPorOrden.get(p.ordenId) ?? []
+    lista.push(p)
+    pagosPorOrden.set(p.ordenId, lista)
+  }
+  const productosPorOrden = new Map<string, Venta[]>()
+  for (const v of ventas) {
+    if (!v.ordenId) continue
+    const lista = productosPorOrden.get(v.ordenId) ?? []
+    lista.push(v)
+    productosPorOrden.set(v.ordenId, lista)
+  }
+  return { ordenes, pagosPorOrden, productosPorOrden }
 }

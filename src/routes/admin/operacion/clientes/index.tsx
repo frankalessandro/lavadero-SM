@@ -4,8 +4,11 @@ import { Mail, MessageCircle, Phone, Search } from 'lucide-react'
 import { fetchClientes, type ClienteResumen } from '../../../../data/clientes'
 import { fetchTiposVehiculo } from '../../../../data/tiposVehiculo'
 import { fetchCombos } from '../../../../data/combos'
+import { fetchLavadores } from '../../../../data/lavadores'
+import { fetchProductos } from '../../../../data/productos'
 import { Card } from '../../../../components/layout/Card'
 import { StatCard } from '../../../../components/layout/StatCard'
+import { ClienteExpedienteModal } from '../../../../components/layout/ClienteExpedienteModal'
 
 // Mismo criterio de indicativo que src/components/layout/ContactoModal.tsx.
 function whatsappHref(telefono: string, mensaje: string): string {
@@ -15,12 +18,14 @@ function whatsappHref(telefono: string, mensaje: string): string {
 }
 
 async function loadClientesPage() {
-  const [clientes, tiposVehiculo, combos] = await Promise.all([
+  const [clientes, tiposVehiculo, combos, lavadores, productos] = await Promise.all([
     fetchClientes(),
     fetchTiposVehiculo(),
     fetchCombos(),
+    fetchLavadores(),
+    fetchProductos(),
   ])
-  return { clientes, tiposVehiculo, combos }
+  return { clientes, tiposVehiculo, combos, lavadores, productos }
 }
 
 export const Route = createFileRoute('/admin/operacion/clientes/')({
@@ -29,11 +34,14 @@ export const Route = createFileRoute('/admin/operacion/clientes/')({
 })
 
 function ClientesPage() {
-  const { clientes, tiposVehiculo, combos } = Route.useLoaderData()
+  const { clientes, tiposVehiculo, combos, lavadores, productos } = Route.useLoaderData()
   const [busqueda, setBusqueda] = useState('')
+  const [expedienteDe, setExpedienteDe] = useState<{ placa: string; nombre: string } | null>(null)
 
   const tipoNombrePorId = new Map(tiposVehiculo.map((t) => [t.id, t.nombre]))
   const comboNombrePorId = new Map(combos.map((c) => [c.id, c.nombre]))
+  const lavadorNombrePorId = new Map(lavadores.map((l) => [l.id, l.nombre]))
+  const productoNombrePorId = new Map(productos.map((p) => [p.id, p.nombre]))
 
   const filtrados = useMemo(() => {
     const termino = busqueda.trim().toLowerCase()
@@ -89,11 +97,15 @@ function ClientesPage() {
               {filtrados.map((cliente) => (
                 <tr
                   key={cliente.placa}
-                  className="border-b border-neutral-100 transition-colors last:border-0 hover:bg-primary-50/40"
+                  onClick={() => setExpedienteDe({ placa: cliente.placa, nombre: cliente.clienteNombre })}
+                  className="cursor-pointer border-b border-neutral-100 transition-colors last:border-0 hover:bg-primary-50/40"
                 >
-                  <td className="px-5 py-3 font-medium text-neutral-900">{cliente.clienteNombre}</td>
+                  <td className="px-5 py-3 font-medium text-neutral-900">
+                    {cliente.clienteNombre}
+                    <span className="ml-1.5 text-xs font-normal text-primary-600">Ver expediente</span>
+                  </td>
                   <td className="px-5 py-3">
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                       {cliente.clienteTelefono ? (
                         <>
                           <a
@@ -155,6 +167,18 @@ function ClientesPage() {
           </table>
         </div>
       </Card>
+
+      {expedienteDe ? (
+        <ClienteExpedienteModal
+          placa={expedienteDe.placa}
+          nombreFallback={expedienteDe.nombre}
+          tipoNombre={(id) => tipoNombrePorId.get(id) ?? '—'}
+          comboNombre={(id) => (id ? comboNombrePorId.get(id) ?? '—' : 'Sin combo')}
+          lavadorNombre={(id) => (id ? lavadorNombrePorId.get(id) : undefined)}
+          productoNombre={(id) => productoNombrePorId.get(id) ?? 'Producto'}
+          onClose={() => setExpedienteDe(null)}
+        />
+      ) : null}
     </div>
   )
 }

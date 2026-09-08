@@ -96,6 +96,20 @@ export async function fetchOrdenesEnRango(desdeISO: string, hastaISO: string): P
   return (data as Record<string, unknown>[]).map(mapOrdenRow)
 }
 
+// Todas las órdenes de una placa (incluidas las anuladas) — para el expediente del cliente en
+// /admin/operacion/clientes. Más reciente primero.
+export async function fetchOrdenesPorPlaca(placa: string): Promise<Orden[]> {
+  const normalizada = placa.trim().toUpperCase()
+  if (!normalizada) return []
+  const { data, error } = await db
+    .from('ordenes')
+    .select(ORDEN_SELECT)
+    .eq('placa', normalizada)
+    .order('consecutivo', { ascending: false })
+  if (error) throw new Error(error.message)
+  return (data as Record<string, unknown>[]).map(mapOrdenRow)
+}
+
 // Solo la columna `consecutivo` de las órdenes creadas en el rango — para la detección de huecos
 // (control antifraude). Consulta liviana: no trae el resto de la orden ni los add-ons.
 export async function fetchConsecutivosEnRango(desdeISO: string, hastaISO: string): Promise<number[]> {

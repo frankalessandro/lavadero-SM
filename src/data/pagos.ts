@@ -22,6 +22,19 @@ export async function fetchPagosDeOrden(ordenId: string): Promise<Pago[]> {
   return pagoSchema.array().parse(data)
 }
 
+// Líneas vigentes de varias órdenes en una sola consulta — para el expediente del cliente.
+export async function fetchPagosDeOrdenes(ordenIds: string[]): Promise<Pago[]> {
+  if (ordenIds.length === 0) return []
+  const { data, error } = await db
+    .from('pagos')
+    .select(PAGO_SELECT)
+    .in('orden_id', ordenIds)
+    .eq('anulado', false)
+    .order('creado_en', { ascending: true })
+  if (error) throw new Error(error.message)
+  return pagoSchema.array().parse(data)
+}
+
 export async function fetchPagosDeGrupo(ventaGrupoId: string): Promise<Pago[]> {
   const { data, error } = await db
     .from('pagos')
