@@ -11,9 +11,10 @@ import {
 } from '../schemas/turnoCaja'
 
 const TURNO_SELECT =
-  'id, rol, responsable, responsableActual:responsable_actual, baseInicial:base_inicial, abiertoEn:abierto_en, cerrado, conteoFisico:conteo_fisico, valorEsperado:valor_esperado, diferencia, justificacionDiferencia:justificacion_diferencia, cerradoPor:cerrado_por, cerradoEn:cerrado_en, recibidoPor:recibido_por'
+  'id, rol, responsable, responsableActual:responsable_actual, responsablePersonaId:responsable_persona_id, responsableActualPersonaId:responsable_actual_persona_id, baseInicial:base_inicial, abiertoEn:abierto_en, cerrado, conteoFisico:conteo_fisico, valorEsperado:valor_esperado, diferencia, justificacionDiferencia:justificacion_diferencia, cerradoPor:cerrado_por, cerradoEn:cerrado_en, recibidoPor:recibido_por'
 
-const TRASPASO_SELECT = 'id, turnoId:turno_id, de, a, hechoEn:hecho_en'
+const TRASPASO_SELECT =
+  'id, turnoId:turno_id, de, a, dePersonaId:de_persona_id, aPersonaId:a_persona_id, hechoEn:hecho_en'
 
 export async function fetchTurnoAbierto(rol: RolCaja): Promise<TurnoCaja | undefined> {
   const { data, error } = await db
@@ -42,6 +43,10 @@ export async function abrirTurno(input: AbrirTurnoInput): Promise<TurnoCaja> {
       rol: parsed.rol,
       responsable: parsed.responsable,
       responsable_actual: parsed.responsable,
+      // La persona es la que manda para agrupar/liquidar; el texto queda como snapshot del
+      // nombre en el momento de abrir (ver 0043).
+      responsable_persona_id: parsed.responsablePersonaId,
+      responsable_actual_persona_id: parsed.responsablePersonaId,
       base_inicial: parsed.baseInicial,
     })
     .select(TURNO_SELECT)
@@ -55,15 +60,25 @@ export async function abrirTurno(input: AbrirTurnoInput): Promise<TurnoCaja> {
 // intacta. Se registra primero en el log de traspasos y luego se actualiza el turno (no atómico,
 // mismo criterio que `generarLiquidacion`: si el update fallara después del insert, error
 // explícito para revisión manual — caso excepcional, no falla en silencio).
-export async function transferirResponsable(turnoId: string, actual: string, nuevoResponsable: string): Promise<TurnoCaja> {
-  const { error: errorTraspaso } = await db
-    .from('traspasos_turno')
-    .insert({ turno_id: turnoId, de: actual, a: nuevoResponsable })
+export async function transferirResponsable(
+  turnoId: string,
+  actual: string,
+  nuevoResponsable: string,
+  actualPersonaId: string | undefined,
+  nuevoPersonaId: string,
+): Promise<TurnoCaja> {
+  const { error: errorTraspaso } = await db.from('traspasos_turno').insert({
+    turno_id: turnoId,
+    de: actual,
+    a: nuevoResponsable,
+    de_persona_id: actualPersonaId ?? null,
+    a_persona_id: nuevoPersonaId,
+  })
   if (errorTraspaso) throw new Error(errorTraspaso.message)
 
   const { data, error } = await db
     .from('turnos_caja')
-    .update({ responsable_actual: nuevoResponsable })
+    .update({ responsable_actual: nuevoResponsable, responsable_actual_persona_id: nuevoPersonaId })
     .eq('id', turnoId)
     .eq('cerrado', false) // regla de negocio 14: un turno cerrado es inmodificable
     .select(TURNO_SELECT)

@@ -19,6 +19,8 @@ import {
 } from '../../schemas/estanciaParqueadero'
 import { METODO_PAGO_LABEL } from '../../lib/metodoPago'
 import { fetchTurnoAbierto, abrirTurno, calcularValorEsperado, cerrarTurno } from '../../data/turnos'
+import { fetchPersonalOperativo } from '../../data/personalOperativo'
+import { NIVELES_POR_CAJA, type PersonalOperativo } from '../../schemas/personalOperativo'
 import type { TurnoCaja } from '../../schemas/turnoCaja'
 import { Card } from '../../components/layout/Card'
 import { CustomSelect } from '../../components/layout/CustomSelect'
@@ -265,16 +267,35 @@ function VigilanteHome() {
 }
 
 function AbrirTurnoModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
-  const [responsable, setResponsable] = useState('')
+  const [personaId, setPersonaId] = useState('')
   const [baseInicial, setBaseInicial] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [personal, setPersonal] = useState<PersonalOperativo[]>([])
+  const [cargando, setCargando] = useState(true)
+
+  // Quién puede quedar a cargo de la caja del parqueadero (ver NIVELES_POR_CAJA): vigilantes y
+  // administradores. Se acabó el nombre tecleado a mano — ver 0043_personal_operativo.sql.
+  useEffect(() => {
+    let vivo = true
+    fetchPersonalOperativo()
+      .then((lista) => {
+        if (vivo) setPersonal(lista.filter((p) => p.activo && NIVELES_POR_CAJA.vigilante.includes(p.nivel)))
+      })
+      .finally(() => {
+        if (vivo) setCargando(false)
+      })
+    return () => {
+      vivo = false
+    }
+  }, [])
 
   async function handleSubmit() {
     setError(null)
     const base = Number(baseInicial)
-    if (!responsable.trim()) {
-      setError('El responsable es obligatorio')
+    const persona = personal.find((p) => p.id === personaId)
+    if (!persona) {
+      setError('Selecciona quién queda a cargo del turno')
       return
     }
     if (!Number.isFinite(base) || base < 0) {
@@ -283,7 +304,12 @@ function AbrirTurnoModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
     }
     setSaving(true)
     try {
-      await abrirTurno({ rol: 'vigilante', responsable, baseInicial: Math.round(base) })
+      await abrirTurno({
+        rol: 'vigilante',
+        responsablePersonaId: persona.id,
+        responsable: persona.nombre,
+        baseInicial: Math.round(base),
+      })
       onSaved()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo abrir el turno')
@@ -297,13 +323,20 @@ function AbrirTurnoModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
       <div className="flex flex-col gap-4">
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="font-medium text-neutral-700">Responsable</span>
-          <input
-            autoFocus
-            value={responsable}
-            onChange={(e) => setResponsable(e.target.value)}
-            placeholder="Nombre del vigilante"
-            className="rounded-lg border border-neutral-300 px-3 py-3 text-base outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+          <CustomSelect
+            value={personaId}
+            onChange={setPersonaId}
+            options={personal.map((p) => ({ value: p.id, label: p.nombre }))}
+            placeholder={cargando ? 'Cargando…' : 'Selecciona quién abre el turno'}
+            disabled={cargando || personal.length === 0}
+            emptyLabel="No hay personas registradas para esta caja"
           />
+          {!cargando && personal.length === 0 ? (
+            <span className="text-xs text-warning-700">
+              Ningún vigilante está registrado todavía. Un administrador debe agregarlo en Personal › Personal de
+              caja antes de poder abrir la caja del parqueadero.
+            </span>
+          ) : null}
         </label>
 
         <label className="flex flex-col gap-1.5 text-sm">

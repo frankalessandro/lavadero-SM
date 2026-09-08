@@ -1,9 +1,40 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { LockOpen, Lock, ArrowLeftRight, History, X } from 'lucide-react'
 import { abrirTurno, fetchTraspasos, transferirResponsable } from '../../data/turnos'
+import { fetchPersonalOperativo } from '../../data/personalOperativo'
+import { NIVELES_POR_CAJA, type PersonalOperativo } from '../../schemas/personalOperativo'
 import type { RolCaja, TurnoCaja, TraspasoTurno } from '../../schemas/turnoCaja'
 import { Card } from './Card'
+import { CustomSelect } from './CustomSelect'
 import { CurrencyInput } from './CurrencyInput'
+
+// Roster elegible para quedar a cargo de una caja. Se carga desde el componente (y no desde el
+// loader de cada ruta) porque el banner se monta en cuatro pantallas distintas — jefe-zona/caja,
+// jefe-zona/asistencia y vigilante — y no vale la pena repetir el fetch en cada loader.
+function usePersonalElegible(rol: RolCaja) {
+  const [personal, setPersonal] = useState<PersonalOperativo[]>([])
+  const [cargando, setCargando] = useState(true)
+
+  useEffect(() => {
+    let vivo = true
+    fetchPersonalOperativo()
+      .then((lista) => {
+        if (vivo) setPersonal(lista)
+      })
+      .finally(() => {
+        if (vivo) setCargando(false)
+      })
+    return () => {
+      vivo = false
+    }
+  }, [])
+
+  const elegibles = useMemo(
+    () => personal.filter((p) => p.activo && NIVELES_POR_CAJA[rol].includes(p.nivel)),
+    [personal, rol],
+  )
+  return { elegibles, cargando }
+}
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 
@@ -16,17 +47,19 @@ function formatFecha(iso: string | undefined) {
 // fuente de "quién es responsable ahora" para las dos pantallas — abrirlo desde cualquiera de
 // las dos habilita ambas, y transferir la responsabilidad se refleja igual en las dos.
 export function AbrirTurnoPrompt({ rol = 'jefe_zona', onAbierto }: { rol?: RolCaja; onAbierto: () => Promise<void> }) {
-  const [responsable, setResponsable] = useState('')
+  const [personaId, setPersonaId] = useState('')
   const [baseInicial, setBaseInicial] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const { elegibles, cargando } = usePersonalElegible(rol)
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     setError(null)
     const base = Number(baseInicial)
-    if (!responsable.trim()) {
-      setError('El responsable es obligatorio')
+    const persona = elegibles.find((p) => p.id === personaId)
+    if (!persona) {
+      setError('Selecciona quién queda a cargo del turno')
       return
     }
     if (!Number.isFinite(base) || base < 0) {
@@ -35,7 +68,12 @@ export function AbrirTurnoPrompt({ rol = 'jefe_zona', onAbierto }: { rol?: RolCa
     }
     setSaving(true)
     try {
-      await abrirTurno({ rol, responsable: responsable.trim(), baseInicial: Math.round(base) })
+      await abrirTurno({
+        rol,
+        responsablePersonaId: persona.id,
+        responsable: persona.nombre,
+        baseInicial: Math.round(base),
+      })
       await onAbierto()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo abrir el turno')
@@ -61,13 +99,20 @@ export function AbrirTurnoPrompt({ rol = 'jefe_zona', onAbierto }: { rol?: RolCa
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="font-medium text-neutral-700">Responsable</span>
-          <input
-            autoFocus
-            value={responsable}
-            onChange={(e) => setResponsable(e.target.value)}
-            placeholder="Nombre de quien abre el turno"
-            className="rounded-lg border border-neutral-300 px-3 py-3 text-base outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+          <CustomSelect
+            value={personaId}
+            onChange={setPersonaId}
+            options={elegibles.map((p) => ({ value: p.id, label: p.nombre }))}
+            placeholder={cargando ? 'Cargando…' : 'Selecciona quién abre el turno'}
+            disabled={cargando || elegibles.length === 0}
+            emptyLabel="No hay personas registradas para esta caja"
           />
+          {!cargando && elegibles.length === 0 ? (
+            <span className="text-xs text-warning-700">
+              Ningún miembro del personal está habilitado para esta caja. Un administrador debe agregarlo en
+              Personal › Personal de caja.
+            </span>
+          ) : null}
         </label>
 
         <label className="flex flex-col gap-1.5 text-sm">
@@ -99,27 +144,37 @@ export function TurnoResponsableBanner({
   children?: ReactNode
 }) {
   const [transfiriendo, setTransfiriendo] = useState(false)
-  const [nuevoResponsable, setNuevoResponsable] = useState('')
+  const [nuevoPersonaId, setNuevoPersonaId] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [historial, setHistorial] = useState<TraspasoTurno[] | null>(null)
   const [cargandoHistorial, setCargandoHistorial] = useState(false)
+  const { elegibles, cargando } = usePersonalElegible(turno.rol)
 
   const fueTransferido = turno.responsableActual !== turno.responsable
+  // Quien ya está a cargo no se ofrece como destino del traspaso.
+  const destinos = elegibles.filter((p) => p.id !== turno.responsableActualPersonaId)
 
   async function handleTransferir(event: FormEvent) {
     event.preventDefault()
     setError(null)
-    if (!nuevoResponsable.trim()) {
+    const persona = destinos.find((p) => p.id === nuevoPersonaId)
+    if (!persona) {
       setError('Indica a quién le pasas la responsabilidad')
       return
     }
     setSaving(true)
     try {
-      const actualizado = await transferirResponsable(turno.id, turno.responsableActual, nuevoResponsable.trim())
+      const actualizado = await transferirResponsable(
+        turno.id,
+        turno.responsableActual,
+        persona.nombre,
+        turno.responsableActualPersonaId,
+        persona.id,
+      )
       onTransferido(actualizado)
       setTransfiriendo(false)
-      setNuevoResponsable('')
+      setNuevoPersonaId('')
       setHistorial(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo transferir la responsabilidad')
@@ -178,12 +233,14 @@ export function TurnoResponsableBanner({
         <form onSubmit={handleTransferir} className="flex flex-col gap-2 rounded-lg border border-primary-100 bg-primary-50/40 p-3">
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-medium text-neutral-700">Transferir responsabilidad a</span>
-            <input
-              autoFocus
-              value={nuevoResponsable}
-              onChange={(e) => setNuevoResponsable(e.target.value)}
-              placeholder="Nombre de quien queda a cargo"
-              className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+            <CustomSelect
+              size="sm"
+              value={nuevoPersonaId}
+              onChange={setNuevoPersonaId}
+              options={destinos.map((p) => ({ value: p.id, label: p.nombre }))}
+              placeholder={cargando ? 'Cargando…' : 'Selecciona quién queda a cargo'}
+              disabled={cargando || destinos.length === 0}
+              emptyLabel="No hay nadie más habilitado para esta caja"
             />
           </label>
           {error ? <p className="text-xs text-danger-600">{error}</p> : null}
