@@ -507,6 +507,22 @@ HEP693  #224 $30.000 anulada 20:21  →  #225 $60.000 creada 20:24, cobrada $60.
 - `validateSearch` de `/recepcion` **anota el tipo de retorno como `{ corrige?: string }` explícitamente** — sin eso TanStack Router lo infiere obligatorio y todos los `<Link to="/recepcion">` de la app dejan de compilar.
 - **Deuda conocida**: el cálculo de precio sigue duplicado entre `src/data/ordenes.ts` (TypeScript) y `cambiar_tipo_orden` (plpgsql, 0038). No se unificó en esta pasada porque no había base de datos disponible para validar el refactor de una función que ya funciona en producción.
 
+## Conteo de inventario en apertura y cierre de turno
+
+Migración `0048_conteo_inventario.sql`. El cierre de turno solo cuadraba la CAJA; si desaparecía una gaseosa, la caja cuadraba igual. Esto agrega un cuadre de PRODUCTO en paralelo, con la misma mecánica de conteo ciego → revelar → justificar del arqueo de efectivo.
+
+- **Alcance**: productos vendibles (`precio_venta is not null` y `activo`) — nevera y vitrina. Los insumos de lavado NO se cuentan (su "faltante" es consumo normal). **Solo el turno de jefe de zona** (el vigilante no vende nevera).
+- **Dos conteos por turno**: `apertura` y `cierre` (tabla `conteos_inventario`, una fila por `(turno_id, momento)`). La apertura reconcilia contra el `contado` del cierre del turno de jefe de zona anterior; si es el primero, contra el stock del sistema.
+- **La apertura RECONCILIA**: su ajuste lleva el stock del sistema al conteo físico (`contado − stock_sistema`), no genera faltante 'pendiente'. La deuda se crea en el **cierre**, contra el responsable del turno (`conteos_inventario_lineas.responde_persona_id`, default = `turnos_caja.responsable_actual_persona_id`).
+- **Esperado del cierre** = `stock_sistema − unidades en ventas 'pendiente'` (cuentas/órdenes abiertas). Se puede cerrar el turno con cuentas abiertas, igual que se cierra la caja con lavados por cobrar — esos productos ya salieron de la nevera pero el stock no los descontó, no son faltante. La columna `en_cuentas_pendientes` de la línea lo guarda para que se vea.
+- **Faltante valorado a COSTO** (`interno.costo_promedio_producto`), no a precio de venta. `valor_diferencia` se calcula y guarda server-side; **el jefe de zona no lo ve** (costo es sensible, §Roles): `conteos_inventario_lineas` es **admin-only**, `conteos_inventario` (cabecera, sin pesos) la lee también jefe_zona. Las RPC que llama el jefe_zona (`preview_conteo_inventario`, etc.) no devuelven costo.
+- **El faltante NO se cobra en el momento** — queda `estado_faltante = 'pendiente'` con su monto y su responsable. Cómo se salda (nómina, efectivo, se perdona) es otro feature. Reporte en `/admin/dinero/inventario`: "Faltantes de inventario por revisar", agrupado por persona.
+- **Trigger `turnos_caja_cierre_requiere_conteo`**: el turno de jefe de zona no cierra sin conteo de cierre — pero **solo si ya tiene conteo de apertura** (los turnos abiertos antes de 0048 cierran sin bloqueo; los nuevos hacen la apertura desde la UI). Trigger aparte del de inmutabilidad de 0045.
+- La justificación general es obligatoria si hay cualquier diferencia; la UI obliga además a recontar (checkbox "ya reconté y busqué") antes de registrar. No bloquea el cierre, solo mete fricción.
+- Cada diferencia (apertura o cierre) genera un `ajuste` en `movimientos_inventario` que deja el stock del sistema en el conteo real — así el conteo siguiente arranca de una base correcta. Queda auditado por 0044 con el responsable del turno.
+- UI: `src/components/layout/ConteoInventario.tsx` (ciego → revela, reusado en apertura y cierre), montado en `/jefe-zona/caja`. El botón "Cerrar turno" muestra primero el conteo de cierre si falta, luego el arqueo de caja.
+- **Verificado contra el sandbox** (15 aserciones en transacción revertida + RPCs por PostgREST): esperado resta las cuentas abiertas, faltante a costo + estado pendiente + responsable del turno, apertura sin diferencia no genera ajustes, cierre bloqueado sin conteo, apertura duplicada rechazada, justificación obligatoria con diferencia.
+
 ## Pendiente de confirmación con el cliente
 
 - Monto/fórmula de la "multa" por vehículo no retirado antes de las 8:00am (fijo, por fracción, o tarifa de noche adicional completa).
