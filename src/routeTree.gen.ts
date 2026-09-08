@@ -43,9 +43,11 @@ import { Route as AdminCatalogoTiposVehiculoIndexRouteImport } from './routes/ad
 import { Route as AdminDineroGastosIndexRouteImport } from './routes/admin/dinero/gastos/index'
 import { Route as AdminDineroInventarioIndexRouteImport } from './routes/admin/dinero/inventario/index'
 import { Route as AdminDineroLiquidacionesIndexRouteImport } from './routes/admin/dinero/liquidaciones/index'
+import { Route as AdminOperacionAuditoriaIndexRouteImport } from './routes/admin/operacion/auditoria/index'
 import { Route as AdminOperacionClientesIndexRouteImport } from './routes/admin/operacion/clientes/index'
 import { Route as AdminOperacionOrdenesIndexRouteImport } from './routes/admin/operacion/ordenes/index'
 import { Route as AdminOperacionTurnosIndexRouteImport } from './routes/admin/operacion/turnos/index'
+import { Route as AdminPersonalCajaIndexRouteImport } from './routes/admin/personal/caja/index'
 import { Route as AdminPersonalLavadoresIndexRouteImport } from './routes/admin/personal/lavadores/index'
 import { Route as AdminPersonalUsuariosIndexRouteImport } from './routes/admin/personal/usuarios/index'
 
@@ -226,6 +228,12 @@ const AdminDineroLiquidacionesIndexRoute =
     path: '/liquidaciones/',
     getParentRoute: () => AdminDineroRouteRoute,
   } as any)
+const AdminOperacionAuditoriaIndexRoute =
+  AdminOperacionAuditoriaIndexRouteImport.update({
+    id: '/auditoria/',
+    path: '/auditoria/',
+    getParentRoute: () => AdminOperacionRouteRoute,
+  } as any)
 const AdminOperacionClientesIndexRoute =
   AdminOperacionClientesIndexRouteImport.update({
     id: '/clientes/',
@@ -244,6 +252,11 @@ const AdminOperacionTurnosIndexRoute =
     path: '/turnos/',
     getParentRoute: () => AdminOperacionRouteRoute,
   } as any)
+const AdminPersonalCajaIndexRoute = AdminPersonalCajaIndexRouteImport.update({
+  id: '/caja/',
+  path: '/caja/',
+  getParentRoute: () => AdminPersonalRouteRoute,
+} as any)
 const AdminPersonalLavadoresIndexRoute =
   AdminPersonalLavadoresIndexRouteImport.update({
     id: '/lavadores/',
@@ -292,9 +305,11 @@ export interface FileRoutesByFullPath {
   '/admin/dinero/gastos/': typeof AdminDineroGastosIndexRoute
   '/admin/dinero/inventario/': typeof AdminDineroInventarioIndexRoute
   '/admin/dinero/liquidaciones/': typeof AdminDineroLiquidacionesIndexRoute
+  '/admin/operacion/auditoria/': typeof AdminOperacionAuditoriaIndexRoute
   '/admin/operacion/clientes/': typeof AdminOperacionClientesIndexRoute
   '/admin/operacion/ordenes/': typeof AdminOperacionOrdenesIndexRoute
   '/admin/operacion/turnos/': typeof AdminOperacionTurnosIndexRoute
+  '/admin/personal/caja/': typeof AdminPersonalCajaIndexRoute
   '/admin/personal/lavadores/': typeof AdminPersonalLavadoresIndexRoute
   '/admin/personal/usuarios/': typeof AdminPersonalUsuariosIndexRoute
 }
@@ -325,9 +340,11 @@ export interface FileRoutesByTo {
   '/admin/dinero/gastos': typeof AdminDineroGastosIndexRoute
   '/admin/dinero/inventario': typeof AdminDineroInventarioIndexRoute
   '/admin/dinero/liquidaciones': typeof AdminDineroLiquidacionesIndexRoute
+  '/admin/operacion/auditoria': typeof AdminOperacionAuditoriaIndexRoute
   '/admin/operacion/clientes': typeof AdminOperacionClientesIndexRoute
   '/admin/operacion/ordenes': typeof AdminOperacionOrdenesIndexRoute
   '/admin/operacion/turnos': typeof AdminOperacionTurnosIndexRoute
+  '/admin/personal/caja': typeof AdminPersonalCajaIndexRoute
   '/admin/personal/lavadores': typeof AdminPersonalLavadoresIndexRoute
   '/admin/personal/usuarios': typeof AdminPersonalUsuariosIndexRoute
 }
@@ -367,9 +384,11 @@ export interface FileRoutesById {
   '/admin/dinero/gastos/': typeof AdminDineroGastosIndexRoute
   '/admin/dinero/inventario/': typeof AdminDineroInventarioIndexRoute
   '/admin/dinero/liquidaciones/': typeof AdminDineroLiquidacionesIndexRoute
+  '/admin/operacion/auditoria/': typeof AdminOperacionAuditoriaIndexRoute
   '/admin/operacion/clientes/': typeof AdminOperacionClientesIndexRoute
   '/admin/operacion/ordenes/': typeof AdminOperacionOrdenesIndexRoute
   '/admin/operacion/turnos/': typeof AdminOperacionTurnosIndexRoute
+  '/admin/personal/caja/': typeof AdminPersonalCajaIndexRoute
   '/admin/personal/lavadores/': typeof AdminPersonalLavadoresIndexRoute
   '/admin/personal/usuarios/': typeof AdminPersonalUsuariosIndexRoute
 }
@@ -410,9 +429,11 @@ export interface FileRouteTypes {
     | '/admin/dinero/gastos/'
     | '/admin/dinero/inventario/'
     | '/admin/dinero/liquidaciones/'
+    | '/admin/operacion/auditoria/'
     | '/admin/operacion/clientes/'
     | '/admin/operacion/ordenes/'
     | '/admin/operacion/turnos/'
+    | '/admin/personal/caja/'
     | '/admin/personal/lavadores/'
     | '/admin/personal/usuarios/'
   fileRoutesByTo: FileRoutesByTo
@@ -443,9 +464,11 @@ export interface FileRouteTypes {
     | '/admin/dinero/gastos'
     | '/admin/dinero/inventario'
     | '/admin/dinero/liquidaciones'
+    | '/admin/operacion/auditoria'
     | '/admin/operacion/clientes'
     | '/admin/operacion/ordenes'
     | '/admin/operacion/turnos'
+    | '/admin/personal/caja'
     | '/admin/personal/lavadores'
     | '/admin/personal/usuarios'
   id:
@@ -484,9 +507,11 @@ export interface FileRouteTypes {
     | '/admin/dinero/gastos/'
     | '/admin/dinero/inventario/'
     | '/admin/dinero/liquidaciones/'
+    | '/admin/operacion/auditoria/'
     | '/admin/operacion/clientes/'
     | '/admin/operacion/ordenes/'
     | '/admin/operacion/turnos/'
+    | '/admin/personal/caja/'
     | '/admin/personal/lavadores/'
     | '/admin/personal/usuarios/'
   fileRoutesById: FileRoutesById
@@ -742,6 +767,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminDineroLiquidacionesIndexRouteImport
       parentRoute: typeof AdminDineroRouteRoute
     }
+    '/admin/operacion/auditoria/': {
+      id: '/admin/operacion/auditoria/'
+      path: '/auditoria'
+      fullPath: '/admin/operacion/auditoria/'
+      preLoaderRoute: typeof AdminOperacionAuditoriaIndexRouteImport
+      parentRoute: typeof AdminOperacionRouteRoute
+    }
     '/admin/operacion/clientes/': {
       id: '/admin/operacion/clientes/'
       path: '/clientes'
@@ -762,6 +794,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/operacion/turnos/'
       preLoaderRoute: typeof AdminOperacionTurnosIndexRouteImport
       parentRoute: typeof AdminOperacionRouteRoute
+    }
+    '/admin/personal/caja/': {
+      id: '/admin/personal/caja/'
+      path: '/caja'
+      fullPath: '/admin/personal/caja/'
+      preLoaderRoute: typeof AdminPersonalCajaIndexRouteImport
+      parentRoute: typeof AdminPersonalRouteRoute
     }
     '/admin/personal/lavadores/': {
       id: '/admin/personal/lavadores/'
@@ -818,6 +857,7 @@ const AdminDineroRouteRouteWithChildren =
 
 interface AdminOperacionRouteRouteChildren {
   AdminOperacionIndexRoute: typeof AdminOperacionIndexRoute
+  AdminOperacionAuditoriaIndexRoute: typeof AdminOperacionAuditoriaIndexRoute
   AdminOperacionClientesIndexRoute: typeof AdminOperacionClientesIndexRoute
   AdminOperacionOrdenesIndexRoute: typeof AdminOperacionOrdenesIndexRoute
   AdminOperacionTurnosIndexRoute: typeof AdminOperacionTurnosIndexRoute
@@ -825,6 +865,7 @@ interface AdminOperacionRouteRouteChildren {
 
 const AdminOperacionRouteRouteChildren: AdminOperacionRouteRouteChildren = {
   AdminOperacionIndexRoute: AdminOperacionIndexRoute,
+  AdminOperacionAuditoriaIndexRoute: AdminOperacionAuditoriaIndexRoute,
   AdminOperacionClientesIndexRoute: AdminOperacionClientesIndexRoute,
   AdminOperacionOrdenesIndexRoute: AdminOperacionOrdenesIndexRoute,
   AdminOperacionTurnosIndexRoute: AdminOperacionTurnosIndexRoute,
@@ -835,12 +876,14 @@ const AdminOperacionRouteRouteWithChildren =
 
 interface AdminPersonalRouteRouteChildren {
   AdminPersonalIndexRoute: typeof AdminPersonalIndexRoute
+  AdminPersonalCajaIndexRoute: typeof AdminPersonalCajaIndexRoute
   AdminPersonalLavadoresIndexRoute: typeof AdminPersonalLavadoresIndexRoute
   AdminPersonalUsuariosIndexRoute: typeof AdminPersonalUsuariosIndexRoute
 }
 
 const AdminPersonalRouteRouteChildren: AdminPersonalRouteRouteChildren = {
   AdminPersonalIndexRoute: AdminPersonalIndexRoute,
+  AdminPersonalCajaIndexRoute: AdminPersonalCajaIndexRoute,
   AdminPersonalLavadoresIndexRoute: AdminPersonalLavadoresIndexRoute,
   AdminPersonalUsuariosIndexRoute: AdminPersonalUsuariosIndexRoute,
 }
