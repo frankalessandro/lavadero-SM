@@ -19,7 +19,7 @@ import {
   Receipt,
   ShieldCheck,
 } from 'lucide-react'
-import { fetchOrdenesHoy, fetchOrdenesEntregadasHoy } from '../../data/ordenes'
+import { fetchOrdenesHoy, fetchOrdenesEntregadasHoy, fetchConsecutivosEnRango } from '../../data/ordenes'
 import { fetchLavadores } from '../../data/lavadores'
 import { fetchResumenHoy } from '../../data/estanciasParqueadero'
 import { fetchGastos, fetchTotalGastosPorCategoria } from '../../data/gastos'
@@ -37,6 +37,7 @@ import { BarChart } from '../../components/layout/BarChart'
 import { KpiCard } from '../../components/layout/KpiCard'
 import { calcularDelta } from '../../lib/kpi'
 import { CHART_COLORS } from '../../lib/chartTheme'
+import { huecosEntre } from '../../lib/consecutivo'
 import { fechaLocalISO } from '../../lib/periodo'
 
 function hoyISO(): string {
@@ -67,6 +68,7 @@ async function loadDashboard() {
     ultimos7,
     turnoJefeZona,
     turnoVigilante,
+    consecutivos7d,
   ] = await Promise.all([
     fetchOrdenesHoy(),
     fetchOrdenesEntregadasHoy(),
@@ -81,6 +83,11 @@ async function loadDashboard() {
     fetchRentabilidadEnRango(hace(6), hoy),
     fetchTurnoAbierto('jefe_zona'),
     fetchTurnoAbierto('vigilante'),
+    (() => {
+      const desde = new Date(); desde.setDate(desde.getDate() - 7); desde.setHours(0, 0, 0, 0)
+      const hasta = new Date(); hasta.setDate(hasta.getDate() + 1); hasta.setHours(0, 0, 0, 0)
+      return fetchConsecutivosEnRango(desde.toISOString(), hasta.toISOString())
+    })(),
   ])
   // Depende de las ventas activas del día, así que no puede ir en el Promise.all de arriba: el
   // costo se busca por los ids de esas ventas (una sola query, no una por venta).
@@ -102,6 +109,7 @@ async function loadDashboard() {
     ultimos7,
     turnoJefeZona,
     turnoVigilante,
+    huecosConsecutivo7d: huecosEntre(consecutivos7d),
   }
 }
 
@@ -137,6 +145,7 @@ function AdminDashboard() {
     ultimos7,
     turnoJefeZona,
     turnoVigilante,
+    huecosConsecutivo7d,
   } = Route.useLoaderData()
   const lavadoresActivos = lavadores.filter((l) => l.activo).length
   const anuladasHoy = ordenesHoy.filter((o) => o.estado === 'anulada')
@@ -379,6 +388,13 @@ function AdminDashboard() {
                 label="Anulaciones"
                 valor={String(anuladasHoy.length)}
                 alerta={anuladasHoy.length > 0}
+                to="/admin/operacion/ordenes"
+              />
+              <MiniDato
+                icon={Ban}
+                label="Huecos consecutivo (7d)"
+                valor={String(huecosConsecutivo7d.length)}
+                alerta={huecosConsecutivo7d.length > 0}
                 to="/admin/operacion/ordenes"
               />
             </div>

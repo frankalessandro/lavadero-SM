@@ -11,7 +11,7 @@ import { fetchPreciosServicioCombo } from '../../data/preciosServicioCombo'
 import { fetchPreciosServicioIndividual, findPrecioServicioIndividual } from '../../data/preciosServicioIndividual'
 import { fetchPreciosComboFijo } from '../../data/preciosComboFijo'
 import { fetchLavadores, suggestNextLavador } from '../../data/lavadores'
-import { fetchDiasDescanso, ensureDiasDescansoGenerados } from '../../data/asistenciaLavadores'
+import { fetchDiasDescanso, ensureDiasDescansoGenerados, fetchAsistenciasDelDia } from '../../data/asistenciaLavadores'
 import {
   fetchOrdenesHoy,
   buscarPorPlaca,
@@ -27,7 +27,7 @@ import type { TipoVehiculo, CategoriaVehiculo } from '../../schemas/tipoVehiculo
 import type { Combo } from '../../schemas/combo'
 import type { Servicio } from '../../schemas/servicio'
 import type { Lavador } from '../../schemas/lavador'
-import type { DiaDescanso } from '../../schemas/asistencia'
+import type { DiaDescanso, AsistenciaLavador } from '../../schemas/asistencia'
 import type { PrecioServicio } from '../../schemas/precioServicio'
 import type { PrecioCombo } from '../../schemas/precioCombo'
 import type { Configuracion } from '../../schemas/configuracion'
@@ -59,6 +59,7 @@ async function loadRecepcion(corrigeId?: string) {
     turno,
     configuracion,
     descansosHoy,
+    asistenciasHoy,
   ] = await Promise.all([
     fetchTiposVehiculo(),
     fetchCombos(),
@@ -72,12 +73,14 @@ async function loadRecepcion(corrigeId?: string) {
     fetchTurnoAbierto('jefe_zona'),
     fetchConfiguracion(),
     fetchDiasDescanso(hoyISO(), hoyISO()),
+    fetchAsistenciasDelDia(hoyISO()),
   ])
   // Orden a corregir (?corrige=<id>): se trae aparte porque depende del search param, no del
   // estado general de la pantalla.
   const corrigiendo = corrigeId ? await fetchOrdenPorId(corrigeId) : undefined
   return {
     corrigiendo,
+    asistenciasHoy,
     tipos,
     combos,
     servicios,
@@ -166,6 +169,7 @@ function RecepcionPage() {
           lavadores={lavadores}
           ordenesHoy={ordenesHoy}
           descansosHoy={data.descansosHoy}
+          asistenciasHoy={data.asistenciasHoy}
           configuracion={data.configuracion}
           corrigiendo={data.corrigiendo}
           responsableTurno={data.turno.responsableActual}
@@ -254,6 +258,7 @@ function ReceptionForm({
   lavadores,
   ordenesHoy,
   descansosHoy,
+  asistenciasHoy,
   configuracion,
   corrigiendo,
   responsableTurno,
@@ -269,6 +274,7 @@ function ReceptionForm({
   lavadores: Lavador[]
   ordenesHoy: Orden[]
   descansosHoy: DiaDescanso[]
+  asistenciasHoy: AsistenciaLavador[]
   configuracion: Configuracion
   /** Orden que se está corrigiendo (?corrige=<id>) — precarga el formulario y, al guardar,
    *  encadena la nueva con la anulación de esta. */
@@ -350,19 +356,35 @@ function ReceptionForm({
   // por si las moscas (el lavador sugerido cambia de planes, resulta que sí está ocupado aunque
   // no lo marque el sistema, etc.) se puede dejar sin asignar aunque NO estén todos ocupados, sin
   // tener que borrar a mano lo que ya eligió `suggestNextLavador`.
+  // Quién marcó llegada hoy (M9). Igual que "ocupado": no se oculta ni se bloquea al que no
+  // marcó — pudo llegar y olvidar el registro y quien recibe lo sabe — solo se avisa. El que
+  // descansa sí se oculta (regla fija del cronograma).
+  const presentesIds = useMemo(
+    () => new Set(asistenciasHoy.map((a) => a.lavadorId)),
+    [asistenciasHoy],
+  )
   const lavadorOptions = useMemo(() => {
     const disponibles = lavadores.filter((l) => l.activo && l.id !== descansaHoyId)
     return [
       { value: '', label: 'Sin asignar', description: 'Se asigna después desde el tablero de seguimiento' },
       ...[...disponibles]
-        .sort((a, b) => Number(ocupadosIds.has(a.id)) - Number(ocupadosIds.has(b.id)))
-        .map((l) => ({
-          value: l.id,
-          label: l.nombre,
-          description: ocupadosIds.has(l.id) ? 'Ocupado ahora mismo — igual se puede asignar' : undefined,
-        })),
+        .sort((a, b) => {
+          const pen = (id: string) => Number(!presentesIds.has(id)) * 2 + Number(ocupadosIds.has(id))
+          return pen(a.id) - pen(b.id)
+        })
+        .map((l) => {
+          const notas = [
+            !presentesIds.has(l.id) ? 'No marcó llegada' : null,
+            ocupadosIds.has(l.id) ? 'Ocupado ahora mismo' : null,
+          ].filter(Boolean)
+          return {
+            value: l.id,
+            label: l.nombre,
+            description: notas.length ? `${notas.join(' · ')} — igual se puede asignar` : undefined,
+          }
+        }),
     ]
-  }, [lavadores, ocupadosIds, descansaHoyId])
+  }, [lavadores, ocupadosIds, presentesIds, descansaHoyId])
   // lavadorOptions[0] es siempre "Sin asignar" (value ''), no cuenta como lavador real acá.
   const lavadoresReales = lavadorOptions.filter((o) => o.value !== '')
   const todosOcupados = lavadoresReales.length > 0 && lavadoresReales.every((o) => ocupadosIds.has(o.value))

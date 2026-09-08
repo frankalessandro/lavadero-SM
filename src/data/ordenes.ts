@@ -96,6 +96,18 @@ export async function fetchOrdenesEnRango(desdeISO: string, hastaISO: string): P
   return (data as Record<string, unknown>[]).map(mapOrdenRow)
 }
 
+// Solo la columna `consecutivo` de las órdenes creadas en el rango — para la detección de huecos
+// (control antifraude). Consulta liviana: no trae el resto de la orden ni los add-ons.
+export async function fetchConsecutivosEnRango(desdeISO: string, hastaISO: string): Promise<number[]> {
+  const { data, error } = await db
+    .from('ordenes')
+    .select('consecutivo')
+    .gte('creado_en', desdeISO)
+    .lt('creado_en', hastaISO)
+  if (error) throw new Error(error.message)
+  return (data as { consecutivo: number }[]).map((r) => r.consecutivo)
+}
+
 export interface HistorialPlaca {
   clienteNombre: string
   clienteTelefono?: string

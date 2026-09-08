@@ -8,6 +8,7 @@ import { anularOrdenInputSchema, type Orden } from '../../../../schemas/orden'
 import { Card } from '../../../../components/layout/Card'
 import { CorregirPagoModal } from '../../../../components/layout/CorregirPagoModal'
 import { METODO_PAGO_LABEL } from '../../../../lib/metodoPago'
+import { huecosEntre, formatearHuecos } from '../../../../lib/consecutivo'
 
 type RangoKey = 'hoy' | '7d' | '30d'
 
@@ -92,6 +93,9 @@ function OrdenesPage() {
     .filter((o) => o.estado === 'entregado')
     .reduce((total, o) => total + o.precio - o.descuento, 0)
   const anuladasEnRango = ordenes.filter((o) => o.estado === 'anulada')
+  // Antifraude (Plan §Control antifraude): un tiquete que nunca se confirmó. Se calcula sobre los
+  // consecutivos presentes en el rango cargado — las anuladas conservan su número y NO son hueco.
+  const huecos = huecosEntre(ordenes.map((o) => o.consecutivo))
 
   return (
     <div className="flex flex-col gap-6 text-left">
@@ -221,6 +225,23 @@ function OrdenesPage() {
           </table>
         </div>
       </Card>
+
+      {huecos.length > 0 ? (
+        <Card className="border-l-4 border-l-danger-500 text-left">
+          <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-danger-700">
+            <Ban size={15} />
+            Huecos en el consecutivo de tiquetes
+          </h2>
+          <p className="text-sm text-neutral-600">
+            {huecos.length === 1 ? 'Falta el tiquete' : `Faltan ${huecos.length} tiquetes:`}{' '}
+            <span className="font-mono font-semibold text-neutral-900">{formatearHuecos(huecos)}</span>
+          </p>
+          <p className="mt-1 text-xs text-neutral-500">
+            Un número que nunca se confirmó. Una anulación conserva su tiquete y no aparece acá — un
+            hueco hay que explicarlo.
+          </p>
+        </Card>
+      ) : null}
 
       {anuladasEnRango.length > 0 ? (
         <Card className="text-left">
