@@ -99,6 +99,37 @@ export async function registrarSalida(
   return estanciaParqueaderoSchema.parse(data)
 }
 
+export interface LavadoHoy {
+  consecutivo: number
+  estado: 'en_proceso' | 'listo' | 'entregado'
+  creadoEn: string
+  entregadaEn?: string
+}
+
+// ¿Esta placa pasó por el lavadero hoy? (regla de negocio 8: un vehículo lavado no genera cobro
+// de parqueadero combinado). Va por la RPC `lavado_hoy_por_placa` (0050) porque el vigilante no
+// tiene acceso de lectura a `ordenes` — la RPC devuelve solo consecutivo/estado/horas, sin datos
+// sensibles. `p_desde` = inicio del día en hora local (Supabase corre en UTC).
+export async function fetchLavadoHoyPorPlaca(placa: string): Promise<LavadoHoy | undefined> {
+  const normalizada = placa.trim().toUpperCase()
+  if (!normalizada) return undefined
+  const desde = new Date()
+  desde.setHours(0, 0, 0, 0)
+  const { data, error } = await db.rpc('lavado_hoy_por_placa', {
+    p_placa: normalizada,
+    p_desde: desde.toISOString(),
+  })
+  if (error) throw new Error(error.message)
+  const row = (data as Record<string, unknown>[])[0]
+  if (!row) return undefined
+  return {
+    consecutivo: row.consecutivo as number,
+    estado: row.estado as LavadoHoy['estado'],
+    creadoEn: row.creado_en as string,
+    entregadaEn: (row.entregada_en as string | null) ?? undefined,
+  }
+}
+
 // Ventana de salida 7:00–8:00am para noche y mensualidad (regla de negocio 7).
 export function fueraDeVentanaSalida(modalidad: ModalidadParqueadero, ahora = new Date()): boolean {
   if (modalidad === 'fijo') return false

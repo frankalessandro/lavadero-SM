@@ -6,7 +6,7 @@ import type { TipoVehiculo } from '../schemas/tipoVehiculo'
 import type { Combo } from '../schemas/combo'
 
 const LIQUIDACION_SELECT =
-  'id, lavadorId:lavador_id, periodoInicio:periodo_inicio, periodoFin:periodo_fin, monto, pagada, pagadaEn:pagada_en, creadoEn:creado_en'
+  'id, lavadorId:lavador_id, periodoInicio:periodo_inicio, periodoFin:periodo_fin, monto, pagada, pagadaEn:pagada_en, anulada, motivoAnulacion:motivo_anulacion, anuladaPor:anulada_por, anuladaEn:anulada_en, creadoEn:creado_en'
 
 export async function fetchLiquidaciones(): Promise<Liquidacion[]> {
   const { data, error } = await db
@@ -361,6 +361,19 @@ export async function generarLiquidacion(
   }
 
   return liquidacion
+}
+
+// Deshace un corte mal generado (rango/lavador equivocado, se generó dos veces). Va por la RPC
+// `anular_liquidacion` (0049): solo si NO está pagada, devuelve las órdenes a "pendiente"
+// (liquidacion_id → null) y marca la liquidación `anulada` con motivo/quién, en una transacción.
+// Solo admin (chequeo dentro de la RPC).
+export async function anularLiquidacion(id: string, motivo: string, anuladaPor: string): Promise<Liquidacion> {
+  const { data, error } = await db
+    .rpc('anular_liquidacion', { p_id: id, p_motivo: motivo, p_anulada_por: anuladaPor })
+    .select(LIQUIDACION_SELECT)
+    .single()
+  if (error) throw new Error(error.message)
+  return liquidacionSchema.parse(data)
 }
 
 export async function marcarLiquidacionPagada(id: string): Promise<Liquidacion> {

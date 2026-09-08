@@ -4,7 +4,7 @@ import { fetchOrdenesEnRango } from './ordenes'
 import { fetchPersonalOperativo } from './personalOperativo'
 
 const LIQUIDACION_SELECT =
-  'id, responsable, personaId:persona_id, periodoInicio:periodo_inicio, periodoFin:periodo_fin, monto, pagada, pagadaEn:pagada_en, creadoEn:creado_en'
+  'id, responsable, personaId:persona_id, periodoInicio:periodo_inicio, periodoFin:periodo_fin, monto, pagada, pagadaEn:pagada_en, anulada, motivoAnulacion:motivo_anulacion, anuladaPor:anulada_por, anuladaEn:anulada_en, creadoEn:creado_en'
 
 export async function fetchLiquidacionesJefeZona(): Promise<LiquidacionJefeZona[]> {
   const { data, error } = await db
@@ -231,6 +231,17 @@ export async function fetchCantidadOrdenesLiquidacionJefeZona(liquidacionId: str
     .eq('liquidacion_jefe_zona_id', liquidacionId)
   if (error) throw new Error(error.message)
   return count ?? 0
+}
+
+// Deshace un corte de jefe de patio mal generado — ver `anularLiquidacion` (lavadores). RPC
+// `anular_liquidacion_jefe_zona` (0049), solo admin, solo si no está pagada.
+export async function anularLiquidacionJefeZona(id: string, motivo: string, anuladaPor: string): Promise<LiquidacionJefeZona> {
+  const { data, error } = await db
+    .rpc('anular_liquidacion_jefe_zona', { p_id: id, p_motivo: motivo, p_anulada_por: anuladaPor })
+    .select(LIQUIDACION_SELECT)
+    .single()
+  if (error) throw new Error(error.message)
+  return liquidacionJefeZonaSchema.parse(data)
 }
 
 export async function marcarLiquidacionJefeZonaPagada(id: string): Promise<LiquidacionJefeZona> {

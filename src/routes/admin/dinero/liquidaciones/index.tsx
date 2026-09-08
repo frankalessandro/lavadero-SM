@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { Wallet, CheckCircle2, Receipt, Clock, ShieldCheck } from 'lucide-react'
+import { Wallet, CheckCircle2, Receipt, Clock, ShieldCheck, Ban, X } from 'lucide-react'
 import {
   fetchComisionesPendientes,
   fetchLiquidaciones,
@@ -9,6 +9,7 @@ import {
   fetchResumenPeriodoLavadores,
   generarLiquidacion,
   marcarLiquidacionPagada,
+  anularLiquidacion,
   type MontoPeriodo,
   type ResumenPeriodoLavador,
 } from '../../../../data/liquidaciones'
@@ -21,6 +22,7 @@ import {
   fetchResumenPeriodoJefeZona,
   generarLiquidacionJefeZona,
   marcarLiquidacionJefeZonaPagada,
+  anularLiquidacionJefeZona,
   type ComisionPendienteJefeZona,
   type MontoPeriodoJefeZona,
   type ResumenPeriodoJefeZona,
@@ -135,6 +137,12 @@ function LiquidacionesPage() {
     rangoLabel?: string
   } | null>(null)
   const [confirmandoPagoJefeZona, setConfirmandoPagoJefeZona] = useState<LiquidacionJefeZona | null>(null)
+  // Anular un corte mal generado (rango/lavador equivocado, doble generación). `tipo` distingue
+  // qué RPC llamar; `label`/`monto` solo para el texto del modal.
+  const [anulando, setAnulando] = useState<
+    { tipo: 'lavador' | 'jefeZona'; id: string; label: string; monto: number } | null
+  >(null)
+  const [anulandoBusy, setAnulandoBusy] = useState(false)
   const [colillaJefeZona, setColillaJefeZona] = useState<ColillaJefeZonaData | null>(null)
   const [cargandoDetalleJefeZona, setCargandoDetalleJefeZona] = useState<string | null>(null)
   const [detalleJefeZona, setDetalleJefeZona] = useState<{ responsable: string; filas: DetalleOrdenJefeZonaFila[] } | null>(
@@ -205,8 +213,10 @@ function LiquidacionesPage() {
   const historicoJefeZonaEnPeriodo = historicoJefeZona.filter(
     (l) => l.periodoInicio <= rangoPeriodo.periodoFin && l.periodoFin >= rangoPeriodo.periodoInicio,
   )
-  const totalLiquidadoEnPeriodo = historicoEnPeriodo.reduce((suma, l) => suma + l.monto, 0)
-  const totalLiquidadoJefeZonaEnPeriodo = historicoJefeZonaEnPeriodo.reduce((suma, l) => suma + l.monto, 0)
+  const totalLiquidadoEnPeriodo = historicoEnPeriodo.filter((l) => !l.anulada).reduce((suma, l) => suma + l.monto, 0)
+  const totalLiquidadoJefeZonaEnPeriodo = historicoJefeZonaEnPeriodo
+    .filter((l) => !l.anulada)
+    .reduce((suma, l) => suma + l.monto, 0)
 
   // Tras generar una liquidación (desde cualquiera de los dos flujos), el reporte por periodo
   // queda desactualizado — refresh() ya recarga pendientes/histórico, esto recarga el resumen.
@@ -404,6 +414,22 @@ function LiquidacionesPage() {
     } finally {
       setGenerandoJefeZona(null)
       setConfirmandoGenerarJefeZona(null)
+    }
+  }
+
+  async function handleAnularLiquidacion(motivo: string, anuladaPor: string) {
+    if (!anulando) return
+    setAnulandoBusy(true)
+    try {
+      if (anulando.tipo === 'lavador') await anularLiquidacion(anulando.id, motivo, anuladaPor)
+      else await anularLiquidacionJefeZona(anulando.id, motivo, anuladaPor)
+      setAnulando(null)
+      await refresh()
+      await refreshResumen()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo anular la liquidación')
+    } finally {
+      setAnulandoBusy(false)
     }
   }
 
@@ -689,8 +715,8 @@ function LiquidacionesPage() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <StatCard
                 label="En proceso de pago"
-                value={String(historico.filter((l) => !l.pagada).length)}
-                hint={COP.format(historico.filter((l) => !l.pagada).reduce((s, l) => s + l.monto, 0))}
+                value={String(historico.filter((l) => !l.pagada && !l.anulada).length)}
+                hint={COP.format(historico.filter((l) => !l.pagada && !l.anulada).reduce((s, l) => s + l.monto, 0))}
                 icon={Clock}
               />
               <StatCard
@@ -721,6 +747,14 @@ function LiquidacionesPage() {
                     pagando={pagando === liquidacion.id}
                     cargandoColilla={cargandoColilla === liquidacion.id}
                     onMarcarPagada={() => setConfirmandoPago(liquidacion)}
+                    onAnular={() =>
+                      setAnulando({
+                        tipo: 'lavador',
+                        id: liquidacion.id,
+                        label: lavadoresPorId.get(liquidacion.lavadorId)?.nombre ?? '—',
+                        monto: liquidacion.monto,
+                      })
+                    }
                     onVerColilla={() => handleVerColilla(liquidacion)}
                   />
                 ))}
@@ -827,6 +861,14 @@ function LiquidacionesPage() {
                     pagando={pagandoJefeZona === liquidacion.id}
                     cargandoColilla={cargandoColillaJefeZona === liquidacion.id}
                     onMarcarPagada={() => setConfirmandoPagoJefeZona(liquidacion)}
+                    onAnular={() =>
+                      setAnulando({
+                        tipo: 'jefeZona',
+                        id: liquidacion.id,
+                        label: liquidacion.responsable,
+                        monto: liquidacion.monto,
+                      })
+                    }
                     onVerColilla={() => handleVerColillaJefeZona(liquidacion)}
                   />
                 ))}
@@ -927,6 +969,104 @@ function LiquidacionesPage() {
           onCancel={() => setConfirmandoPagoJefeZona(null)}
         />
       ) : null}
+
+      {anulando ? (
+        <AnularLiquidacionModal
+          label={anulando.label}
+          monto={anulando.monto}
+          busy={anulandoBusy}
+          onCancel={() => setAnulando(null)}
+          onConfirm={handleAnularLiquidacion}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+// Anular un corte no pagado: motivo obligatorio + quién anula (regla 13, mismo patrón que anular
+// una orden). La RPC devuelve las órdenes a "pendiente" y marca la liquidación anulada.
+function AnularLiquidacionModal({
+  label,
+  monto,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  label: string
+  monto: number
+  busy: boolean
+  onCancel: () => void
+  onConfirm: (motivo: string, anuladaPor: string) => void | Promise<void>
+}) {
+  const [motivo, setMotivo] = useState('')
+  const [anuladaPor, setAnuladaPor] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  function submit(e: FormEvent) {
+    e.preventDefault()
+    if (motivo.trim().length < 3) return setError('El motivo es obligatorio (mínimo 3 caracteres)')
+    if (!anuladaPor.trim()) return setError('Indica quién anula la liquidación')
+    setError(null)
+    void onConfirm(motivo.trim(), anuladaPor.trim())
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/40 p-4">
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-card-hover">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-neutral-900">Anular liquidación</h2>
+            <p className="text-xs text-neutral-500">
+              {label} · {COP.format(monto)}. Las órdenes vuelven a quedar pendientes de liquidar.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <form onSubmit={submit} className="flex flex-col gap-4">
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="font-medium text-neutral-700">Motivo</span>
+            <textarea
+              autoFocus
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              rows={2}
+              placeholder="Ej. rango equivocado, se generó dos veces"
+              className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="font-medium text-neutral-700">Quién anula</span>
+            <input
+              value={anuladaPor}
+              onChange={(e) => setAnuladaPor(e.target.value)}
+              className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+            />
+          </label>
+          {error ? <p className="text-xs text-danger-600">{error}</p> : null}
+          <div className="flex justify-end gap-2 border-t border-neutral-100 pt-4">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="rounded-lg px-3 py-2 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-100"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={busy}
+              className="rounded-lg bg-danger-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-danger-700 disabled:opacity-60"
+            >
+              {busy ? 'Anulando…' : 'Anular liquidación'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   )
 }
@@ -936,12 +1076,14 @@ function LiquidacionJefeZonaRow({
   pagando,
   cargandoColilla,
   onMarcarPagada,
+  onAnular,
   onVerColilla,
 }: {
   liquidacion: LiquidacionJefeZona
   pagando: boolean
   cargandoColilla: boolean
   onMarcarPagada: () => void
+  onAnular: () => void
   onVerColilla: () => void
 }) {
   const esDiaria = liquidacion.periodoInicio === liquidacion.periodoFin
@@ -968,11 +1110,16 @@ function LiquidacionJefeZonaRow({
       <td className="px-5 py-3 text-neutral-900">{COP.format(liquidacion.monto)}</td>
       <td className="px-5 py-3">
         <span
+          title={liquidacion.anulada ? liquidacion.motivoAnulacion ?? undefined : undefined}
           className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
-            liquidacion.pagada ? 'bg-success-50 text-success-700' : 'bg-warning-50 text-warning-700'
+            liquidacion.anulada
+              ? 'bg-danger-50 text-danger-700'
+              : liquidacion.pagada
+                ? 'bg-success-50 text-success-700'
+                : 'bg-warning-50 text-warning-700'
           }`}
         >
-          {liquidacion.pagada ? 'Pagada' : 'En proceso de pago'}
+          {liquidacion.anulada ? 'Anulada' : liquidacion.pagada ? 'Pagada' : 'En proceso de pago'}
         </span>
       </td>
       <td className="px-5 py-3">
@@ -986,20 +1133,37 @@ function LiquidacionJefeZonaRow({
             <Receipt size={14} />
             {cargandoColilla ? 'Cargando…' : 'Colilla'}
           </button>
-          {liquidacion.pagada ? (
+          {liquidacion.anulada ? (
+            <span
+              className="flex items-center gap-1 text-xs text-danger-600"
+              title={liquidacion.motivoAnulacion ?? undefined}
+            >
+              <Ban size={14} />
+              Anulada{liquidacion.anuladaPor ? ` · ${liquidacion.anuladaPor}` : ''}
+            </span>
+          ) : liquidacion.pagada ? (
             <span className="flex items-center gap-1 text-xs text-neutral-400">
               <CheckCircle2 size={14} />
               {liquidacion.pagadaEn ? new Date(liquidacion.pagadaEn).toLocaleDateString('es-CO') : ''}
             </span>
           ) : (
-            <button
-              type="button"
-              disabled={pagando}
-              onClick={onMarcarPagada}
-              className="rounded-lg px-3 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-primary-100 hover:text-primary-700 disabled:opacity-50"
-            >
-              {pagando ? 'Guardando…' : 'Marcar pagada'}
-            </button>
+            <>
+              <button
+                type="button"
+                disabled={pagando}
+                onClick={onMarcarPagada}
+                className="rounded-lg px-3 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-primary-100 hover:text-primary-700 disabled:opacity-50"
+              >
+                {pagando ? 'Guardando…' : 'Marcar pagada'}
+              </button>
+              <button
+                type="button"
+                onClick={onAnular}
+                className="rounded-lg px-3 py-1.5 text-xs font-medium text-danger-600 transition-colors hover:bg-danger-50"
+              >
+                Anular
+              </button>
+            </>
           )}
         </div>
       </td>
@@ -1013,6 +1177,7 @@ function LiquidacionRow({
   pagando,
   cargandoColilla,
   onMarcarPagada,
+  onAnular,
   onVerColilla,
 }: {
   liquidacion: Liquidacion
@@ -1020,6 +1185,7 @@ function LiquidacionRow({
   pagando: boolean
   cargandoColilla: boolean
   onMarcarPagada: () => void
+  onAnular: () => void
   onVerColilla: () => void
 }) {
   // periodoInicio === periodoFin es exactamente el criterio que usa rangoPorPeriodicidad al
@@ -1051,11 +1217,16 @@ function LiquidacionRow({
       <td className="px-5 py-3 text-neutral-900">{COP.format(liquidacion.monto)}</td>
       <td className="px-5 py-3">
         <span
+          title={liquidacion.anulada ? liquidacion.motivoAnulacion ?? undefined : undefined}
           className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
-            liquidacion.pagada ? 'bg-success-50 text-success-700' : 'bg-warning-50 text-warning-700'
+            liquidacion.anulada
+              ? 'bg-danger-50 text-danger-700'
+              : liquidacion.pagada
+                ? 'bg-success-50 text-success-700'
+                : 'bg-warning-50 text-warning-700'
           }`}
         >
-          {liquidacion.pagada ? 'Pagada' : 'En proceso de pago'}
+          {liquidacion.anulada ? 'Anulada' : liquidacion.pagada ? 'Pagada' : 'En proceso de pago'}
         </span>
       </td>
       <td className="px-5 py-3">
@@ -1069,20 +1240,37 @@ function LiquidacionRow({
             <Receipt size={14} />
             {cargandoColilla ? 'Cargando…' : 'Colilla'}
           </button>
-          {liquidacion.pagada ? (
+          {liquidacion.anulada ? (
+            <span
+              className="flex items-center gap-1 text-xs text-danger-600"
+              title={liquidacion.motivoAnulacion ?? undefined}
+            >
+              <Ban size={14} />
+              Anulada{liquidacion.anuladaPor ? ` · ${liquidacion.anuladaPor}` : ''}
+            </span>
+          ) : liquidacion.pagada ? (
             <span className="flex items-center gap-1 text-xs text-neutral-400">
               <CheckCircle2 size={14} />
               {liquidacion.pagadaEn ? new Date(liquidacion.pagadaEn).toLocaleDateString('es-CO') : ''}
             </span>
           ) : (
-            <button
-              type="button"
-              disabled={pagando}
-              onClick={onMarcarPagada}
-              className="rounded-lg px-3 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-primary-100 hover:text-primary-700 disabled:opacity-50"
-            >
-              {pagando ? 'Guardando…' : 'Marcar pagada'}
-            </button>
+            <>
+              <button
+                type="button"
+                disabled={pagando}
+                onClick={onMarcarPagada}
+                className="rounded-lg px-3 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-primary-100 hover:text-primary-700 disabled:opacity-50"
+              >
+                {pagando ? 'Guardando…' : 'Marcar pagada'}
+              </button>
+              <button
+                type="button"
+                onClick={onAnular}
+                className="rounded-lg px-3 py-1.5 text-xs font-medium text-danger-600 transition-colors hover:bg-danger-50"
+              >
+                Anular
+              </button>
+            </>
           )}
         </div>
       </td>

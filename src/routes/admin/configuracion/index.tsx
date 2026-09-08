@@ -1,14 +1,24 @@
 import { useState, type FormEvent } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { fetchConfiguracion, updateConfiguracion } from '../../../data/configuracion'
+import {
+  fetchConfiguracion,
+  updateConfiguracion,
+  fetchConfiguracionHistorial,
+  type ConfiguracionHistorial,
+} from '../../../data/configuracion'
 import { configuracionSchema, type Configuracion } from '../../../schemas/configuracion'
 import { Card } from '../../../components/layout/Card'
 import { CurrencyInput } from '../../../components/layout/CurrencyInput'
 
 export const Route = createFileRoute('/admin/configuracion/')({
-  loader: fetchConfiguracion,
+  loader: async () => ({
+    configuracion: await fetchConfiguracion(),
+    historial: await fetchConfiguracionHistorial(),
+  }),
   component: ConfiguracionPage,
 })
+
+const FECHA_HORA = new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium', timeStyle: 'short' })
 
 const BASE_OPCIONES: { value: Configuracion['comisionBase']; label: string; descripcion: string }[] = [
   {
@@ -37,7 +47,7 @@ const PERIODICIDAD_OPCIONES: { value: Configuracion['periodicidadLiquidacion']; 
 ]
 
 function ConfiguracionPage() {
-  const initial = Route.useLoaderData()
+  const { configuracion: initial, historial } = Route.useLoaderData()
   const [comisionPorcentaje, setComisionPorcentaje] = useState(String(initial.comisionLavadorPorcentaje * 100))
   const [comisionJefeZonaPorcentaje, setComisionJefeZonaPorcentaje] = useState(
     String(initial.comisionJefeZonaPorcentaje * 100),
@@ -230,6 +240,51 @@ function ConfiguracionPage() {
           </div>
         </form>
       </Card>
+
+      <HistorialConfiguracion historial={historial} />
     </div>
+  )
+}
+
+// Línea de tiempo de la config (0052). La bitácora (Auditoría) registra quién hizo cada cambio;
+// esto responde "qué regía en tal fecha" sin recorrer eventos. La fila más reciente es la vigente.
+function HistorialConfiguracion({ historial }: { historial: ConfiguracionHistorial[] }) {
+  if (historial.length <= 1) return null
+  return (
+    <Card className="max-w-xl">
+      <h3 className="mb-1 text-sm font-semibold text-neutral-900">Historial de cambios</h3>
+      <p className="mb-3 text-xs text-neutral-500">
+        Cada línea es el estado que rigió desde esa fecha. Para ver quién hizo cada cambio,
+        Operación › Auditoría.
+      </p>
+      <ol className="flex flex-col gap-2 text-sm">
+        {historial.map((h, i) => (
+          <li
+            key={h.id}
+            className={`rounded-lg border px-3 py-2.5 ${
+              i === 0 ? 'border-primary-200 bg-primary-50/50' : 'border-neutral-200'
+            }`}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs font-medium text-neutral-500">
+                Desde {FECHA_HORA.format(new Date(h.vigenteDesde))}
+              </span>
+              {i === 0 ? (
+                <span className="rounded-full bg-primary-100 px-2 py-0.5 text-[11px] font-medium text-primary-700">
+                  Vigente
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-1 text-xs text-neutral-600">
+              Lavador {(h.comisionLavadorPorcentaje * 100).toFixed(1)}% · Jefe de patio{' '}
+              {(h.comisionJefeZonaPorcentaje * 100).toFixed(1)}% · Base{' '}
+              {h.comisionBase === 'lista' ? 'precio de lista' : 'valor cobrado'} · Liquidación{' '}
+              {h.periodicidadLiquidacion} · Recargo alto cilindraje{' '}
+              {h.recargoAltoCilindraje.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })}
+            </p>
+          </li>
+        ))}
+      </ol>
+    </Card>
   )
 }

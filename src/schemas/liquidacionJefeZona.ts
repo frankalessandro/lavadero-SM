@@ -15,6 +15,10 @@ export const liquidacionJefeZonaSchema = z.object({
   periodoFin: z.string(),
   monto: z.number().int().nonnegative(),
   pagada: z.boolean(),
+  anulada: z.boolean().default(false),
+  motivoAnulacion: z.string().nullish().transform((v) => v ?? undefined),
+  anuladaPor: z.string().nullish().transform((v) => v ?? undefined),
+  anuladaEn: z.string().nullish().transform((v) => v ?? undefined),
   pagadaEn: z
     .string()
     .nullish()

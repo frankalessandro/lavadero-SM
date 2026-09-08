@@ -11,6 +11,10 @@ export const liquidacionSchema = z.object({
     .string()
     .nullish()
     .transform((value) => value ?? undefined),
+  anulada: z.boolean().default(false),
+  motivoAnulacion: z.string().nullish().transform((v) => v ?? undefined),
+  anuladaPor: z.string().nullish().transform((v) => v ?? undefined),
+  anuladaEn: z.string().nullish().transform((v) => v ?? undefined),
   creadoEn: z.string(),
 })
 

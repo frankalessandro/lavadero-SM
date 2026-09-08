@@ -8,6 +8,8 @@ import {
   fetchResumenHoy,
   registrarEntrada,
   registrarSalida,
+  fetchLavadoHoyPorPlaca,
+  type LavadoHoy,
   cobroPorModalidad,
   fueraDeVentanaSalida,
 } from '../../data/estanciasParqueadero'
@@ -18,6 +20,8 @@ import {
   type MetodoPagoParqueadero,
 } from '../../schemas/estanciaParqueadero'
 import { METODO_PAGO_LABEL } from '../../lib/metodoPago'
+import { fetchSuscripcionActivaPorPlaca } from '../../data/suscripcionesParqueadero'
+import { estadoVigencia, ESTADO_VIGENCIA_LABEL, type SuscripcionParqueadero } from '../../schemas/suscripcionParqueadero'
 import { fetchTurnoAbierto, abrirTurno, calcularValorEsperado, cerrarTurno } from '../../data/turnos'
 import { fetchPersonalOperativo } from '../../data/personalOperativo'
 import { NIVELES_POR_CAJA, type PersonalOperativo } from '../../schemas/personalOperativo'
@@ -512,16 +516,89 @@ function CerrarTurnoModal({ turno, onClose, onSaved }: { turno: TurnoCaja; onClo
   )
 }
 
+// Regla de negocio 8: un vehículo que se lavó hoy no genera cobro combinado de parqueadero.
+// Solo avisa — qué hacer si el carro efectivamente se quedó toda la noche es criterio del
+// vigilante/negocio, no se fuerza el cobro a $0.
+// Suscriptor de mensualidad/fijo (0051): en la portería importa si está al día. No cambia el
+// cobro (regla 6: esas modalidades no cobran por movimiento).
+function AvisoSuscripcion({ sus }: { sus: SuscripcionParqueadero }) {
+  const estado = estadoVigencia(sus.fechaFin)
+  const tono =
+    estado === 'vigente'
+      ? 'border-success-600/25 bg-success-50 text-success-700'
+      : estado === 'por_vencer'
+        ? 'border-warning-600/25 bg-warning-50 text-warning-700'
+        : 'border-danger-600/25 bg-danger-50 text-danger-700'
+  return (
+    <div className={`flex items-start gap-2 rounded-lg border px-3 py-2.5 text-xs ${tono}`}>
+      <Car size={14} className="mt-0.5 shrink-0" />
+      <span>
+        Suscriptor {sus.modalidad === 'fijo' ? 'fijo 24h' : 'mensualidad'} · {sus.titular} —{' '}
+        <span className="font-medium">
+          {ESTADO_VIGENCIA_LABEL[estado]} (vence {new Date(`${sus.fechaFin}T00:00:00`).toLocaleDateString('es-CO')})
+        </span>
+      </span>
+    </div>
+  )
+}
+
+function AvisoLavadoHoy({ lavado, enSalida = false }: { lavado: LavadoHoy; enSalida?: boolean }) {
+  const HORA = new Intl.DateTimeFormat('es-CO', { hour: 'numeric', minute: '2-digit' })
+  const detalle =
+    lavado.estado === 'entregado' && lavado.entregadaEn
+      ? `entregado ${HORA.format(new Date(lavado.entregadaEn))}`
+      : lavado.estado === 'entregado'
+        ? 'entregado hoy'
+        : `todavía ${lavado.estado === 'listo' ? 'listo para entregar' : 'en lavado'}`
+  return (
+    <div className="flex items-start gap-2 rounded-lg border border-warning-600/25 bg-warning-50 px-3 py-2.5 text-xs text-warning-700">
+      <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+      <span>
+        Este vehículo tiene un lavado hoy (#{lavado.consecutivo}, {detalle}).{' '}
+        <span className="font-medium">
+          Regla 8: un vehículo lavado no paga parqueadero combinado{enSalida ? ' — revisa antes de cobrar.' : '.'}
+        </span>
+      </span>
+    </div>
+  )
+}
+
 function EntradaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const [placa, setPlaca] = useState('')
   const [modalidad, setModalidad] = useState<ModalidadParqueadero>('noche')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [tarifaNoche, setTarifaNoche] = useState(0)
+  const [lavadoHoy, setLavadoHoy] = useState<LavadoHoy | undefined>(undefined)
+  const [suscripcion, setSuscripcion] = useState<SuscripcionParqueadero | undefined>(undefined)
 
   useEffect(() => {
     cobroPorModalidad('noche').then(setTarifaNoche)
   }, [])
+
+  // Regla 8: avisar si esta placa ya pasó por el lavadero hoy — no se cobra parqueadero combinado.
+  // `fetchLavadoHoyPorPlaca('')` resuelve a undefined, así que pasar la placa corta limpia el aviso
+  // sin un setState síncrono dentro del effect.
+  useEffect(() => {
+    const placaLimpia = placa.trim().length >= 5 ? placa.trim() : ''
+    let cancelado = false
+    const t = setTimeout(() => {
+      fetchLavadoHoyPorPlaca(placaLimpia)
+        .then((l) => {
+          if (!cancelado) setLavadoHoy(l)
+        })
+        .catch(() => {})
+      fetchSuscripcionActivaPorPlaca(placaLimpia)
+        .then((sub) => {
+          if (!cancelado) setSuscripcion(sub)
+        })
+        .catch(() => {})
+    }, 350)
+    return () => {
+      cancelado = true
+      clearTimeout(t)
+    }
+  }, [placa])
 
   async function handleSubmit() {
     const parsed = entradaInputSchema.safeParse({ placa, modalidad })
@@ -578,6 +655,9 @@ function EntradaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
           ) : null}
         </div>
 
+        {suscripcion ? <AvisoSuscripcion sus={suscripcion} /> : null}
+        {lavadoHoy ? <AvisoLavadoHoy lavado={lavadoHoy} /> : null}
+
         {error ? <p className="text-xs text-danger-600">{error}</p> : null}
 
         <button
@@ -610,6 +690,26 @@ function SalidaModal({
   const [cobro, setCobro] = useState(0)
 
   const estancia = useMemo(() => estancias.find((e) => e.id === estanciaId), [estancias, estanciaId])
+  const [lavadoHoy, setLavadoHoy] = useState<LavadoHoy | undefined>(undefined)
+  const [suscripcion, setSuscripcion] = useState<SuscripcionParqueadero | undefined>(undefined)
+
+  useEffect(() => {
+    let cancelado = false
+    const placa = estancia?.placa ?? ''
+    fetchLavadoHoyPorPlaca(placa)
+      .then((l) => {
+        if (!cancelado) setLavadoHoy(l)
+      })
+      .catch(() => {})
+    fetchSuscripcionActivaPorPlaca(placa)
+      .then((sub) => {
+        if (!cancelado) setSuscripcion(sub)
+      })
+      .catch(() => {})
+    return () => {
+      cancelado = true
+    }
+  }, [estancia])
 
   useEffect(() => {
     let cancelado = false
@@ -667,6 +767,9 @@ function SalidaModal({
             </p>
           ) : null
         ) : null}
+
+        {suscripcion ? <AvisoSuscripcion sus={suscripcion} /> : null}
+        {lavadoHoy ? <AvisoLavadoHoy lavado={lavadoHoy} enSalida /> : null}
 
         {estancia && cobro > 0 ? (
           <>
