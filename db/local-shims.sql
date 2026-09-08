@@ -31,3 +31,27 @@ create or replace function interno.es_activo() returns boolean
   language sql stable as $$ select true $$;
 create or replace function interno.es_admin() returns boolean
   language sql stable as $$ select false $$;
+
+-- `auth.uid()` — lo usa `interno.actor()` (0044_bitacora_auditoria.sql) para saber con qué cuenta
+-- se hizo cada cosa. En el sandbox no hay GoTrue ni schema `auth`, así que sin este stub las
+-- migraciones de la bitácora fallan al crearse y cualquier insert con trigger revienta. Devuelve
+-- NULL: en el log local queda "sin usuario", que es la verdad — no hay sesión que registrar. La
+-- persona (`persona_id`) sí se resuelve normal, porque sale del turno abierto, no del JWT.
+create schema if not exists auth;
+grant usage on schema auth to web_anon, authenticated, anon;
+create or replace function auth.uid() returns uuid
+  language sql stable as $$ select null::uuid $$;
+
+-- `public.perfiles` la crea 0011 (Supabase-only, nunca se corrió acá) pero `interno.actor()` de
+-- 0044 la consulta — y como es `language sql`, Postgres valida el cuerpo al CREAR la función, así
+-- que sin la tabla la migración de la bitácora ni siquiera se puede aplicar en el sandbox. Stub
+-- vacío: en local `auth.uid()` es NULL, así que nunca hace match y la bitácora queda con usuario
+-- nulo (la verdad — no hay sesión). La persona sí se resuelve, sale del turno abierto.
+create table if not exists public.perfiles (
+  id uuid primary key,
+  nombre text,
+  rol text,
+  activo boolean not null default true,
+  creado_en timestamptz not null default now()
+);
+grant select on public.perfiles to web_anon, authenticated, anon;
