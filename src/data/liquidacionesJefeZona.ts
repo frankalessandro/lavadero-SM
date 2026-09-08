@@ -1,9 +1,10 @@
 import { db } from '../lib/db'
 import { liquidacionJefeZonaSchema, type LiquidacionJefeZona } from '../schemas/liquidacionJefeZona'
 import { fetchOrdenesEnRango } from './ordenes'
+import { fetchPersonalOperativo } from './personalOperativo'
 
 const LIQUIDACION_SELECT =
-  'id, responsable, periodoInicio:periodo_inicio, periodoFin:periodo_fin, monto, pagada, pagadaEn:pagada_en, creadoEn:creado_en'
+  'id, responsable, personaId:persona_id, periodoInicio:periodo_inicio, periodoFin:periodo_fin, monto, pagada, pagadaEn:pagada_en, creadoEn:creado_en'
 
 export async function fetchLiquidacionesJefeZona(): Promise<LiquidacionJefeZona[]> {
   const { data, error } = await db
@@ -15,34 +16,45 @@ export async function fetchLiquidacionesJefeZona(): Promise<LiquidacionJefeZona[
 }
 
 export interface ComisionPendienteJefeZona {
+  personaId: string
   responsable: string
   montoPendiente: number
   cantidadOrdenes: number
 }
 
-// A diferencia de fetchComisionesPendientes (lavadores, con tabla propia y activo/inactivo), acá
-// no hay roster de "jefes de zona" — la lista de responsables sale de quién efectivamente quedó
-// registrado como responsable del turno al crear cada orden (ver createOrden). Solo aparecen
-// responsables con algo pendiente; alguien que ya liquidó todo simplemente no sale en la lista.
+// Agrupa por `jefe_zona_persona_id`, NO por el texto `jefe_zona_responsable`. Ese texto se tecleaba
+// a mano y produjo 13 grafías para 3 personas — la comisión de Julián llegó a estar partida en seis
+// pedazos (ver 0043_personal_operativo.sql). El nombre que se muestra sale del roster, no de la
+// orden. Las órdenes anteriores a 0043 que no mapearon a nadie quedan fuera (no hay a quién
+// pagarles); la migración aborta si existiera alguna así, de modo que en la práctica no las hay.
 export async function fetchComisionesPendientesJefeZona(): Promise<ComisionPendienteJefeZona[]> {
-  const { data, error } = await db
-    .from('ordenes')
-    .select('jefe_zona_responsable, comision_jefe_zona')
-    .is('liquidacion_jefe_zona_id', null)
-    .neq('estado', 'anulada')
+  const [{ data, error }, personal] = await Promise.all([
+    db
+      .from('ordenes')
+      .select('jefe_zona_persona_id, comision_jefe_zona')
+      .is('liquidacion_jefe_zona_id', null)
+      .neq('estado', 'anulada'),
+    fetchPersonalOperativo(),
+  ])
   if (error) throw new Error(error.message)
 
+  const nombrePorId = new Map(personal.map((p) => [p.id, p.nombre]))
   const acumulado = new Map<string, { monto: number; cantidad: number }>()
-  for (const fila of data as { jefe_zona_responsable: string | null; comision_jefe_zona: number }[]) {
-    if (!fila.jefe_zona_responsable) continue
-    const actual = acumulado.get(fila.jefe_zona_responsable) ?? { monto: 0, cantidad: 0 }
+  for (const fila of data as { jefe_zona_persona_id: string | null; comision_jefe_zona: number }[]) {
+    if (!fila.jefe_zona_persona_id) continue
+    const actual = acumulado.get(fila.jefe_zona_persona_id) ?? { monto: 0, cantidad: 0 }
     actual.monto += fila.comision_jefe_zona
     actual.cantidad += 1
-    acumulado.set(fila.jefe_zona_responsable, actual)
+    acumulado.set(fila.jefe_zona_persona_id, actual)
   }
 
   return Array.from(acumulado.entries())
-    .map(([responsable, v]) => ({ responsable, montoPendiente: v.monto, cantidadOrdenes: v.cantidad }))
+    .map(([personaId, v]) => ({
+      personaId,
+      responsable: nombrePorId.get(personaId) ?? 'Persona no encontrada',
+      montoPendiente: v.monto,
+      cantidadOrdenes: v.cantidad,
+    }))
     .sort((a, b) => b.montoPendiente - a.montoPendiente)
 }
 
@@ -64,13 +76,13 @@ export interface OrdenPendienteJefeZona {
 // abre desde su tarjeta de "Comisiones pendientes". Mismo filtro que fetchComisionesPendientesJefeZona
 // (responsable + sin liquidacion_jefe_zona_id + no anulada), pero trayendo el desglose de cada orden
 // en vez del acumulado. La comisión es por orden (3% del precio de lista), no por cada servicio suelto.
-export async function fetchOrdenesPendientesJefeZona(responsable: string): Promise<OrdenPendienteJefeZona[]> {
+export async function fetchOrdenesPendientesJefeZona(personaId: string): Promise<OrdenPendienteJefeZona[]> {
   const { data, error } = await db
     .from('ordenes')
     .select(
       'id, consecutivo, creadoEn:creado_en, placa, tipoVehiculoId:tipo_vehiculo_id, comboId:combo_id, precio, comisionJefeZona:comision_jefe_zona, serviciosAdicionales:orden_servicios(servicios(nombre))',
     )
-    .eq('jefe_zona_responsable', responsable)
+    .eq('jefe_zona_persona_id', personaId)
     .is('liquidacion_jefe_zona_id', null)
     .neq('estado', 'anulada')
     .order('creado_en', { ascending: false })
@@ -102,6 +114,7 @@ export async function fetchOrdenesPendientesJefeZona(responsable: string): Promi
 }
 
 export interface ResumenPeriodoJefeZona {
+  personaId: string
   responsable: string
   cantidadOrdenes: number
   montoTotal: number
@@ -116,22 +129,29 @@ export async function fetchResumenPeriodoJefeZona(periodoInicio: string, periodo
   hastaExclusivoISO.setUTCDate(hastaExclusivoISO.getUTCDate() + 1)
   const ordenes = await fetchOrdenesEnRango(new Date(`${periodoInicio}T00:00:00.000Z`).toISOString(), hastaExclusivoISO.toISOString())
 
+  const nombrePorId = new Map((await fetchPersonalOperativo()).map((p) => [p.id, p.nombre]))
   const acumulado = new Map<string, { cantidad: number; total: number; pendiente: number }>()
   for (const orden of ordenes) {
-    if (orden.estado === 'anulada' || !orden.jefeZonaResponsable) continue
-    const actual = acumulado.get(orden.jefeZonaResponsable) ?? { cantidad: 0, total: 0, pendiente: 0 }
+    if (orden.estado === 'anulada' || !orden.jefeZonaPersonaId) continue
+    const actual = acumulado.get(orden.jefeZonaPersonaId) ?? { cantidad: 0, total: 0, pendiente: 0 }
     actual.cantidad += 1
     actual.total += orden.comisionJefeZona
     if (orden.liquidacionJefeZonaId === undefined) actual.pendiente += orden.comisionJefeZona
-    acumulado.set(orden.jefeZonaResponsable, actual)
+    acumulado.set(orden.jefeZonaPersonaId, actual)
   }
 
   return Array.from(acumulado.entries())
-    .map(([responsable, a]) => ({ responsable, cantidadOrdenes: a.cantidad, montoTotal: a.total, montoPendiente: a.pendiente }))
+    .map(([personaId, a]) => ({
+      personaId,
+      responsable: nombrePorId.get(personaId) ?? 'Persona no encontrada',
+      cantidadOrdenes: a.cantidad,
+      montoTotal: a.total,
+      montoPendiente: a.pendiente,
+    }))
     .sort((a, b) => b.montoTotal - a.montoTotal)
 }
 
-async function ordenesElegiblesJefeZona(responsable: string, periodoInicio: string, periodoFin: string) {
+async function ordenesElegiblesJefeZona(personaId: string, periodoInicio: string, periodoFin: string) {
   const hastaExclusivoISO = new Date(`${periodoFin}T00:00:00.000Z`)
   hastaExclusivoISO.setUTCDate(hastaExclusivoISO.getUTCDate() + 1)
 
@@ -139,7 +159,7 @@ async function ordenesElegiblesJefeZona(responsable: string, periodoInicio: stri
     await fetchOrdenesEnRango(new Date(`${periodoInicio}T00:00:00.000Z`).toISOString(), hastaExclusivoISO.toISOString())
   ).filter(
     (orden) =>
-      orden.jefeZonaResponsable === responsable && orden.liquidacionJefeZonaId === undefined && orden.estado !== 'anulada',
+      orden.jefeZonaPersonaId === personaId && orden.liquidacionJefeZonaId === undefined && orden.estado !== 'anulada',
   )
 }
 
@@ -149,11 +169,11 @@ export interface MontoPeriodoJefeZona {
 }
 
 export async function fetchMontoPeriodoJefeZona(
-  responsable: string,
+  personaId: string,
   periodoInicio: string,
   periodoFin: string,
 ): Promise<MontoPeriodoJefeZona> {
-  const ordenes = await ordenesElegiblesJefeZona(responsable, periodoInicio, periodoFin)
+  const ordenes = await ordenesElegiblesJefeZona(personaId, periodoInicio, periodoFin)
   return {
     monto: ordenes.reduce((suma, orden) => suma + orden.comisionJefeZona, 0),
     cantidadOrdenes: ordenes.length,
@@ -164,16 +184,19 @@ export async function fetchMontoPeriodoJefeZona(
 // multi-tabla, así que si el paso 2 (marcar las órdenes) falla, se reporta explícito para revisión
 // manual en vez de fallar en silencio.
 export async function generarLiquidacionJefeZona(
+  personaId: string,
   responsable: string,
   periodoInicio: string,
   periodoFin: string,
 ): Promise<LiquidacionJefeZona> {
-  const ordenes = await ordenesElegiblesJefeZona(responsable, periodoInicio, periodoFin)
+  const ordenes = await ordenesElegiblesJefeZona(personaId, periodoInicio, periodoFin)
   const monto = ordenes.reduce((suma, orden) => suma + orden.comisionJefeZona, 0)
 
   const { data: creada, error: errorInsert } = await db
     .from('liquidaciones_jefe_zona')
-    .insert({ responsable, periodo_inicio: periodoInicio, periodo_fin: periodoFin, monto })
+    // `responsable` se guarda como snapshot del nombre al momento del corte; `persona_id` es la
+    // clave real (renombrar a alguien después no debe reescribir su histórico de colillas).
+    .insert({ responsable, persona_id: personaId, periodo_inicio: periodoInicio, periodo_fin: periodoFin, monto })
     .select(LIQUIDACION_SELECT)
     .single()
   if (errorInsert) throw new Error(errorInsert.message)

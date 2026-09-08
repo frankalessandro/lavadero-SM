@@ -241,12 +241,17 @@ function LiquidacionesPage() {
 
   async function handleGenerarDesdeReporteJefeZona(resumen: ResumenPeriodoJefeZona) {
     setError(null)
-    const key = `${resumen.responsable}:reporte`
+    const key = `${resumen.personaId}:reporte`
     setCalculandoJefeZona(key)
     try {
-      const preview = await fetchMontoPeriodoJefeZona(resumen.responsable, rangoPeriodo.periodoInicio, rangoPeriodo.periodoFin)
+      const preview = await fetchMontoPeriodoJefeZona(resumen.personaId, rangoPeriodo.periodoInicio, rangoPeriodo.periodoFin)
       setConfirmandoGenerarJefeZona({
-        comision: { responsable: resumen.responsable, montoPendiente: resumen.montoPendiente, cantidadOrdenes: resumen.cantidadOrdenes },
+        comision: {
+          personaId: resumen.personaId,
+          responsable: resumen.responsable,
+          montoPendiente: resumen.montoPendiente,
+          cantidadOrdenes: resumen.cantidadOrdenes,
+        },
         periodicidad: 'semanal',
         periodoInicio: rangoPeriodo.periodoInicio,
         periodoFin: rangoPeriodo.periodoFin,
@@ -352,10 +357,10 @@ function LiquidacionesPage() {
 
   async function handleElegirPeriodicidadJefeZona(comision: ComisionPendienteJefeZona, periodicidad: Periodicidad) {
     setError(null)
-    setCalculandoJefeZona(`${comision.responsable}:${periodicidad}`)
+    setCalculandoJefeZona(`${comision.personaId}:${periodicidad}`)
     try {
       const [periodoInicio, periodoFin] = rangoPorPeriodicidad(periodicidad)
-      const preview = await fetchMontoPeriodoJefeZona(comision.responsable, periodoInicio, periodoFin)
+      const preview = await fetchMontoPeriodoJefeZona(comision.personaId, periodoInicio, periodoFin)
       if (preview.cantidadOrdenes === 0) {
         setError(
           `${comision.responsable} no tiene órdenes sin liquidar en ${
@@ -376,9 +381,14 @@ function LiquidacionesPage() {
     if (!confirmandoGenerarJefeZona) return
     const { comision, periodoInicio, periodoFin } = confirmandoGenerarJefeZona
     setError(null)
-    setGenerandoJefeZona(comision.responsable)
+    setGenerandoJefeZona(comision.personaId)
     try {
-      const liquidacion = await generarLiquidacionJefeZona(comision.responsable, periodoInicio, periodoFin)
+      const liquidacion = await generarLiquidacionJefeZona(
+        comision.personaId,
+        comision.responsable,
+        periodoInicio,
+        periodoFin,
+      )
       await refresh()
       await refreshResumen()
       setColillaJefeZona({
@@ -407,11 +417,11 @@ function LiquidacionesPage() {
     }
   }
 
-  async function handleVerDetalleJefeZona(responsable: string) {
+  async function handleVerDetalleJefeZona(personaId: string, responsable: string) {
     setError(null)
-    setCargandoDetalleJefeZona(responsable)
+    setCargandoDetalleJefeZona(personaId)
     try {
-      const ordenes = await fetchOrdenesPendientesJefeZona(responsable)
+      const ordenes = await fetchOrdenesPendientesJefeZona(personaId)
       const comboNombrePorId = new Map(combos.map((c) => [c.id, c.nombre] as const))
       const tipoNombrePorId = new Map(tiposVehiculo.map((t) => [t.id, t.nombre] as const))
       setDetalleJefeZona({
@@ -569,7 +579,7 @@ function LiquidacionesPage() {
                     </tr>
                   ))
                 : resumenJefeZona.map((r) => (
-                    <tr key={r.responsable} className="border-b border-neutral-100 last:border-0">
+                    <tr key={r.personaId} className="border-b border-neutral-100 last:border-0">
                       <td className="px-5 py-3 font-medium text-neutral-900">{r.responsable}</td>
                       <td className="px-5 py-3 text-neutral-600">{r.cantidadOrdenes}</td>
                       <td className="px-5 py-3 text-neutral-700">{COP.format(r.montoTotal)}</td>
@@ -578,11 +588,11 @@ function LiquidacionesPage() {
                         {r.montoPendiente > 0 ? (
                           <button
                             type="button"
-                            disabled={calculandoJefeZona === `${r.responsable}:reporte` || generandoJefeZona === r.responsable}
+                            disabled={calculandoJefeZona === `${r.personaId}:reporte` || generandoJefeZona === r.personaId}
                             onClick={() => handleGenerarDesdeReporteJefeZona(r)}
                             className="rounded-lg px-3 py-1.5 text-xs font-medium text-primary-700 transition-colors hover:bg-primary-100 disabled:opacity-50"
                           >
-                            {calculandoJefeZona === `${r.responsable}:reporte` ? 'Calculando…' : 'Generar de este periodo'}
+                            {calculandoJefeZona === `${r.personaId}:reporte` ? 'Calculando…' : 'Generar de este periodo'}
                           </button>
                         ) : (
                           <span className="text-xs text-neutral-400">Al día</span>
@@ -742,7 +752,7 @@ function LiquidacionesPage() {
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {pendientesJefeZona.map((comision) => (
-                <Card key={comision.responsable} className="flex flex-col gap-3">
+                <Card key={comision.personaId} className="flex flex-col gap-3">
                   <div className="flex items-center gap-3">
                     <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
                       <ShieldCheck size={18} strokeWidth={2} />
@@ -757,17 +767,17 @@ function LiquidacionesPage() {
                   <p className="text-xl font-semibold text-neutral-900">{COP.format(comision.montoPendiente)}</p>
                   <button
                     type="button"
-                    disabled={cargandoDetalleJefeZona === comision.responsable}
-                    onClick={() => handleVerDetalleJefeZona(comision.responsable)}
+                    disabled={cargandoDetalleJefeZona === comision.personaId}
+                    onClick={() => handleVerDetalleJefeZona(comision.personaId, comision.responsable)}
                     className="-mt-1 self-start text-xs font-medium text-primary-700 transition-colors hover:text-primary-800 disabled:opacity-50"
                   >
-                    {cargandoDetalleJefeZona === comision.responsable
+                    {cargandoDetalleJefeZona === comision.personaId
                       ? 'Cargando…'
                       : `Ver ${comision.cantidadOrdenes} orden${comision.cantidadOrdenes === 1 ? '' : 'es'} sin liquidar`}
                   </button>
                   <div className="grid grid-cols-2 gap-2">
                     {(['diaria', 'semanal'] as const).map((periodicidad) => {
-                      const key = `${comision.responsable}:${periodicidad}`
+                      const key = `${comision.personaId}:${periodicidad}`
                       const esDefault = periodicidad === configuracion.periodicidadLiquidacion
                       return (
                         <button
@@ -776,7 +786,7 @@ function LiquidacionesPage() {
                           disabled={
                             comision.montoPendiente === 0 ||
                             calculandoJefeZona === key ||
-                            generandoJefeZona === comision.responsable
+                            generandoJefeZona === comision.personaId
                           }
                           onClick={() => handleElegirPeriodicidadJefeZona(comision, periodicidad)}
                           className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
