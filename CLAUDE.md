@@ -542,6 +542,40 @@ Modalidades `mensualidad` y `fijo` (regla 6) solo existían como etiqueta. Tabla
 ### Historial de `configuracion` — `0052_configuracion_historial.sql`
 `configuracion` es una fila que se sobrescribe. Tabla `configuracion_historial` (append-only, admin-only) + trigger `after update` que agrega una fila con el estado NUEVO en cada cambio real (`NEW is distinct from OLD` — un UPDATE sin cambio no deja fila). Fila semilla con el estado actual al aplicar. Responde "qué % regía el 20 de agosto" (= la fila con el mayor `vigente_desde <= X`); complementa la bitácora de 0044, que registra el *evento* (quién/cuándo). Sección "Historial de cambios" en `/admin/configuracion` (timeline, la más reciente marcada "Vigente").
 
+## Expedientes gerenciales — clic en una fila abre el detalle
+
+Patrón: una lista plana de CRUD se vuelve una herramienta de análisis si al hacer clic en la fila
+se abre un modal con todo el contexto de ese registro. Sin migración — todo sale de datos que ya
+existen.
+
+- **Bloque de orden reutilizable**: `src/components/layout/OrdenDetalleCard.tsx` (tarjeta con horas,
+  combo, lavador, dinero, desglose del pago partido, productos, anulación) + `src/lib/ordenFormato.ts`
+  (`duracion`, `ESTADO_ORDEN_LABEL/CLASS` — en `lib/` por `react-refresh/only-export-components`, que
+  solo está desactivado en `src/routes/**`). Lo usan los tres expedientes de abajo y el del cliente.
+- **Expediente del cliente** (`/admin/operacion/clientes`, ya existía): contacto + historial de
+  servicios de esa placa. Refactorizado para usar `OrdenDetalleCard`.
+- **Expediente del lavador** (`/admin/personal/lavadores`): `src/data/expedienteLavador.ts`.
+  `fetchResumenLavadores()` agrega TODAS las órdenes no anuladas por lavador para el **ranking**
+  (`#2 de 6 en producción / comisión / rapidez`); `fetchExpedienteLavador(id, 60)` trae lo de ese
+  lavador — comisión generada/pagada/pendiente (usa `comisionParaLavador`, ahora exportada de
+  `liquidaciones.ts`), ticket y tiempo promedio, tiempo por combo (`BarChart`), y asistencia
+  (`fetchAsistenciasEnRango` nueva). El data layer devuelve `diasRango` para no llamar `Date.now()`
+  en render (regla `react-hooks/purity`).
+- **Expediente del turno** (`/admin/operacion/turnos`): `src/data/expedienteTurno.ts` (archivo
+  aparte para no crear un ciclo `turnos.ts` ↔ `ordenes.ts`). Reconstruye el arqueo línea por línea
+  (`desgloseEsperado`), pagos por método (`fetchPagosDeTurno`), conteos de inventario de apertura y
+  cierre con sus diferencias (`fetchLineasDeConteo`), traspasos, y lista órdenes/ventas/gastos del
+  turno. La lista de turnos gana un `BarChart` de la diferencia de arqueo por turno en el tiempo.
+- **Rendimiento del catálogo** (`/admin/catalogo/combos`): toggle "Precios | Rendimiento" arriba de
+  la tabla. `src/data/rendimientoCombos.ts:fetchRendimientoCombos(desde, hasta)` — por combo: veces,
+  ingreso, participación %, ticket y tiempo promedio, desglose por tipo de vehículo (clic en la fila).
+  Solo órdenes entregadas. Rango 7/30/90 días.
+- Helpers de datos nuevos: `fetchOrdenesDeLavador` / `fetchOrdenesDeTurno` (ordenes.ts),
+  `fetchPagosDeOrdenes` / `fetchPagosDeTurno` (pagos.ts), `fetchVentasDeOrdenes` / `fetchVentasDeTurno`
+  (ventas.ts), `fetchLineasDeConteo` (conteosInventario.ts), `fetchAsistenciasEnRango`
+  (asistenciaLavadores.ts). Todos hacen una consulta por tabla con `.in(...)` / `.eq(...)`, nunca una
+  por registro.
+
 ## Pendiente de confirmación con el cliente
 
 - Monto/fórmula de la "multa" por vehículo no retirado antes de las 8:00am (fijo, por fracción, o tarifa de noche adicional completa).
