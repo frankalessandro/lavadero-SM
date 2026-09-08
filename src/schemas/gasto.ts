@@ -14,6 +14,10 @@ export const gastoSchema = z.object({
   monto: z.number().int().positive(),
   responsable: z.string(),
   origen: z.enum(['caja', 'otro']),
+  // Turno de caja al que se imputa el gasto — lo que `calcularValorEsperado` resta del arqueo.
+  // Nullable: un gasto administrativo (`origen: 'otro'`) no sale de ninguna caja, y los gastos
+  // anteriores a 0042 quedaron sin turno porque `createGasto` no escribía la columna.
+  turnoId: z.string().optional(),
   creadoEn: z.string(),
 })
 
@@ -24,6 +28,7 @@ export const gastoInputSchema = z.object({
   monto: z.number().int().positive('El monto debe ser mayor a 0'),
   responsable: z.string().trim().min(1, 'El responsable es obligatorio'),
   origen: z.enum(['caja', 'otro']),
+  turnoId: z.string().optional(),
 })
 
 export const categoriaGastoInputSchema = z.object({

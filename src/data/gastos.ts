@@ -36,7 +36,7 @@ export async function setCategoriaGastoActivo(id: string, activo: boolean): Prom
 // select con embedding vía FK de PostgREST: categorias_gasto(nombre) resuelve el nombre de la
 // categoría en la misma consulta (confirmado con curl contra categoria_id -> categorias_gasto(id)).
 const GASTO_SELECT =
-  'id, fecha, categoriaId:categoria_id, categoriaNombre:categorias_gasto(nombre), descripcion, monto, responsable, origen, creadoEn:creado_en'
+  'id, fecha, categoriaId:categoria_id, categoriaNombre:categorias_gasto(nombre), descripcion, monto, responsable, origen, turnoId:turno_id, creadoEn:creado_en'
 
 interface GastoRow {
   id: string
@@ -47,6 +47,7 @@ interface GastoRow {
   monto: number
   responsable: string
   origen: 'caja' | 'otro'
+  turnoId: string | null
   creadoEn: string
 }
 
@@ -55,9 +56,11 @@ export interface GastoConCategoria extends Gasto {
 }
 
 function mapGastoRow(row: GastoRow): GastoConCategoria {
-  const { categoriaNombre, ...rest } = row
+  const { categoriaNombre, turnoId, ...rest } = row
   return {
-    ...gastoSchema.parse(rest),
+    // `turno_id` viaja como null desde Postgres y el schema lo declara `.optional()` (no
+    // `.nullable()`), así que se normaliza acá — mismo criterio que el resto del data layer.
+    ...gastoSchema.parse({ ...rest, turnoId: turnoId ?? undefined }),
     categoriaNombre: categoriaNombre?.nombre ?? '',
   }
 }
@@ -75,7 +78,22 @@ export async function fetchGastos(desdeISO?: string, hastaISO?: string): Promise
   return (data as unknown as GastoRow[]).map(mapGastoRow)
 }
 
-export async function createGasto(input: GastoInput): Promise<Gasto> {
+// Gastos de caja menuda imputados a un turno (`origen: 'caja'` + `turno_id`) — es lo que
+// `calcularValorEsperado` resta del arqueo. Se pide el turno explícito en vez de resolver el
+// abierto acá dentro para que el llamador no pueda imputar por accidente a un turno distinto al
+// que está viendo en pantalla.
+export async function fetchGastosDeTurno(turnoId: string): Promise<GastoConCategoria[]> {
+  const { data, error } = await db
+    .from('gastos')
+    .select(GASTO_SELECT)
+    .eq('turno_id', turnoId)
+    .eq('origen', 'caja')
+    .order('creado_en', { ascending: false })
+  if (error) throw new Error(error.message)
+  return (data as unknown as GastoRow[]).map(mapGastoRow)
+}
+
+export async function createGasto(input: GastoInput): Promise<GastoConCategoria> {
   const parsed = gastoInputSchema.parse(input)
   const payload = {
     fecha: parsed.fecha,
@@ -84,10 +102,13 @@ export async function createGasto(input: GastoInput): Promise<Gasto> {
     monto: parsed.monto,
     responsable: parsed.responsable,
     origen: parsed.origen,
+    // Sin esto ningún gasto reducía el arqueo: la columna existe desde 0007 y
+    // `calcularValorEsperado` la consulta, pero nadie la escribía (ver 0042).
+    turno_id: parsed.turnoId ?? null,
   }
-  const { data, error } = await db.from('gastos').insert(payload).select().single()
+  const { data, error } = await db.from('gastos').insert(payload).select(GASTO_SELECT).single()
   if (error) throw new Error(error.message)
-  return gastoSchema.parse(data)
+  return mapGastoRow(data as unknown as GastoRow)
 }
 
 export interface TotalPorCategoria {

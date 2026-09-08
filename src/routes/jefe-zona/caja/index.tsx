@@ -2,17 +2,23 @@ import { useState, type FormEvent } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { X, CheckCircle2, ClipboardCheck } from 'lucide-react'
 import { fetchTurnoAbierto, fetchTurnos, desgloseEsperado, cerrarTurno, type DesgloseEsperado } from '../../../data/turnos'
+import { fetchCategoriasGasto, fetchGastosDeTurno, type GastoConCategoria } from '../../../data/gastos'
 import type { TurnoCaja } from '../../../schemas/turnoCaja'
 import { Card } from '../../../components/layout/Card'
 import { CurrencyInput } from '../../../components/layout/CurrencyInput'
+import { GastosDeTurno } from '../../../components/layout/GastosDeTurno'
 import { AbrirTurnoPrompt, TurnoResponsableBanner } from '../../../components/layout/TurnoResponsableBanner'
 
 async function loadCaja() {
-  const [turnoAbierto, turnosRecientes] = await Promise.all([
+  const [turnoAbierto, turnosRecientes, categorias] = await Promise.all([
     fetchTurnoAbierto('jefe_zona'),
     fetchTurnos('jefe_zona'),
+    fetchCategoriasGasto(),
   ])
-  return { turnoAbierto, turnosRecientes: turnosRecientes.slice(0, 5) }
+  // Los gastos del turno dependen del turno abierto, así que van en una segunda ronda — sin
+  // turno abierto no hay caja menuda que mostrar.
+  const gastosTurno = turnoAbierto ? await fetchGastosDeTurno(turnoAbierto.id) : []
+  return { turnoAbierto, turnosRecientes: turnosRecientes.slice(0, 5), categorias, gastosTurno }
 }
 
 export const Route = createFileRoute('/jefe-zona/caja/')({
@@ -32,6 +38,7 @@ function CajaJefeZona() {
   const router = useRouter()
   const [turnoAbierto, setTurnoAbierto] = useState(data.turnoAbierto)
   const [turnosRecientes, setTurnosRecientes] = useState(data.turnosRecientes)
+  const [gastosTurno, setGastosTurno] = useState<GastoConCategoria[]>(data.gastosTurno)
   const [cerrando, setCerrando] = useState(false)
 
   async function refresh() {
@@ -41,6 +48,7 @@ function CajaJefeZona() {
     ])
     setTurnoAbierto(nuevoAbierto)
     setTurnosRecientes(nuevosRecientes.slice(0, 5))
+    setGastosTurno(nuevoAbierto ? await fetchGastosDeTurno(nuevoAbierto.id) : [])
     router.invalidate()
   }
 
@@ -60,6 +68,16 @@ function CajaJefeZona() {
       ) : (
         <AbrirTurnoPrompt onAbierto={refresh} />
       )}
+
+      {turnoAbierto ? (
+        <GastosDeTurno
+          turno={turnoAbierto}
+          categorias={data.categorias}
+          gastos={gastosTurno}
+          onRegistrado={(gasto) => setGastosTurno((previos) => [gasto, ...previos])}
+          size="sm"
+        />
+      ) : null}
 
       <div>
         <h2 className="mb-2 text-sm font-semibold text-neutral-900">Turnos recientes</h2>
