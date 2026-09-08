@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { Ban, Wallet, X } from 'lucide-react'
+import { Ban, ClipboardList, Wallet, X } from 'lucide-react'
 import { anularOrden, fetchOrdenesEnRango } from '../../../../data/ordenes'
 import { fetchLavadores } from '../../../../data/lavadores'
 import { fetchCombos } from '../../../../data/combos'
@@ -9,6 +9,10 @@ import { Card } from '../../../../components/layout/Card'
 import { CorregirPagoModal } from '../../../../components/layout/CorregirPagoModal'
 import { METODO_PAGO_LABEL } from '../../../../lib/metodoPago'
 import { huecosEntre, formatearHuecos } from '../../../../lib/consecutivo'
+import { fetchProductos } from '../../../../data/productos'
+import { StatCard } from '../../../../components/layout/StatCard'
+import { OrdenExpedienteModal } from '../../../../components/layout/OrdenExpedienteModal'
+import { duracion } from '../../../../lib/ordenFormato'
 
 type RangoKey = 'hoy' | '7d' | '30d'
 
@@ -46,12 +50,13 @@ const ESTADO_CLASSNAME: Record<Orden['estado'], string> = {
 
 async function loadOrdenesPage() {
   const { desdeISO, hastaISO } = rangoFechas(1)
-  const [ordenes, lavadores, combos] = await Promise.all([
+  const [ordenes, lavadores, combos, productos] = await Promise.all([
     fetchOrdenesEnRango(desdeISO, hastaISO),
     fetchLavadores(),
     fetchCombos(),
+    fetchProductos(),
   ])
-  return { ordenes, lavadores, combos }
+  return { ordenes, lavadores, combos, productos }
 }
 
 export const Route = createFileRoute('/admin/operacion/ordenes/')({
@@ -68,6 +73,8 @@ function OrdenesPage() {
   const combosPorId = new Map(initial.combos.map((c) => [c.id, c.nombre]))
   const [anulando, setAnulando] = useState<Orden | null>(null)
   const [corrigiendoPago, setCorrigiendoPago] = useState<Orden | null>(null)
+  const [expedienteDe, setExpedienteDe] = useState<Orden | null>(null)
+  const productosPorId = new Map(initial.productos.map((p) => [p.id, p.nombre]))
 
   async function cambiarRango(key: RangoKey) {
     setRango(key)
@@ -97,12 +104,36 @@ function OrdenesPage() {
   // consecutivos presentes en el rango cargado — las anuladas conservan su número y NO son hueco.
   const huecos = huecosEntre(ordenes.map((o) => o.consecutivo))
 
+  // KPIs del rango.
+  const entregadas = ordenes.filter((o) => o.estado === 'entregado')
+  const ticketPromedio = entregadas.length
+    ? Math.round(entregadas.reduce((s, o) => s + o.precio - o.descuento, 0) / entregadas.length)
+    : 0
+  const conTiempo = entregadas.filter((o) => o.tiempoLavadoSegundos != null)
+  const tiempoPromedio = conTiempo.length
+    ? Math.round(conTiempo.reduce((s, o) => s + (o.tiempoLavadoSegundos ?? 0), 0) / conTiempo.length)
+    : null
+  const pctAnuladas = ordenes.length ? Math.round((anuladasEnRango.length / ordenes.length) * 100) : 0
+  const mixPago = (['efectivo', 'transferencia', 'datafono', 'mixto'] as const)
+    .map((m) => ({ m, n: entregadas.filter((o) => o.metodoPago === m).length }))
+    .filter((x) => x.n > 0)
+    .map((x) => `${METODO_PAGO_LABEL[x.m]} ${x.n}`)
+    .join(' · ')
+
   return (
     <div className="flex flex-col gap-6 text-left">
       <div>
         <h2 className="text-base font-semibold text-neutral-900">Órdenes</h2>
         <p className="text-sm text-neutral-500">Histórico de órdenes de lavado, con anulación auditada.</p>
       </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Órdenes del rango" value={String(ordenes.length)} icon={ClipboardList} />
+        <StatCard label="Ticket promedio" value={COP.format(ticketPromedio)} hint={`${entregadas.length} entregadas`} icon={Wallet} />
+        <StatCard label="Tiempo promedio" value={tiempoPromedio != null ? duracion(tiempoPromedio) : '—'} icon={Wallet} />
+        <StatCard label="Anuladas" value={`${anuladasEnRango.length} · ${pctAnuladas}%`} icon={Ban} />
+      </div>
+      {mixPago ? <p className="-mt-3 text-xs text-neutral-500">Mix de pago (entregadas): {mixPago}</p> : null}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex rounded-lg border border-neutral-300 p-1">
@@ -143,7 +174,11 @@ function OrdenesPage() {
             </thead>
             <tbody>
               {ordenes.map((orden) => (
-                <tr key={orden.id} className="border-b border-neutral-100 transition-colors last:border-0 hover:bg-primary-50/40">
+                <tr
+                  key={orden.id}
+                  onClick={() => setExpedienteDe(orden)}
+                  className="cursor-pointer border-b border-neutral-100 transition-colors last:border-0 hover:bg-primary-50/40"
+                >
                   <td className="px-5 py-3 text-neutral-500">#{orden.consecutivo}</td>
                   <td className="px-5 py-3 font-medium text-neutral-900">{orden.placa}</td>
                   <td className="px-5 py-3 text-neutral-700">{orden.clienteNombre}</td>
@@ -184,7 +219,7 @@ function OrdenesPage() {
                       {ESTADO_LABEL[orden.estado]}
                     </span>
                   </td>
-                  <td className="px-5 py-3">
+                  <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
                     <div className="flex justify-end gap-1">
                       {orden.estado === 'entregado' ? (
                         <button
@@ -282,6 +317,16 @@ function OrdenesPage() {
             setCorrigiendoPago(null)
             await refrescar()
           }}
+        />
+      ) : null}
+
+      {expedienteDe ? (
+        <OrdenExpedienteModal
+          orden={expedienteDe}
+          comboNombre={(id) => (id ? combosPorId.get(id) ?? '—' : 'Sin combo')}
+          lavadorNombre={(id) => (id ? lavadoresPorId.get(id) : undefined)}
+          productoNombre={(id) => productosPorId.get(id) ?? 'Producto'}
+          onClose={() => setExpedienteDe(null)}
         />
       ) : null}
     </div>

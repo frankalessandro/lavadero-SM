@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { Mail, MessageCircle, Phone, Search } from 'lucide-react'
+import { Coins, Mail, MessageCircle, Phone, Repeat, Search, UserPlus } from 'lucide-react'
 import { fetchClientes, type ClienteResumen } from '../../../../data/clientes'
 import { fetchTiposVehiculo } from '../../../../data/tiposVehiculo'
 import { fetchCombos } from '../../../../data/combos'
@@ -36,6 +36,7 @@ export const Route = createFileRoute('/admin/operacion/clientes/')({
 function ClientesPage() {
   const { clientes, tiposVehiculo, combos, lavadores, productos } = Route.useLoaderData()
   const [busqueda, setBusqueda] = useState('')
+  const [orden, setOrden] = useState<'recientes' | 'gastado' | 'frecuencia'>('recientes')
   const [expedienteDe, setExpedienteDe] = useState<{ placa: string; nombre: string } | null>(null)
 
   const tipoNombrePorId = new Map(tiposVehiculo.map((t) => [t.id, t.nombre]))
@@ -50,10 +51,23 @@ function ClientesPage() {
       : clientes.filter(
           (c) => c.placa.toLowerCase().includes(termino) || c.clienteNombre.toLowerCase().includes(termino),
         )
-    return [...base].sort((a, b) => new Date(b.ultimoServicioEn).getTime() - new Date(a.ultimoServicioEn).getTime())
-  }, [clientes, busqueda])
+    const cmp: Record<typeof orden, (a: ClienteResumen, b: ClienteResumen) => number> = {
+      recientes: (a, b) => new Date(b.ultimoServicioEn).getTime() - new Date(a.ultimoServicioEn).getTime(),
+      gastado: (a, b) => b.totalGastado - a.totalGastado,
+      frecuencia: (a, b) => b.totalServicios - a.totalServicios,
+    }
+    return [...base].sort(cmp[orden])
+  }, [clientes, busqueda, orden])
 
   const conTelefono = clientes.filter((c) => c.clienteTelefono).length
+  const recurrentes = clientes.filter((c) => c.totalServicios > 1).length
+  const inicioMes = (() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+  })()
+  const nuevosDelMes = clientes.filter((c) => c.primerServicioEn.slice(0, 10) >= inicioMes).length
+  const gastoTotalBase = clientes.reduce((s, c) => s + c.totalGastado, 0)
+  const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 
   return (
     <div className="flex flex-col gap-6 text-left">
@@ -64,10 +78,28 @@ function ClientesPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard label="Clientes registrados" value={String(clientes.length)} icon={Search} />
-        <StatCard label="Con teléfono" value={String(conTelefono)} icon={Phone} />
-        <StatCard label="Con correo" value={String(clientes.filter((c) => c.clienteCorreo).length)} icon={Mail} />
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <StatCard label="Clientes registrados" value={String(clientes.length)} hint={`${conTelefono} con teléfono`} icon={Search} />
+        <StatCard label="Recurrentes" value={String(recurrentes)} hint={`de ${clientes.length} · ${clientes.length ? Math.round((recurrentes / clientes.length) * 100) : 0}%`} icon={Repeat} />
+        <StatCard label="Nuevos este mes" value={String(nuevosDelMes)} icon={UserPlus} />
+        <StatCard label="Facturado histórico" value={COP.format(gastoTotalBase)} hint="órdenes entregadas" icon={Coins} />
+      </div>
+
+      <div className="flex w-fit rounded-lg border border-neutral-300 p-1">
+        {([['recientes', 'Recientes'], ['gastado', 'Más gastan'], ['frecuencia', 'Más frecuentes']] as const).map(
+          ([k, label]) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setOrden(k)}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                orden === k ? 'bg-primary-600 text-white shadow-nav-active' : 'text-neutral-600 hover:bg-neutral-50'
+              }`}
+            >
+              {label}
+            </button>
+          ),
+        )}
       </div>
 
       <label className="flex items-center gap-2 rounded-lg border border-neutral-300 px-3 py-2.5 text-sm focus-within:border-primary-500 focus-within:ring-1 focus-within:ring-primary-500 sm:max-w-xs">
@@ -90,7 +122,9 @@ function ClientesPage() {
                 <th className="px-5 py-3">Vehículo</th>
                 <th className="px-5 py-3">Placa</th>
                 <th className="px-5 py-3">Último servicio</th>
-                <th className="px-5 py-3">Servicios</th>
+                <th className="px-5 py-3 text-right">Servicios</th>
+                <th className="px-5 py-3 text-right">Total gastado</th>
+                <th className="px-5 py-3 text-right">Ticket prom.</th>
               </tr>
             </thead>
             <tbody>
@@ -153,12 +187,14 @@ function ClientesPage() {
                       {new Date(cliente.ultimoServicioEn).toLocaleDateString('es-CO')}
                     </span>
                   </td>
-                  <td className="px-5 py-3 text-neutral-700">{cliente.totalServicios}</td>
+                  <td className="px-5 py-3 text-right text-neutral-700">{cliente.totalServicios}</td>
+                  <td className="px-5 py-3 text-right font-medium text-neutral-900">{COP.format(cliente.totalGastado)}</td>
+                  <td className="px-5 py-3 text-right text-neutral-600">{COP.format(cliente.ticketPromedio)}</td>
                 </tr>
               ))}
               {filtrados.length === 0 ? (
                 <tr>
-                  <td className="px-5 py-6 text-center text-neutral-400" colSpan={6}>
+                  <td className="px-5 py-6 text-center text-neutral-400" colSpan={8}>
                     No hay clientes que coincidan con la búsqueda.
                   </td>
                 </tr>

@@ -1,6 +1,6 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useMemo, useRef, useState, type FormEvent } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { Plus, Receipt, Settings2, X } from 'lucide-react'
+import { Plus, Receipt, Settings2, TrendingUp, X } from 'lucide-react'
 import {
   createCategoriaGasto,
   createGasto,
@@ -11,6 +11,7 @@ import {
 } from '../../../../data/gastos'
 import { categoriaGastoInputSchema, gastoInputSchema, type CategoriaGasto } from '../../../../schemas/gasto'
 import { Card } from '../../../../components/layout/Card'
+import { BarChart } from '../../../../components/layout/BarChart'
 import { StatCard } from '../../../../components/layout/StatCard'
 import { CustomSelect } from '../../../../components/layout/CustomSelect'
 import { ConfirmModal } from '../../../../components/layout/ConfirmModal'
@@ -28,6 +29,28 @@ function finDelMesISO(): string {
 
 function hoyISO(): string {
   return new Date().toISOString().slice(0, 10)
+}
+
+const RANGOS_GASTO = [
+  { key: 'mes', label: 'Este mes', dias: 0 },
+  { key: '30', label: '30 días', dias: 30 },
+  { key: '90', label: '90 días', dias: 90 },
+] as const
+type RangoGastoKey = (typeof RANGOS_GASTO)[number]['key']
+
+// [desde, hasta] en YYYY-MM-DD para fetchGastos. `mes` = mes calendario actual; N días = ventana
+// móvil. `previo` recorre la misma longitud hacia atrás para la comparación.
+function rangoGasto(key: RangoGastoKey, previo = false): { desde: string; hasta: string } {
+  const d = new Date()
+  if (key === 'mes') {
+    const base = previo ? new Date(d.getFullYear(), d.getMonth() - 1, 1) : new Date(d.getFullYear(), d.getMonth(), 1)
+    const fin = new Date(base.getFullYear(), base.getMonth() + 1, 0)
+    return { desde: base.toISOString().slice(0, 10), hasta: fin.toISOString().slice(0, 10) }
+  }
+  const dias = Number(key)
+  const hasta = previo ? new Date(d.getFullYear(), d.getMonth(), d.getDate() - dias) : d
+  const desde = new Date(hasta.getFullYear(), hasta.getMonth(), hasta.getDate() - dias)
+  return { desde: desde.toISOString().slice(0, 10), hasta: hasta.toISOString().slice(0, 10) }
 }
 
 const formatoMoneda = new Intl.NumberFormat('es-CO', {
@@ -60,19 +83,48 @@ function GastosPage() {
   const [categorias, setCategorias] = useState(initial.categorias)
   const [gastos, setGastos] = useState(initial.gastos)
   const [categoriasModalOpen, setCategoriasModalOpen] = useState(false)
+  const [rango, setRango] = useState<RangoGastoKey>('mes')
+  const [totalPrevio, setTotalPrevio] = useState<number | null>(null)
+  const [categoriaFiltro, setCategoriaFiltro] = useState<string | null>(null)
 
   async function refresh() {
-    const [nuevasCategorias, nuevosGastos] = await Promise.all([
+    const r = rangoGasto(rango)
+    const rp = rangoGasto(rango, true)
+    const [nuevasCategorias, nuevosGastos, previos] = await Promise.all([
       fetchCategoriasGasto(),
-      fetchGastos(inicioDelMesISO(), finDelMesISO()),
+      fetchGastos(r.desde, r.hasta),
+      fetchGastos(rp.desde, rp.hasta),
     ])
     setCategorias(nuevasCategorias)
     setGastos(nuevosGastos)
+    setTotalPrevio(previos.reduce((a, g) => a + g.monto, 0))
     router.invalidate()
   }
 
-  const totalMes = gastos.reduce((acc, gasto) => acc + gasto.monto, 0)
+  async function cambiarRango(key: RangoGastoKey) {
+    setRango(key)
+    const r = rangoGasto(key)
+    const rp = rangoGasto(key, true)
+    const [nuevosGastos, previos] = await Promise.all([fetchGastos(r.desde, r.hasta), fetchGastos(rp.desde, rp.hasta)])
+    setGastos(nuevosGastos)
+    setTotalPrevio(previos.reduce((a, g) => a + g.monto, 0))
+    setCategoriaFiltro(null)
+  }
+
+  const totalRango = gastos.reduce((acc, gasto) => acc + gasto.monto, 0)
   const categoriasActivas = categorias.filter((c) => c.activo)
+  const diasDelRango = rango === 'mes' ? new Date().getDate() : Number(rango)
+  const promedioDiario = diasDelRango > 0 ? Math.round(totalRango / diasDelRango) : 0
+  const deltaPct =
+    totalPrevio && totalPrevio > 0 ? Math.round(((totalRango - totalPrevio) / totalPrevio) * 100) : null
+
+  const porCategoria = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const g of gastos) m.set(g.categoriaNombre, (m.get(g.categoriaNombre) ?? 0) + g.monto)
+    return [...m.entries()].map(([nombre, monto]) => ({ nombre, monto })).sort((a, b) => b.monto - a.monto)
+  }, [gastos])
+
+  const gastosVisibles = categoriaFiltro ? gastos.filter((g) => g.categoriaNombre === categoriaFiltro) : gastos
 
   return (
     <div className="flex flex-col gap-6 text-left">
@@ -91,14 +143,77 @@ function GastosPage() {
         </button>
       </div>
 
-      <StatCard
-        label="Total del mes"
-        value={formatoMoneda.format(totalMes)}
-        hint={`${gastos.length} gasto${gastos.length === 1 ? '' : 's'} registrado${gastos.length === 1 ? '' : 's'}`}
-        icon={Receipt}
-      />
+      <div className="flex w-fit rounded-lg border border-neutral-300 p-1">
+        {RANGOS_GASTO.map((r) => (
+          <button
+            key={r.key}
+            type="button"
+            onClick={() => cambiarRango(r.key)}
+            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+              rango === r.key ? 'bg-primary-600 text-white shadow-nav-active' : 'text-neutral-600 hover:bg-neutral-50'
+            }`}
+          >
+            {r.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard
+          label="Total del rango"
+          value={formatoMoneda.format(totalRango)}
+          hint={
+            deltaPct != null
+              ? `${deltaPct > 0 ? '+' : ''}${deltaPct}% vs. periodo anterior`
+              : `${gastos.length} gasto${gastos.length === 1 ? '' : 's'}`
+          }
+          icon={Receipt}
+        />
+        <StatCard label="Promedio diario" value={formatoMoneda.format(promedioDiario)} icon={TrendingUp} />
+        <StatCard label="Categorías con gasto" value={String(porCategoria.length)} icon={Settings2} />
+      </div>
+
+      {porCategoria.length > 0 ? (
+        <Card className="flex flex-col gap-3 p-4">
+          <h3 className="text-sm font-semibold text-neutral-900">Gasto por categoría</h3>
+          {porCategoria.length > 2 ? (
+            <BarChart
+              labels={porCategoria.map((c) => c.nombre)}
+              data={porCategoria.map((c) => c.monto)}
+              valueFormatter={(v) => formatoMoneda.format(v)}
+              height={Math.max(140, porCategoria.length * 32)}
+            />
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            {porCategoria.map((c) => (
+              <button
+                key={c.nombre}
+                type="button"
+                onClick={() => setCategoriaFiltro((prev) => (prev === c.nombre ? null : c.nombre))}
+                className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                  categoriaFiltro === c.nombre
+                    ? 'border-primary-500 bg-primary-50 text-primary-700'
+                    : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
+                }`}
+              >
+                {c.nombre} · {formatoMoneda.format(c.monto)}
+              </button>
+            ))}
+          </div>
+        </Card>
+      ) : null}
 
       <GastoForm categorias={categoriasActivas} onSaved={refresh} />
+
+      {categoriaFiltro ? (
+        <button
+          type="button"
+          onClick={() => setCategoriaFiltro(null)}
+          className="w-fit rounded-lg bg-primary-50 px-3 py-1.5 text-xs font-medium text-primary-700 transition-colors hover:bg-primary-100"
+        >
+          Filtrando: {categoriaFiltro} · quitar filtro
+        </button>
+      ) : null}
 
       <Card className="p-0">
         <table className="w-full text-sm">
@@ -113,13 +228,13 @@ function GastosPage() {
             </tr>
           </thead>
           <tbody>
-            {gastos.map((gasto) => (
+            {gastosVisibles.map((gasto) => (
               <GastoRow key={gasto.id} gasto={gasto} />
             ))}
-            {gastos.length === 0 ? (
+            {gastosVisibles.length === 0 ? (
               <tr>
                 <td className="px-5 py-6 text-center text-neutral-400" colSpan={6}>
-                  No hay gastos registrados este mes.
+                  {categoriaFiltro ? `Sin gastos de "${categoriaFiltro}" en el rango.` : 'No hay gastos en el rango.'}
                 </td>
               </tr>
             ) : null}

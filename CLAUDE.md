@@ -571,10 +571,28 @@ existen.
   ingreso, participación %, ticket y tiempo promedio, desglose por tipo de vehículo (clic en la fila).
   Solo órdenes entregadas. Rango 7/30/90 días.
 - Helpers de datos nuevos: `fetchOrdenesDeLavador` / `fetchOrdenesDeTurno` (ordenes.ts),
-  `fetchPagosDeOrdenes` / `fetchPagosDeTurno` (pagos.ts), `fetchVentasDeOrdenes` / `fetchVentasDeTurno`
-  (ventas.ts), `fetchLineasDeConteo` (conteosInventario.ts), `fetchAsistenciasEnRango`
-  (asistenciaLavadores.ts). Todos hacen una consulta por tabla con `.in(...)` / `.eq(...)`, nunca una
-  por registro.
+  `fetchPagosDeOrdenes` / `fetchPagosDeTurno` (pagos.ts), `fetchVentasDeOrdenes` / `fetchVentasDeTurno` /
+  `fetchVentasDeProducto` (ventas.ts), `fetchLineasDeConteo` (conteosInventario.ts),
+  `fetchAsistenciasEnRango` (asistenciaLavadores.ts). Todos hacen una consulta por tabla con
+  `.in(...)` / `.eq(...)`, nunca una por registro.
+
+### Segunda tanda de mejoras gerenciales
+
+- **Expediente de una orden** (`OrdenExpedienteModal`): envuelve `OrdenDetalleCard` trayendo su pago
+  partido y productos. Se abre desde una fila de `/admin/operacion/ordenes`, que además gana KPIs
+  (órdenes, ticket promedio, tiempo promedio, % anuladas, mix de métodos).
+- **Clientes con segmentación** (`/admin/operacion/clientes`): `fetchClientes` ahora agrega
+  `totalGastado` / `ticketPromedio` / `primerServicioEn`. KPIs (recurrentes, nuevos del mes,
+  facturado histórico) + toggle de orden Recientes / Más gastan / Más frecuentes + columnas de gasto.
+- **Gastos con periodo** (`/admin/dinero/gastos`): toggle Este mes / 30 / 90 días (ya no clavado al
+  mes), comparación `%` vs. periodo anterior, promedio diario, `BarChart` por categoría y filtro por
+  categoría clicable. `refresh()` y `cambiarRango()` recargan el rango + el previo. **Nota**: recargar
+  al cambiar de rango va por un handler `cambiarRango`, no por `useEffect` con `setState`
+  (`react-hooks/set-state-in-effect`).
+- **Expediente del producto** (`ProductoExpedienteModal`, desde `/admin/dinero/inventario`): stock,
+  valorización, margen unitario, **días de stock** (rotación al ritmo de 30 días), unidades vendidas
+  por mes (`BarChart`) y movimientos. `useState(() => Date.now())` para el "ahora" — no llamar
+  `Date.now()` en render (`react-hooks/purity`).
 
 ## Pendiente de confirmación con el cliente
 

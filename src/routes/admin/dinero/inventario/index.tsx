@@ -15,6 +15,7 @@ import {
 } from '../../../../data/movimientosInventario'
 import { fetchVentasEnRango } from '../../../../data/ventas'
 import { fetchFaltantesPendientes, type FaltantePendiente } from '../../../../data/conteosInventario'
+import { ProductoExpedienteModal } from '../../../../components/layout/ProductoExpedienteModal'
 import { productoInputSchema, type Producto } from '../../../../schemas/producto'
 import {
   movimientoInventarioInputSchema,
@@ -84,6 +85,7 @@ function InventarioPage() {
   const [formOpen, setFormOpen] = useState(false)
   const [movimientoFormOpen, setMovimientoFormOpen] = useState(false)
   const [confirmando, setConfirmando] = useState<Producto | null>(null)
+  const [expedienteDe, setExpedienteDe] = useState<Producto | null>(null)
 
   async function refresh() {
     const [nuevosProductos, nuevoStock, nuevosMovimientos, nuevasVentas] = await Promise.all([
@@ -214,6 +216,7 @@ function InventarioPage() {
           setFormOpen(true)
         }}
         onToggleActivo={setConfirmando}
+        onVerExpediente={setExpedienteDe}
         vacio="No hay insumos registrados. Usa «Nuevo producto» sin precio de venta."
       />
 
@@ -231,6 +234,7 @@ function InventarioPage() {
           setFormOpen(true)
         }}
         onToggleActivo={setConfirmando}
+        onVerExpediente={setExpedienteDe}
         vacio="No hay productos de nevera registrados. Usa «Nuevo producto» con precio de venta."
       />
 
@@ -370,6 +374,14 @@ function InventarioPage() {
           onCancel={() => setConfirmando(null)}
         />
       ) : null}
+
+      {expedienteDe ? (
+        <ProductoExpedienteModal
+          producto={expedienteDe}
+          stock={stockPorProducto.get(expedienteDe.id)}
+          onClose={() => setExpedienteDe(null)}
+        />
+      ) : null}
     </div>
   )
 }
@@ -385,6 +397,7 @@ function StockTable({
   mostrarPrecio = false,
   onEditar,
   onToggleActivo,
+  onVerExpediente,
   vacio,
 }: {
   titulo: string
@@ -397,6 +410,7 @@ function StockTable({
   mostrarPrecio?: boolean
   onEditar: (producto: Producto) => void
   onToggleActivo: (producto: Producto) => void
+  onVerExpediente: (producto: Producto) => void
   vacio: string
 }) {
   return (
@@ -431,9 +445,16 @@ function StockTable({
             const nivel = nivelStock(stockActual)
             const bajoMin = nivel === 'bajo'
             return (
-              <tr key={producto.id} className="border-b border-neutral-100 transition-colors last:border-0 hover:bg-primary-50/40">
+              <tr
+                key={producto.id}
+                onClick={() => onVerExpediente(producto)}
+                className="cursor-pointer border-b border-neutral-100 transition-colors last:border-0 hover:bg-primary-50/40"
+              >
                 <td className="px-5 py-3">
-                  <p className="font-medium text-neutral-900">{producto.nombre}</p>
+                  <p className="font-medium text-neutral-900">
+                    {producto.nombre}
+                    <span className="ml-1.5 text-xs font-normal text-primary-600">Ver expediente</span>
+                  </p>
                   <p className="text-xs text-neutral-400">{producto.unidadMedida}</p>
                 </td>
                 <td className="px-5 py-3">
@@ -474,7 +495,7 @@ function StockTable({
                     </span>
                   )}
                 </td>
-                <td className="px-5 py-3">
+                <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
                   <div className="flex justify-end gap-2">
                     <button
                       type="button"

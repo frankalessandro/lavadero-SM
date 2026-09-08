@@ -17,7 +17,10 @@ export interface ClienteResumen {
   tipoVehiculoId: string
   ultimoComboId: string
   ultimoServicioEn: string
+  primerServicioEn: string
   totalServicios: number
+  totalGastado: number
+  ticketPromedio: number
 }
 
 interface OrdenClienteRow {
@@ -28,6 +31,9 @@ interface OrdenClienteRow {
   tipoVehiculoId: string
   comboId: string
   creadoEn: string
+  precio: number
+  descuento: number
+  estado: string
 }
 
 // Excluye anuladas (regla 13: quedan visibles en auditoría, pero no representan un servicio
@@ -37,21 +43,26 @@ export async function fetchClientes(): Promise<ClienteResumen[]> {
   const { data, error } = await db
     .from('ordenes')
     .select(
-      'placa, clienteNombre:cliente_nombre, clienteTelefono:cliente_telefono, clienteCorreo:cliente_correo, tipoVehiculoId:tipo_vehiculo_id, comboId:combo_id, creadoEn:creado_en',
+      'placa, clienteNombre:cliente_nombre, clienteTelefono:cliente_telefono, clienteCorreo:cliente_correo, tipoVehiculoId:tipo_vehiculo_id, comboId:combo_id, creadoEn:creado_en, precio, descuento, estado',
     )
     .neq('estado', 'anulada')
     .order('creado_en', { ascending: false })
   if (error) throw new Error(error.message)
 
   const filas = data as unknown as OrdenClienteRow[]
-  const porPlaca = new Map<string, ClienteResumen>()
+  const acc = new Map<string, ClienteResumen & { entregadas: number }>()
   for (const fila of filas) {
-    const existente = porPlaca.get(fila.placa)
+    const gasto = fila.estado === 'entregado' ? fila.precio - fila.descuento : 0
+    const entregada = fila.estado === 'entregado' ? 1 : 0
+    const existente = acc.get(fila.placa)
     if (existente) {
       existente.totalServicios += 1
+      existente.totalGastado += gasto
+      existente.entregadas += entregada
+      if (fila.creadoEn < existente.primerServicioEn) existente.primerServicioEn = fila.creadoEn
       continue
     }
-    porPlaca.set(fila.placa, {
+    acc.set(fila.placa, {
       placa: fila.placa,
       clienteNombre: fila.clienteNombre,
       clienteTelefono: fila.clienteTelefono ?? undefined,
@@ -59,10 +70,17 @@ export async function fetchClientes(): Promise<ClienteResumen[]> {
       tipoVehiculoId: fila.tipoVehiculoId,
       ultimoComboId: fila.comboId,
       ultimoServicioEn: fila.creadoEn,
+      primerServicioEn: fila.creadoEn,
       totalServicios: 1,
+      totalGastado: gasto,
+      ticketPromedio: 0,
+      entregadas: entregada,
     })
   }
-  return Array.from(porPlaca.values())
+  return Array.from(acc.values()).map(({ entregadas, ...c }) => ({
+    ...c,
+    ticketPromedio: entregadas > 0 ? Math.round(c.totalGastado / entregadas) : 0,
+  }))
 }
 
 // Expediente completo de un cliente (por placa): todas sus órdenes —incluidas las anuladas— con

@@ -59,6 +59,20 @@ export async function fetchVentasDeOrden(ordenId: string): Promise<Venta[]> {
 
 // Productos cargados a una cuenta abierta que todavía no se ha cerrado (pendientes) o que ya se
 // cobraron al cerrarla (activas) — para pintar el carrito de una cuenta y el recibo al cerrarla.
+// Todas las ventas (no anuladas) de un producto — expediente del producto: unidades por mes,
+// historial. Más reciente primero.
+export async function fetchVentasDeProducto(productoId: string): Promise<Venta[]> {
+  if (!productoId) return []
+  const { data, error } = await db
+    .from('ventas')
+    .select(VENTA_SELECT)
+    .eq('producto_id', productoId)
+    .neq('estado', 'anulada')
+    .order('creado_en', { ascending: false })
+  if (error) throw new Error(error.message)
+  return ventaSchema.array().parse(data)
+}
+
 // Ventas imputadas a un turno de caja — expediente del turno. Incluye anuladas para la
 // trazabilidad.
 export async function fetchVentasDeTurno(turnoId: string): Promise<Venta[]> {
