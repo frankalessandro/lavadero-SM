@@ -14,6 +14,7 @@ import {
   type StockProducto,
 } from '../../../../data/movimientosInventario'
 import { fetchVentasEnRango } from '../../../../data/ventas'
+import { fetchFaltantesPendientes, type FaltantePendiente } from '../../../../data/conteosInventario'
 import { productoInputSchema, type Producto } from '../../../../schemas/producto'
 import {
   movimientoInventarioInputSchema,
@@ -43,13 +44,14 @@ function hace30DiasISO(): string {
 }
 
 async function loadInventario() {
-  const [productos, stock, movimientos, ventas] = await Promise.all([
+  const [productos, stock, movimientos, ventas, faltantes] = await Promise.all([
     fetchProductos(),
     fetchStockProductos(),
     fetchMovimientos(),
     fetchVentasEnRango(hace30DiasISO(), new Date().toISOString()),
+    fetchFaltantesPendientes(),
   ])
-  return { productos, stock, movimientos: movimientos.slice(0, 15), ventas }
+  return { productos, stock, movimientos: movimientos.slice(0, 15), ventas, faltantes }
 }
 
 export const Route = createFileRoute('/admin/dinero/inventario/')({
@@ -165,6 +167,9 @@ function InventarioPage() {
         <StatCard label="Productos activos" value={String(productosActivos.length)} icon={Boxes} />
         <StatCard label="Valorización total" value={COP.format(valorizacionTotal)} hint="Costo promedio de entradas" icon={Coins} />
       </div>
+
+      <FaltantesPendientes faltantes={data.faltantes} />
+
 
       <div className="grid grid-cols-3 gap-3">
         {(
@@ -860,5 +865,67 @@ function ProductoForm({
         </form>
       </div>
     </div>
+  )
+}
+
+// Faltantes de inventario registrados en el cierre de turno (0048), sin resolver todavía.
+// Agrupados por quién responde. Solo lectura por ahora — cómo se salda (descuento de nómina,
+// efectivo, se perdona) es un feature aparte.
+function FaltantesPendientes({ faltantes }: { faltantes: FaltantePendiente[] }) {
+  const porPersona = useMemo(() => {
+    const mapa = new Map<string, { nombre: string; total: number; items: FaltantePendiente[] }>()
+    for (const f of faltantes) {
+      const key = f.linea.respondePersonaId ?? 'sin'
+      const g = mapa.get(key) ?? { nombre: f.respondeNombre, total: 0, items: [] }
+      g.total += f.linea.valorDiferencia
+      g.items.push(f)
+      mapa.set(key, g)
+    }
+    return [...mapa.values()].sort((a, b) => b.total - a.total)
+  }, [faltantes])
+
+  if (faltantes.length === 0) return null
+
+  const totalGeneral = faltantes.reduce((s, f) => s + f.linea.valorDiferencia, 0)
+
+  return (
+    <Card className="flex flex-col gap-3 border-l-4 border-l-danger-500 p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-danger-50 text-danger-700">
+            <AlertTriangle size={18} />
+          </span>
+          <div>
+            <h3 className="text-sm font-semibold text-neutral-900">Faltantes de inventario por revisar</h3>
+            <p className="text-xs text-neutral-500">Registrados en el cierre de turno, sin saldar</p>
+          </div>
+        </div>
+        <p className="font-mono text-lg font-bold text-danger-700">{COP.format(totalGeneral)}</p>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        {porPersona.map((g) => (
+          <div key={g.nombre} className="rounded-lg bg-neutral-50 p-3">
+            <div className="mb-1.5 flex items-center justify-between">
+              <span className="text-sm font-semibold text-neutral-800">{g.nombre}</span>
+              <span className="font-mono text-sm font-semibold text-danger-700">{COP.format(g.total)}</span>
+            </div>
+            <ul className="flex flex-col gap-1">
+              {g.items.map((f) => (
+                <li key={f.linea.id} className="flex items-center justify-between gap-3 text-xs text-neutral-600">
+                  <span>
+                    {Math.abs(f.linea.diferencia)} × {f.productoNombre}
+                    {f.linea.motivo ? <span className="text-neutral-400"> · {f.linea.motivo}</span> : null}
+                  </span>
+                  <span className="shrink-0 text-neutral-400">
+                    {new Date(f.fecha).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' })}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </Card>
   )
 }

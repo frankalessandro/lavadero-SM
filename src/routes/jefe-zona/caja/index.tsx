@@ -3,22 +3,39 @@ import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { X, CheckCircle2, ClipboardCheck } from 'lucide-react'
 import { fetchTurnoAbierto, fetchTurnos, desgloseEsperado, cerrarTurno, type DesgloseEsperado } from '../../../data/turnos'
 import { fetchCategoriasGasto, fetchGastosDeTurno, type GastoConCategoria } from '../../../data/gastos'
+import { fetchProductosOperativo } from '../../../data/productos'
+import { fetchConteoDeTurno } from '../../../data/conteosInventario'
+import type { ConteoInventario as ConteoInventarioType } from '../../../schemas/conteoInventario'
+
 import type { TurnoCaja } from '../../../schemas/turnoCaja'
 import { Card } from '../../../components/layout/Card'
 import { CurrencyInput } from '../../../components/layout/CurrencyInput'
 import { GastosDeTurno } from '../../../components/layout/GastosDeTurno'
+import { ConteoInventario } from '../../../components/layout/ConteoInventario'
 import { AbrirTurnoPrompt, TurnoResponsableBanner } from '../../../components/layout/TurnoResponsableBanner'
 
 async function loadCaja() {
-  const [turnoAbierto, turnosRecientes, categorias] = await Promise.all([
+  const [turnoAbierto, turnosRecientes, categorias, productos] = await Promise.all([
     fetchTurnoAbierto('jefe_zona'),
     fetchTurnos('jefe_zona'),
     fetchCategoriasGasto(),
+    fetchProductosOperativo(),
   ])
-  // Los gastos del turno dependen del turno abierto, así que van en una segunda ronda — sin
-  // turno abierto no hay caja menuda que mostrar.
-  const gastosTurno = turnoAbierto ? await fetchGastosDeTurno(turnoAbierto.id) : []
-  return { turnoAbierto, turnosRecientes: turnosRecientes.slice(0, 5), categorias, gastosTurno }
+  // Lo que depende del turno abierto va en una segunda ronda.
+  const [gastosTurno, conteoApertura] = turnoAbierto
+    ? await Promise.all([
+        fetchGastosDeTurno(turnoAbierto.id),
+        fetchConteoDeTurno(turnoAbierto.id, 'apertura'),
+      ])
+    : [[], undefined]
+  return {
+    turnoAbierto,
+    turnosRecientes: turnosRecientes.slice(0, 5),
+    categorias,
+    productos,
+    gastosTurno,
+    conteoApertura,
+  }
 }
 
 export const Route = createFileRoute('/jefe-zona/caja/')({
@@ -39,7 +56,9 @@ function CajaJefeZona() {
   const [turnoAbierto, setTurnoAbierto] = useState(data.turnoAbierto)
   const [turnosRecientes, setTurnosRecientes] = useState(data.turnosRecientes)
   const [gastosTurno, setGastosTurno] = useState<GastoConCategoria[]>(data.gastosTurno)
-  const [cerrando, setCerrando] = useState(false)
+  const [conteoApertura, setConteoApertura] = useState<ConteoInventarioType | undefined>(data.conteoApertura)
+  // 'idle' · 'conteo' (falta el conteo de cierre) · 'arqueo' (modal de arqueo de caja)
+  const [cerrandoFase, setCerrandoFase] = useState<'idle' | 'conteo' | 'arqueo'>('idle')
 
   async function refresh() {
     const [nuevoAbierto, nuevosRecientes] = await Promise.all([
@@ -48,8 +67,24 @@ function CajaJefeZona() {
     ])
     setTurnoAbierto(nuevoAbierto)
     setTurnosRecientes(nuevosRecientes.slice(0, 5))
-    setGastosTurno(nuevoAbierto ? await fetchGastosDeTurno(nuevoAbierto.id) : [])
+    if (nuevoAbierto) {
+      const [g, ca] = await Promise.all([
+        fetchGastosDeTurno(nuevoAbierto.id),
+        fetchConteoDeTurno(nuevoAbierto.id, 'apertura'),
+      ])
+      setGastosTurno(g)
+      setConteoApertura(ca)
+    } else {
+      setGastosTurno([])
+      setConteoApertura(undefined)
+    }
     router.invalidate()
+  }
+
+  async function handleCerrarClick() {
+    if (!turnoAbierto) return
+    const cc = await fetchConteoDeTurno(turnoAbierto.id, 'cierre')
+    setCerrandoFase(cc ? 'arqueo' : 'conteo')
   }
 
   return (
@@ -58,7 +93,7 @@ function CajaJefeZona() {
         <TurnoResponsableBanner turno={turnoAbierto} onTransferido={setTurnoAbierto}>
           <button
             type="button"
-            onClick={() => setCerrando(true)}
+            onClick={handleCerrarClick}
             className="flex items-center justify-center gap-2 rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700"
           >
             <ClipboardCheck size={16} />
@@ -68,6 +103,27 @@ function CajaJefeZona() {
       ) : (
         <AbrirTurnoPrompt onAbierto={refresh} />
       )}
+
+      {turnoAbierto && !conteoApertura ? (
+        <ConteoInventario
+          turno={turnoAbierto}
+          momento="apertura"
+          productos={data.productos}
+          onConfirmado={refresh}
+        />
+      ) : null}
+
+      {turnoAbierto && cerrandoFase === 'conteo' ? (
+        <ConteoInventario
+          turno={turnoAbierto}
+          momento="cierre"
+          productos={data.productos}
+          onConfirmado={async () => {
+            await refresh()
+            setCerrandoFase('arqueo')
+          }}
+        />
+      ) : null}
 
       {turnoAbierto ? (
         <GastosDeTurno
@@ -91,12 +147,12 @@ function CajaJefeZona() {
         </div>
       </div>
 
-      {cerrando && turnoAbierto ? (
+      {cerrandoFase === 'arqueo' && turnoAbierto ? (
         <CerrarTurnoModal
           turno={turnoAbierto}
-          onClose={() => setCerrando(false)}
+          onClose={() => setCerrandoFase('idle')}
           onCerrado={async () => {
-            setCerrando(false)
+            setCerrandoFase('idle')
             await refresh()
           }}
         />
