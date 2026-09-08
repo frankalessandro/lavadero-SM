@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { createFileRoute, Link, redirect, useRouter } from '@tanstack/react-router'
+import { createFileRoute, Link, redirect, useNavigate, useRouter } from '@tanstack/react-router'
 import { Package, Car, Lock, Sparkles, AlertTriangle } from 'lucide-react'
 import { SimpleTopbar } from '../../components/layout/SimpleTopbar'
 import { signOut } from '../../lib/auth'
@@ -12,7 +12,14 @@ import { fetchPreciosServicioIndividual, findPrecioServicioIndividual } from '..
 import { fetchPreciosComboFijo } from '../../data/preciosComboFijo'
 import { fetchLavadores, suggestNextLavador } from '../../data/lavadores'
 import { fetchDiasDescanso, ensureDiasDescansoGenerados } from '../../data/asistenciaLavadores'
-import { fetchOrdenesHoy, buscarPorPlaca, createOrden, fetchOrdenEnProcesoPorPlaca } from '../../data/ordenes'
+import {
+  fetchOrdenesHoy,
+  buscarPorPlaca,
+  createOrden,
+  corregirOrden,
+  fetchOrdenPorId,
+  fetchOrdenEnProcesoPorPlaca,
+} from '../../data/ordenes'
 import { fetchTurnoAbierto } from '../../data/turnos'
 import { fetchConfiguracion } from '../../data/configuracion'
 import { ordenInputSchema, type EstadoOrden, type Orden } from '../../schemas/orden'
@@ -33,7 +40,7 @@ function hoyISO(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-async function loadRecepcion() {
+async function loadRecepcion(corrigeId?: string) {
   // Genera (si hace falta) la fila de dias_descanso de hoy antes de leerla — si nadie visitó
   // /jefe-zona/asistencia todavía hoy, esa tabla puede no tener fila para la fecha actual y
   // ningún lavador quedaría marcado como "descansa hoy" en este selector (bug: Javier seguía
@@ -66,7 +73,11 @@ async function loadRecepcion() {
     fetchConfiguracion(),
     fetchDiasDescanso(hoyISO(), hoyISO()),
   ])
+  // Orden a corregir (?corrige=<id>): se trae aparte porque depende del search param, no del
+  // estado general de la pantalla.
+  const corrigiendo = corrigeId ? await fetchOrdenPorId(corrigeId) : undefined
   return {
+    corrigiendo,
     tipos,
     combos,
     servicios,
@@ -83,6 +94,13 @@ async function loadRecepcion() {
 }
 
 export const Route = createFileRoute('/recepcion/')({
+  // El tipo de retorno se anota explícitamente con `corrige?` opcional: sin eso TanStack Router
+  // lo infiere como obligatorio y todos los `<Link to="/recepcion">` del resto de la app
+  // (topbar, dashboard de jefe de zona) exigirían pasar el search param.
+  validateSearch: (search: Record<string, unknown>): { corrige?: string } => ({
+    corrige: typeof search.corrige === 'string' && search.corrige ? search.corrige : undefined,
+  }),
+  loaderDeps: ({ search }) => ({ corrige: search.corrige }),
   beforeLoad: ({ context }) => {
     if (!context.auth) throw redirect({ to: '/login' })
     const { rol, activo } = context.auth.perfil
@@ -90,7 +108,7 @@ export const Route = createFileRoute('/recepcion/')({
       throw redirect({ to: '/login' })
     }
   },
-  loader: loadRecepcion,
+  loader: ({ deps }) => loadRecepcion(deps.corrige),
   component: RecepcionPage,
 })
 
@@ -149,6 +167,8 @@ function RecepcionPage() {
           ordenesHoy={ordenesHoy}
           descansosHoy={data.descansosHoy}
           configuracion={data.configuracion}
+          corrigiendo={data.corrigiendo}
+          responsableTurno={data.turno.responsableActual}
           onCreated={refresh}
         />
       ) : (
@@ -235,6 +255,8 @@ function ReceptionForm({
   ordenesHoy,
   descansosHoy,
   configuracion,
+  corrigiendo,
+  responsableTurno,
   onCreated,
 }: {
   tipos: TipoVehiculo[]
@@ -248,15 +270,39 @@ function ReceptionForm({
   ordenesHoy: Orden[]
   descansosHoy: DiaDescanso[]
   configuracion: Configuracion
+  /** Orden que se está corrigiendo (?corrige=<id>) — precarga el formulario y, al guardar,
+   *  encadena la nueva con la anulación de esta. */
+  corrigiendo?: Orden
+  /** Quién está a cargo del turno — queda como autor de la corrección (0043/0046). */
+  responsableTurno: string
   onCreated: () => void
 }) {
-  const [form, setForm] = useState(emptyForm)
+  const [form, setForm] = useState(() =>
+    corrigiendo
+      ? {
+          placa: corrigiendo.placa,
+          clienteNombre: corrigiendo.clienteNombre,
+          clienteTelefono: corrigiendo.clienteTelefono ?? '',
+          clienteCorreo: corrigiendo.clienteCorreo ?? '',
+          tipoVehiculoId: corrigiendo.tipoVehiculoId,
+          comboId: corrigiendo.comboId ?? '',
+          lavadorId: corrigiendo.lavadorId ?? '',
+          lavadorId2: corrigiendo.lavadorId2 ?? '',
+          observaciones: corrigiendo.observaciones ?? '',
+          altoCilindraje: corrigiendo.altoCilindraje,
+        }
+      : emptyForm,
+  )
+  const [motivoCorreccion, setMotivoCorreccion] = useState('')
+  const navigate = useNavigate()
   // Elegir "combo" o "servicios" es una decisión explícita del usuario, no un valor más dentro
   // del selector de combo — en modo "combo" se puede además agregar servicios sueltos encima
   // (el checklist de abajo sigue disponible); en modo "servicios" la orden es solo servicios,
   // sin combo.
-  const [modo, setModo] = useState<'combo' | 'servicios'>('combo')
-  const [serviciosAdicionales, setServiciosAdicionales] = useState<string[]>([])
+  const [modo, setModo] = useState<'combo' | 'servicios'>(corrigiendo && !corrigiendo.comboId ? 'servicios' : 'combo')
+  const [serviciosAdicionales, setServiciosAdicionales] = useState<string[]>(
+    corrigiendo ? corrigiendo.serviciosAdicionales.map((s) => s.servicioId) : [],
+  )
   const [openStep, setOpenStep] = useState(1)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -268,7 +314,7 @@ function ReceptionForm({
   // "Lavar entre 2" — a criterio de quien recibe, caso a caso. Checkbox separado del selector del
   // segundo lavador para que desmarcar limpie de una vez form.lavadorId2 (evita mandar un
   // lavadorId2 residual si el usuario desmarca sin borrar la selección).
-  const [lavarEntreDos, setLavarEntreDos] = useState(false)
+  const [lavarEntreDos, setLavarEntreDos] = useState(Boolean(corrigiendo?.lavadorId2))
 
   useEffect(() => {
     suggestNextLavador().then((id) => {
@@ -474,10 +520,26 @@ function ReceptionForm({
       setError(parsed.error.issues[0]?.message ?? 'Revisa los datos del formulario')
       return
     }
+    if (corrigiendo && motivoCorreccion.trim().length < 3) {
+      setError('Indica el motivo de la corrección (mínimo 3 caracteres)')
+      return
+    }
     setError(null)
     setSaving(true)
     try {
       const orden = await createOrden(parsed.data)
+      // Corrección (0046): la orden nueva ya existe por el camino normal; ahora se encadena con
+      // la anulación de la anterior en una sola transacción. Si esto fallara, la nueva queda
+      // creada y la vieja viva — el mismo estado en que quedaba el flujo manual, y la RPC es
+      // idempotente, así que reintentar desde el mismo enlace lo termina de cerrar.
+      if (corrigiendo) {
+        await corregirOrden(
+          corrigiendo.id,
+          orden.id,
+          motivoCorreccion.trim(),
+          responsableTurno,
+        )
+      }
       setRecibo({
         consecutivo: orden.consecutivo,
         placa: orden.placa,
@@ -495,7 +557,13 @@ function ReceptionForm({
       setServiciosAdicionales([])
       setMotoDuplicada(undefined)
       setLavarEntreDos(false)
+      setMotivoCorreccion('')
       setOpenStep(1)
+      // Salir del modo corrección: si se queda el `?corrige=` en la URL, el siguiente vehículo que
+      // se registre intentaría encadenarse con una orden que ya quedó anulada.
+      if (corrigiendo) {
+        await navigate({ to: '/recepcion', search: {} })
+      }
       onCreated()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo registrar la orden')
@@ -506,6 +574,32 @@ function ReceptionForm({
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+      {corrigiendo ? (
+        <div className="flex flex-col gap-3 rounded-2xl border border-warning-600/25 bg-warning-50 p-4">
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle size={18} className="mt-0.5 shrink-0 text-warning-700" />
+            <div>
+              <p className="text-sm font-semibold text-warning-700">
+                Corrigiendo la orden #{corrigiendo.consecutivo} · {corrigiendo.placa}
+              </p>
+              <p className="text-xs text-warning-700/80">
+                Los datos vienen precargados. Cambia lo que esté mal y guarda: se registra una orden nueva y la
+                #{corrigiendo.consecutivo} queda anulada, encadenada a la nueva. No se cobra dos veces.
+              </p>
+            </div>
+          </div>
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="font-medium text-neutral-700">¿Qué estaba mal?</span>
+            <input
+              value={motivoCorreccion}
+              onChange={(e) => setMotivoCorreccion(e.target.value)}
+              placeholder="Ej. combo equivocado, precio mal aplicado"
+              className="rounded-lg border border-neutral-300 bg-white px-3 py-3 text-base outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+            />
+          </label>
+        </div>
+      ) : null}
+
       <AccordionSection
         step={1}
         title="Vehículo"

@@ -20,6 +20,7 @@ import {
   Motorbike,
   UserRound,
   Pencil,
+  FileWarning,
   Receipt,
   ClipboardCheck,
   Search,
@@ -1306,6 +1307,18 @@ function OrdenCard({
               Editar cliente
             </button>
           ) : null}
+          {/* Corregir = lo que no se puede arreglar editando (el combo, o el precio de una orden
+              ya cobrada): abre recepción con los datos precargados y, al guardar, encadena la
+              orden nueva con la anulación de esta (ver 0046_corregir_orden.sql). */}
+          <Link
+            to="/recepcion"
+            search={{ corrige: orden.id }}
+            title="El combo o el precio están mal — reemplaza esta orden por una nueva"
+            className="group/btn flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-warning-50 hover:text-warning-700"
+          >
+            <FileWarning size={14} />
+            Corregir
+          </Link>
           {onVolverAProceso ? (
             <button
               type="button"
