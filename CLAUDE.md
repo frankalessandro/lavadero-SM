@@ -523,6 +523,25 @@ Migración `0048_conteo_inventario.sql`. El cierre de turno solo cuadraba la CAJ
 - UI: `src/components/layout/ConteoInventario.tsx` (ciego → revela, reusado en apertura y cierre), montado en `/jefe-zona/caja`. El botón "Cerrar turno" muestra primero el conteo de cierre si falta, luego el arqueo de caja.
 - **Verificado contra el sandbox** (15 aserciones en transacción revertida + RPCs por PostgREST): esperado resta las cuentas abiertas, faltante a costo + estado pendiente + responsable del turno, apertura sin diferencia no genera ajustes, cierre bloqueado sin conteo, apertura duplicada rechazada, justificación obligatoria con diferencia.
 
+## Cierre de brechas contra el Plan (sin migración salvo donde se indica)
+
+Tanda de items que quedaban de la auditoría inicial, para alinear el software al Plan de Alcance.
+
+### Consecutivo de tiquetes con alerta de huecos *(antifraude, Plan §Control antifraude)*
+Sin migración. `src/lib/consecutivo.ts` — `huecosEntre(nums)` (números faltantes entre el mín y el máx presentes) + `formatearHuecos` (agrupa en tramos: `#6–8, #10`). `fetchConsecutivosEnRango` (solo la columna `consecutivo`, consulta liviana). Tarjeta en `/admin/operacion/ordenes` y `MiniDato` "Huecos consecutivo (7d)" en `/admin`. **Una anulación NO es hueco** — la orden anulada conserva su consecutivo; un hueco es un número que nunca se confirmó (insert revertido).
+
+### Anular liquidación — `0049_anular_liquidacion.sql`
+`liquidaciones` y `liquidaciones_jefe_zona` ganan `anulada`/`motivo_anulacion`/`anulada_por`/`anulada_en`. RPCs `anular_liquidacion` / `anular_liquidacion_jefe_zona` (solo admin, solo si `not pagada`): devuelven las órdenes a pendiente (`liquidacion_id*` → null, lo captura la bitácora de 0044) y marcan la fila anulada, en una transacción. Una liquidación **pagada es inmodificable** (misma lógica que un turno cerrado, regla 14). UI en `/admin/dinero/liquidaciones`: botón "Anular" + modal de motivo, badge "Anulada", y las anuladas quedan fuera de todos los totales (`&& !l.anulada`).
+
+### Cruce lavado ↔ parqueadero (regla 8) — `0050_lavado_hoy_por_placa.sql`
+RPC `lavado_hoy_por_placa(placa, desde)` `security definer` — el vigilante **no** lee `ordenes` por RLS; la RPC devuelve solo consecutivo/estado/horas. `p_desde` = inicio del día en hora local (Supabase corre en UTC). En `/vigilante`, al registrar entrada o salida, un aviso: *"Este vehículo tiene un lavado hoy (#N). Regla 8: no paga parqueadero combinado."* **No fuerza el cobro a $0** — si el carro se quedó toda la noche, qué hacer es criterio del vigilante/negocio.
+
+### Suscriptores de parqueadero — `0051_suscripciones_parqueadero.sql`
+Modalidades `mensualidad` y `fijo` (regla 6) solo existían como etiqueta. Tabla `suscripciones_parqueadero` (placa, titular, teléfono, modalidad, valor del periodo, `fecha_inicio`/`fecha_fin`, `activo` — se inactiva no se borra). RLS: admin CRUD, vigilante SELECT (portería). `estadoVigencia(fechaFin)` en `src/schemas/suscripcionParqueadero.ts` → `vigente` / `por_vencer` (≤7 días) / `vencida`. CRUD en `/admin/catalogo/parqueadero` (sección nueva bajo las tarifas, con alerta de "por vencer"). En `/vigilante`, aviso al registrar entrada/salida si la placa es suscriptor, con su estado. **No incluye la multa de la regla 7** — la fórmula sigue pendiente (ver abajo); `fueraDeVentanaSalida` ya marca la alerta.
+
+### Historial de `configuracion` — `0052_configuracion_historial.sql`
+`configuracion` es una fila que se sobrescribe. Tabla `configuracion_historial` (append-only, admin-only) + trigger `after update` que agrega una fila con el estado NUEVO en cada cambio real (`NEW is distinct from OLD` — un UPDATE sin cambio no deja fila). Fila semilla con el estado actual al aplicar. Responde "qué % regía el 20 de agosto" (= la fila con el mayor `vigente_desde <= X`); complementa la bitácora de 0044, que registra el *evento* (quién/cuándo). Sección "Historial de cambios" en `/admin/configuracion` (timeline, la más reciente marcada "Vigente").
+
 ## Pendiente de confirmación con el cliente
 
 - Monto/fórmula de la "multa" por vehículo no retirado antes de las 8:00am (fijo, por fracción, o tarifa de noche adicional completa).
