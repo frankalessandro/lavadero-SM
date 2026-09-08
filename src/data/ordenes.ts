@@ -110,6 +110,31 @@ export async function fetchOrdenesPorPlaca(placa: string): Promise<Orden[]> {
   return (data as Record<string, unknown>[]).map(mapOrdenRow)
 }
 
+// Todas las órdenes donde participó un lavador (como principal o segundo), incluidas las
+// anuladas — para el expediente del lavador. Más reciente primero.
+export async function fetchOrdenesDeLavador(lavadorId: string): Promise<Orden[]> {
+  if (!lavadorId) return []
+  const { data, error } = await db
+    .from('ordenes')
+    .select(ORDEN_SELECT)
+    .or(`lavador_id.eq.${lavadorId},lavador_id_2.eq.${lavadorId}`)
+    .order('consecutivo', { ascending: false })
+  if (error) throw new Error(error.message)
+  return (data as Record<string, unknown>[]).map(mapOrdenRow)
+}
+
+// Órdenes cobradas/imputadas a un turno de caja — para el expediente del turno.
+export async function fetchOrdenesDeTurno(turnoId: string): Promise<Orden[]> {
+  if (!turnoId) return []
+  const { data, error } = await db
+    .from('ordenes')
+    .select(ORDEN_SELECT)
+    .eq('turno_id', turnoId)
+    .order('consecutivo', { ascending: false })
+  if (error) throw new Error(error.message)
+  return (data as Record<string, unknown>[]).map(mapOrdenRow)
+}
+
 // Solo la columna `consecutivo` de las órdenes creadas en el rango — para la detección de huecos
 // (control antifraude). Consulta liviana: no trae el resto de la orden ni los add-ons.
 export async function fetchConsecutivosEnRango(desdeISO: string, hastaISO: string): Promise<number[]> {

@@ -38,7 +38,7 @@ function splitComision(comisionLavador: number, tieneSegundo: boolean): [number,
 // específico — la mitad si lavó entre 2, el total si fue el único. Se usa en cualquier lugar que
 // necesite el monto REAL de un lavador (liquidar, mostrar pendientes), nunca comisionLavador
 // directo cuando puede haber un segundo lavador de por medio.
-function comisionParaLavador(
+export function comisionParaLavador(
   orden: { comisionLavador: number; lavadorId?: string; lavadorId2?: string },
   lavadorId: string,
 ): number {

@@ -59,6 +59,19 @@ export async function fetchVentasDeOrden(ordenId: string): Promise<Venta[]> {
 
 // Productos cargados a una cuenta abierta que todavía no se ha cerrado (pendientes) o que ya se
 // cobraron al cerrarla (activas) — para pintar el carrito de una cuenta y el recibo al cerrarla.
+// Ventas imputadas a un turno de caja — expediente del turno. Incluye anuladas para la
+// trazabilidad.
+export async function fetchVentasDeTurno(turnoId: string): Promise<Venta[]> {
+  if (!turnoId) return []
+  const { data, error } = await db
+    .from('ventas')
+    .select(VENTA_SELECT)
+    .eq('turno_id', turnoId)
+    .order('consecutivo', { ascending: true })
+  if (error) throw new Error(error.message)
+  return ventaSchema.array().parse(data)
+}
+
 // Productos (no anulados) de varias órdenes en una consulta — expediente del cliente.
 export async function fetchVentasDeOrdenes(ordenIds: string[]): Promise<Venta[]> {
   if (ordenIds.length === 0) return []

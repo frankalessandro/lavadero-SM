@@ -1,11 +1,16 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { ClipboardCheck, ClipboardList, Scale } from 'lucide-react'
 import { fetchTurnos } from '../../../../data/turnos'
 import { fetchCorreccionesEnRango, type CorreccionReparto } from '../../../../data/pagos'
+import { fetchCombos } from '../../../../data/combos'
+import { fetchLavadores } from '../../../../data/lavadores'
+import { fetchProductos } from '../../../../data/productos'
 import type { RolCaja, TurnoCaja } from '../../../../schemas/turnoCaja'
 import { Card } from '../../../../components/layout/Card'
 import { StatCard } from '../../../../components/layout/StatCard'
+import { BarChart } from '../../../../components/layout/BarChart'
+import { TurnoExpedienteModal } from '../../../../components/layout/TurnoExpedienteModal'
 import { METODO_PAGO_LABEL } from '../../../../lib/metodoPago'
 import type { MetodoPago } from '../../../../schemas/orden'
 
@@ -47,11 +52,14 @@ function ultimosNDias(dias: number): { desdeISO: string; hastaISO: string } {
 export const Route = createFileRoute('/admin/operacion/turnos/')({
   loader: async () => {
     const { desdeISO, hastaISO } = ultimosNDias(30)
-    const [turnos, correcciones] = await Promise.all([
+    const [turnos, correcciones, combos, lavadores, productos] = await Promise.all([
       fetchByFiltro('todos'),
       fetchCorreccionesEnRango(desdeISO, hastaISO),
+      fetchCombos(),
+      fetchLavadores(),
+      fetchProductos(),
     ])
-    return { turnos, correcciones }
+    return { turnos, correcciones, combos, lavadores, productos }
   },
   component: TurnosPage,
 })
@@ -81,6 +89,11 @@ function TurnosPage() {
   const [turnos, setTurnos] = useState(initial.turnos)
   const correcciones: CorreccionReparto[] = initial.correcciones
   const [loading, setLoading] = useState(false)
+  const [expedienteDe, setExpedienteDe] = useState<TurnoCaja | null>(null)
+
+  const comboNombrePorId = new Map(initial.combos.map((c) => [c.id, c.nombre]))
+  const lavadorNombrePorId = new Map(initial.lavadores.map((l) => [l.id, l.nombre]))
+  const productoNombrePorId = new Map(initial.productos.map((p) => [p.id, p.nombre]))
 
   async function cambiarFiltro(key: FiltroKey) {
     setFiltro(key)
@@ -95,6 +108,19 @@ function TurnosPage() {
   const cerrados = turnos.filter((t) => t.cerrado)
   const conDiferencia = cerrados.filter((t) => (t.diferencia ?? 0) !== 0)
   const sumaDiferencias = cerrados.reduce((total, t) => total + (t.diferencia ?? 0), 0)
+
+  // Diferencia de arqueo por turno cerrado, del más viejo al más nuevo — para ver si hay patrón.
+  const serieDiferencias = useMemo(() => {
+    const ordenados = turnos
+      .filter((t) => t.cerrado)
+      .sort((a, b) => new Date(a.abiertoEn).getTime() - new Date(b.abiertoEn).getTime())
+    return {
+      labels: ordenados.map(
+        (t) => `${ROL_LABEL[t.rol].slice(0, 4)} ${new Date(t.abiertoEn).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' })}`,
+      ),
+      data: ordenados.map((t) => t.diferencia ?? 0),
+    }
+  }, [turnos])
 
   return (
     <div className="flex flex-col gap-6 text-left">
@@ -121,6 +147,20 @@ function TurnosPage() {
           icon={Scale}
         />
       </div>
+
+      {serieDiferencias.data.filter((d) => d !== 0).length > 2 ? (
+        <Card className="flex flex-col gap-2 p-4">
+          <h3 className="text-sm font-semibold text-neutral-900">Diferencia de arqueo por turno</h3>
+          <p className="text-xs text-neutral-500">Positivo = sobrante, negativo = faltante. Del más antiguo al más reciente.</p>
+          <BarChart
+            horizontal={false}
+            labels={serieDiferencias.labels}
+            data={serieDiferencias.data}
+            valueFormatter={(v) => COP.format(v)}
+            height={200}
+          />
+        </Card>
+      ) : null}
 
       <div className="flex rounded-lg border border-neutral-300 p-1 w-fit">
         {FILTROS.map((f) => (
@@ -156,13 +196,20 @@ function TurnosPage() {
             </thead>
             <tbody>
               {turnos.map((turno) => (
-                <tr key={turno.id} className="border-b border-neutral-100 transition-colors last:border-0 hover:bg-primary-50/40">
+                <tr
+                  key={turno.id}
+                  onClick={() => setExpedienteDe(turno)}
+                  className="cursor-pointer border-b border-neutral-100 transition-colors last:border-0 hover:bg-primary-50/40"
+                >
                   <td className="px-5 py-3">
                     <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${ROL_CLASSNAME[turno.rol]}`}>
                       {ROL_LABEL[turno.rol]}
                     </span>
                   </td>
-                  <td className="px-5 py-3 font-medium text-neutral-900">{turno.responsable}</td>
+                  <td className="px-5 py-3 font-medium text-neutral-900">
+                    {turno.responsable}
+                    <span className="ml-1.5 text-xs font-normal text-primary-600">Ver expediente</span>
+                  </td>
                   <td className="px-5 py-3 text-neutral-700">{new Date(turno.abiertoEn).toLocaleString('es-CO')}</td>
                   <td className="px-5 py-3 text-neutral-700">
                     {turno.cerrado ? (
@@ -262,6 +309,16 @@ function TurnosPage() {
           </div>
         </Card>
       </div>
+
+      {expedienteDe ? (
+        <TurnoExpedienteModal
+          turno={expedienteDe}
+          comboNombre={(id) => (id ? comboNombrePorId.get(id) ?? '—' : 'Sin combo')}
+          lavadorNombre={(id) => (id ? lavadorNombrePorId.get(id) : undefined)}
+          productoNombre={(id) => productoNombrePorId.get(id) ?? 'Producto'}
+          onClose={() => setExpedienteDe(null)}
+        />
+      ) : null}
     </div>
   )
 }

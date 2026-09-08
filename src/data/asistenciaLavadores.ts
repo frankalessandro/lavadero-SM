@@ -113,6 +113,19 @@ export async function fetchAsistenciasDelDia(fechaISO: string): Promise<Asistenc
   return asistenciaLavadorSchema.array().parse(data)
 }
 
+// Rango de fechas (YYYY-MM-DD, ambas inclusivas) — para el expediente del lavador (% de días
+// trabajados, faltas).
+export async function fetchAsistenciasEnRango(desdeISO: string, hastaISO: string): Promise<AsistenciaLavador[]> {
+  const { data, error } = await db
+    .from('asistencias_lavadores')
+    .select(ASISTENCIA_SELECT)
+    .gte('fecha', desdeISO)
+    .lte('fecha', hastaISO)
+    .order('fecha', { ascending: false })
+  if (error) throw new Error(error.message)
+  return asistenciaLavadorSchema.array().parse(data)
+}
+
 // Marca la llegada de un lavador — una sola vez por día (unique(lavador_id, fecha) en la
 // tabla). La UI deshabilita el botón tras marcar para no depender de este error en el flujo
 // normal, pero igual queda protegido a nivel de base de datos ante doble clic/carrera.

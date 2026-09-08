@@ -91,6 +91,24 @@ export async function cerrarConteoInventario(
   return conteoInventarioSchema.parse(data)
 }
 
+export interface ConteoLineaConProducto extends ConteoLinea {
+  productoNombre: string
+}
+
+// Todas las líneas de un conteo (admin-only, lleva el valor a costo) — para el expediente del
+// turno.
+export async function fetchLineasDeConteo(conteoId: string): Promise<ConteoLineaConProducto[]> {
+  const { data, error } = await db
+    .from('conteos_inventario_lineas')
+    .select(`${LINEA_SELECT}, productos(nombre)`)
+    .eq('conteo_id', conteoId)
+  if (error) throw new Error(error.message)
+  return (data as unknown as Record<string, unknown>[]).map((row) => ({
+    ...conteoLineaSchema.parse(row),
+    productoNombre: (row.productos as { nombre: string } | null)?.nombre ?? '—',
+  }))
+}
+
 export interface FaltantePendiente {
   linea: ConteoLinea
   productoNombre: string

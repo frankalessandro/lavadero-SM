@@ -7,22 +7,35 @@ import {
   updateLavador,
   setLavadorActivo,
 } from '../../../../data/lavadores'
+import { fetchResumenLavadores } from '../../../../data/expedienteLavador'
+import { fetchCombos } from '../../../../data/combos'
+import { fetchProductos } from '../../../../data/productos'
 import { lavadorInputSchema, type Lavador } from '../../../../schemas/lavador'
 import { Card } from '../../../../components/layout/Card'
 import { ConfirmModal } from '../../../../components/layout/ConfirmModal'
+import { LavadorExpedienteModal } from '../../../../components/layout/LavadorExpedienteModal'
 
 export const Route = createFileRoute('/admin/personal/lavadores/')({
-  loader: fetchLavadores,
+  loader: async () => ({
+    lavadores: await fetchLavadores(),
+    resumen: await fetchResumenLavadores(),
+    combos: await fetchCombos(),
+    productos: await fetchProductos(),
+  }),
   component: LavadoresPage,
 })
 
 function LavadoresPage() {
   const initial = Route.useLoaderData()
   const router = useRouter()
-  const [lavadores, setLavadores] = useState(initial)
+  const [lavadores, setLavadores] = useState(initial.lavadores)
   const [editing, setEditing] = useState<Lavador | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [confirmando, setConfirmando] = useState<Lavador | null>(null)
+  const [expedienteDe, setExpedienteDe] = useState<Lavador | null>(null)
+
+  const comboNombrePorId = new Map(initial.combos.map((c) => [c.id, c.nombre]))
+  const productoNombrePorId = new Map(initial.productos.map((p) => [p.id, p.nombre]))
 
   async function refresh() {
     setLavadores(await fetchLavadores())
@@ -79,9 +92,13 @@ function LavadoresPage() {
             {lavadores.map((lavador) => (
               <tr
                 key={lavador.id}
-                className="border-b border-neutral-100 transition-colors last:border-0 hover:bg-primary-50/40"
+                onClick={() => setExpedienteDe(lavador)}
+                className="cursor-pointer border-b border-neutral-100 transition-colors last:border-0 hover:bg-primary-50/40"
               >
-                <td className="px-5 py-3 font-medium text-neutral-900">{lavador.nombre}</td>
+                <td className="px-5 py-3 font-medium text-neutral-900">
+                  {lavador.nombre}
+                  <span className="ml-1.5 text-xs font-normal text-primary-600">Ver expediente</span>
+                </td>
                 <td className="px-5 py-3 text-neutral-600">{lavador.telefono || '—'}</td>
                 <td className="px-5 py-3 text-neutral-600">
                   {new Date(lavador.fechaIngreso).toLocaleDateString('es-CO')}
@@ -95,7 +112,7 @@ function LavadoresPage() {
                     {lavador.activo ? 'Activo' : 'Inactivo'}
                   </span>
                 </td>
-                <td className="px-5 py-3">
+                <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
                   <div className="flex justify-end gap-2">
                     <button
                       type="button"
@@ -126,6 +143,16 @@ function LavadoresPage() {
           </tbody>
         </table>
       </Card>
+
+      {expedienteDe ? (
+        <LavadorExpedienteModal
+          lavador={expedienteDe}
+          resumen={initial.resumen}
+          comboNombre={(id) => (id ? comboNombrePorId.get(id) ?? '—' : 'Sin combo')}
+          productoNombre={(id) => productoNombrePorId.get(id) ?? 'Producto'}
+          onClose={() => setExpedienteDe(null)}
+        />
+      ) : null}
 
       {formOpen ? (
         <LavadorForm

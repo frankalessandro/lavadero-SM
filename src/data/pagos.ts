@@ -22,6 +22,19 @@ export async function fetchPagosDeOrden(ordenId: string): Promise<Pago[]> {
   return pagoSchema.array().parse(data)
 }
 
+// Todas las líneas de pago imputadas a un turno (incluidas las anuladas) — para el expediente
+// del turno: desglose por método, correcciones, etc.
+export async function fetchPagosDeTurno(turnoId: string): Promise<Pago[]> {
+  if (!turnoId) return []
+  const { data, error } = await db
+    .from('pagos')
+    .select(PAGO_SELECT)
+    .eq('turno_id', turnoId)
+    .order('creado_en', { ascending: true })
+  if (error) throw new Error(error.message)
+  return pagoSchema.array().parse(data)
+}
+
 // Líneas vigentes de varias órdenes en una sola consulta — para el expediente del cliente.
 export async function fetchPagosDeOrdenes(ordenIds: string[]): Promise<Pago[]> {
   if (ordenIds.length === 0) return []
