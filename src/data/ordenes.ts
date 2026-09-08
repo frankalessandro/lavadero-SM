@@ -17,7 +17,7 @@ import { fetchTurnoAbierto } from './turnos'
 // orden_servicios embebido vía FK de PostgREST (mismo patrón que `categorias_gasto(nombre)`
 // en `src/data/gastos.ts`): trae los add-ons de cada orden en la misma consulta.
 const ORDEN_SELECT =
-  'id, consecutivo, placa, clienteNombre:cliente_nombre, clienteTelefono:cliente_telefono, clienteCorreo:cliente_correo, tipoVehiculoId:tipo_vehiculo_id, comboId:combo_id, lavadorId:lavador_id, lavadorId2:lavador_id_2, precio, descuento, descuentoPct:descuento_pct, descuentoMotivo:descuento_motivo, descuentoAutorizadoPor:descuento_autorizado_por, altoCilindraje:alto_cilindraje, comisionLavador:comision_lavador, comisionJefeZona:comision_jefe_zona, jefeZonaResponsable:jefe_zona_responsable, comisionNegocio:comision_negocio, metodoPago:metodo_pago, referenciaPago:referencia_pago, observaciones, estado, creadoEn:creado_en, listaEn:lista_en, entregadaEn:entregada_en, tiempoLavadoSegundos:tiempo_lavado_segundos, tiempoEsperaEntregaSegundos:tiempo_espera_entrega_segundos, notificadoListo:notificado_listo, liquidacionId:liquidacion_id, liquidacionId2:liquidacion_id_2, liquidacionJefeZonaId:liquidacion_jefe_zona_id, motivoAnulacion:motivo_anulacion, anuladaEn:anulada_en, anuladaPor:anulada_por, serviciosAdicionales:orden_servicios(servicioId:servicio_id, precio, servicios(nombre))'
+  'id, consecutivo, placa, clienteNombre:cliente_nombre, clienteTelefono:cliente_telefono, clienteCorreo:cliente_correo, tipoVehiculoId:tipo_vehiculo_id, comboId:combo_id, lavadorId:lavador_id, lavadorId2:lavador_id_2, precio, descuento, descuentoPct:descuento_pct, descuentoMotivo:descuento_motivo, descuentoAutorizadoPor:descuento_autorizado_por, altoCilindraje:alto_cilindraje, comisionLavador:comision_lavador, comisionJefeZona:comision_jefe_zona, jefeZonaResponsable:jefe_zona_responsable, jefeZonaPersonaId:jefe_zona_persona_id, comisionNegocio:comision_negocio, metodoPago:metodo_pago, referenciaPago:referencia_pago, observaciones, estado, creadoEn:creado_en, listaEn:lista_en, entregadaEn:entregada_en, tiempoLavadoSegundos:tiempo_lavado_segundos, tiempoEsperaEntregaSegundos:tiempo_espera_entrega_segundos, notificadoListo:notificado_listo, liquidacionId:liquidacion_id, liquidacionId2:liquidacion_id_2, liquidacionJefeZonaId:liquidacion_jefe_zona_id, corrigeAOrdenId:corrige_a_orden_id, motivoAnulacion:motivo_anulacion, anuladaEn:anulada_en, anuladaPor:anulada_por, serviciosAdicionales:orden_servicios(servicioId:servicio_id, precio, servicios(nombre))'
 
 interface OrdenServicioAdicionalRaw {
   servicioId: string
@@ -266,6 +266,9 @@ export async function createOrden(input: OrdenInput): Promise<Orden> {
       comision_lavador: comisionLavador,
       comision_jefe_zona: comisionJefeZona,
       jefe_zona_responsable: turno.responsableActual,
+      // La persona a cargo del turno en este momento (0043): es la clave por la que se agrupa y
+      // se liquida la comisión de jefe de patio. El texto de arriba se conserva como snapshot.
+      jefe_zona_persona_id: turno.responsableActualPersonaId ?? null,
       comision_negocio: comisionNegocio,
       observaciones: parsed.observaciones,
     })
@@ -310,29 +313,7 @@ export async function createOrden(input: OrdenInput): Promise<Orden> {
 // recalcula después, por eso se lee `creado_en` antes del update en vez de restar en el cliente
 // (PostgREST no permite expresiones sobre columnas existentes dentro de un update).
 export async function marcarListo(id: string): Promise<Orden> {
-  const { data: actual, error: errorActual } = await db
-    .from('ordenes')
-    .select('creadoEn:creado_en')
-    .eq('id', id)
-    .single()
-  if (errorActual) throw new Error(errorActual.message)
-
-  const ahora = new Date()
-  const tiempoLavadoSegundos = Math.max(
-    0,
-    Math.round((ahora.getTime() - new Date(actual.creadoEn as string).getTime()) / 1000),
-  )
-
-  const { data, error } = await db
-    .from('ordenes')
-    .update({
-      estado: 'listo',
-      lista_en: ahora.toISOString(),
-      tiempo_lavado_segundos: tiempoLavadoSegundos,
-    })
-    .eq('id', id)
-    .select(ORDEN_SELECT)
-    .single()
+  const { data, error } = await db.rpc('marcar_listo', { p_orden_id: id }).select(ORDEN_SELECT).single()
   if (error) throw new Error(error.message)
   return mapOrdenRow(data as unknown as Record<string, unknown>)
 }
@@ -343,12 +324,7 @@ export async function marcarListo(id: string): Promise<Orden> {
 // frescos y no queden datos de la vuelta anterior. También limpia el check de "ya avisé al
 // cliente" (notificado_listo) — ya no aplica mientras el vehículo no esté listo otra vez.
 export async function volverAProceso(id: string): Promise<Orden> {
-  const { data, error } = await db
-    .from('ordenes')
-    .update({ estado: 'en_proceso', lista_en: null, tiempo_lavado_segundos: null, notificado_listo: false })
-    .eq('id', id)
-    .select(ORDEN_SELECT)
-    .single()
+  const { data, error } = await db.rpc('volver_a_proceso', { p_orden_id: id }).select(ORDEN_SELECT).single()
   if (error) throw new Error(error.message)
   return mapOrdenRow(data as unknown as Record<string, unknown>)
 }
@@ -363,18 +339,13 @@ export async function volverAProceso(id: string): Promise<Orden> {
 // "lavar entre 2" (2, columna `lavador_id_2`) — mismo modal/función sirve para asignar, cambiar o
 // quitar cualquiera de los dos desde el tablero de seguimiento.
 export async function reasignarLavador(id: string, nuevoLavadorId: string | null, slot: 1 | 2 = 1): Promise<Orden> {
-  const columna = slot === 1 ? 'lavador_id' : 'lavador_id_2'
+  // El avance de la cola de rotación (regla 9) ya no se hace acá con una segunda llamada: va
+  // dentro de la RPC, en la misma transacción que el cambio de lavador.
   const { data, error } = await db
-    .from('ordenes')
-    .update({ [columna]: nuevoLavadorId })
-    .eq('id', id)
+    .rpc('reasignar_lavador', { p_orden_id: id, p_lavador_id: nuevoLavadorId, p_slot: slot })
     .select(ORDEN_SELECT)
     .single()
   if (error) throw new Error(error.message)
-  if (!nuevoLavadorId) {
-    return mapOrdenRow(data as unknown as Record<string, unknown>)
-  }
-  await registrarAsignacion(nuevoLavadorId)
   return mapOrdenRow(data as unknown as Record<string, unknown>)
 }
 
@@ -382,9 +353,7 @@ export async function reasignarLavador(id: string, nuevoLavadorId: string | null
 // tablero de seguimiento, no dispara ningún efecto de negocio (no cobra, no cambia estado).
 export async function marcarNotificado(id: string, notificado: boolean): Promise<Orden> {
   const { data, error } = await db
-    .from('ordenes')
-    .update({ notificado_listo: notificado })
-    .eq('id', id)
+    .rpc('marcar_notificado', { p_orden_id: id, p_notificado: notificado })
     .select(ORDEN_SELECT)
     .single()
   if (error) throw new Error(error.message)
@@ -415,14 +384,13 @@ export async function cambiarTipoOrden(id: string, tipoVehiculoId: string): Prom
 export async function editarInfoCliente(id: string, input: ClienteInfoInput): Promise<Orden> {
   const parsed = clienteInfoInputSchema.parse(input)
   const { data, error } = await db
-    .from('ordenes')
-    .update({
-      placa: parsed.placa,
-      cliente_nombre: parsed.clienteNombre,
-      cliente_telefono: parsed.clienteTelefono ?? null,
-      cliente_correo: parsed.clienteCorreo ?? null,
+    .rpc('editar_info_cliente', {
+      p_orden_id: id,
+      p_placa: parsed.placa,
+      p_cliente_nombre: parsed.clienteNombre,
+      p_cliente_telefono: parsed.clienteTelefono ?? null,
+      p_cliente_correo: parsed.clienteCorreo ?? null,
     })
-    .eq('id', id)
     .select(ORDEN_SELECT)
     .single()
   if (error) throw new Error(error.message)
@@ -471,19 +439,45 @@ export async function cobrarYEntregarOrden(
   return mapOrdenRow(data as unknown as Record<string, unknown>)
 }
 
+// Trae una orden puntual por id — la usa /recepcion para precargar el formulario cuando se entra
+// a corregir una orden existente (?corrige=<id>).
+export async function fetchOrdenPorId(id: string): Promise<Orden | undefined> {
+  const { data, error } = await db.from('ordenes').select(ORDEN_SELECT).eq('id', id).maybeSingle()
+  if (error) throw new Error(error.message)
+  return data ? mapOrdenRow(data as unknown as Record<string, unknown>) : undefined
+}
+
+// Encadena una anulación con su reemplazo (0046). El flujo real del negocio cuando algo no se
+// puede arreglar con "Editar" (el combo, o el precio de una orden ya cobrada) es descartar y
+// volver a ingresar; esto lo vuelve un solo acto en vez de dos pasos manuales que pueden quedar a
+// medias. La orden NUEVA se crea antes con `createOrden` —el camino de siempre, con su cálculo de
+// precio y comisiones— y esta función marca el vínculo y anula la vieja en una transacción.
+// Es idempotente: si falla la red, se puede reintentar sin duplicar nada.
+export async function corregirOrden(
+  ordenAnteriorId: string,
+  ordenNuevaId: string,
+  motivo: string,
+  corregidaPor: string,
+): Promise<Orden> {
+  const { data, error } = await db
+    .rpc('corregir_orden', {
+      p_orden_anterior: ordenAnteriorId,
+      p_orden_nueva: ordenNuevaId,
+      p_motivo: motivo,
+      p_corregida_por: corregidaPor,
+    })
+    .select(ORDEN_SELECT)
+    .single()
+  if (error) throw new Error(error.message)
+  return mapOrdenRow(data as unknown as Record<string, unknown>)
+}
+
 // Regla de negocio 13: ningún registro se elimina — se anula con motivo obligatorio y queda
 // visible en reportes/auditoría (bitácora simplificada: quién y cuándo, sin sesión real todavía).
 export async function anularOrden(id: string, input: AnularOrdenInput): Promise<Orden> {
   const parsed = anularOrdenInputSchema.parse(input)
   const { data, error } = await db
-    .from('ordenes')
-    .update({
-      estado: 'anulada',
-      motivo_anulacion: parsed.motivo,
-      anulada_por: parsed.anuladaPor,
-      anulada_en: new Date().toISOString(),
-    })
-    .eq('id', id)
+    .rpc('anular_orden', { p_orden_id: id, p_motivo: parsed.motivo, p_anulada_por: parsed.anuladaPor })
     .select(ORDEN_SELECT)
     .single()
   if (error) throw new Error(error.message)

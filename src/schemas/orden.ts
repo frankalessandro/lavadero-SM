@@ -94,6 +94,10 @@ export const ordenSchema = z.object({
   // del lavador) — comisionNegocio ya no es "el resto del lavador", es el resto de los dos.
   comisionJefeZona: z.number().int().nonnegative(),
   jefeZonaResponsable: nullableTrimmedString,
+  // Persona real a cargo del turno cuando se creó la orden (FK a `personal_operativo`, 0043).
+  // Es la clave por la que se agrupa y liquida la comisión de jefe de patio; el texto de arriba
+  // queda como evidencia de lo que se tecleó en su momento.
+  jefeZonaPersonaId: nullableTrimmedString,
   comisionNegocio: z.number().int().nonnegative(),
   // Se conoce recién al cobrar/entregar, no al registrar el vehículo.
   metodoPago: metodoPagoSchema.nullish().transform((value) => value ?? undefined),
@@ -117,6 +121,9 @@ export const ordenSchema = z.object({
   // lavadores (ver src/data/liquidacionesJefeZona.ts), independiente por completo de
   // liquidacionId/liquidacionId2.
   liquidacionJefeZonaId: nullableTimestamp,
+  // Orden anulada a la que esta reemplaza (0046). Solo viene en una orden creada desde el flujo
+  // de "Corregir orden"; en una orden normal es undefined.
+  corrigeAOrdenId: nullableTrimmedString,
   motivoAnulacion: nullableTrimmedString,
   anuladaEn: nullableTimestamp,
   anuladaPor: nullableTrimmedString,

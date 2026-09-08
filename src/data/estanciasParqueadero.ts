@@ -83,30 +83,16 @@ export async function registrarEntrada(input: EntradaInput): Promise<EstanciaPar
   return estanciaParqueaderoSchema.parse(data)
 }
 
+// Va por la RPC `registrar_salida_parqueadero` (0045), no por un UPDATE suelto: la salida es el
+// momento en que se fija el cobro (regla 17), así que la tarifa, el turno al que se imputa y el
+// cambio de estado tienen que resolverse en la base, en una transacción, y no en tres llamadas
+// desde el cliente. Desde 0045 el vigilante ya no tiene UPDATE directo sobre `estancias_parqueadero`.
 export async function registrarSalida(
   id: string,
   metodoPago?: MetodoPagoParqueadero,
 ): Promise<EstanciaParqueadero> {
-  const { data: actual, error: fetchError } = await db
-    .from('estancias_parqueadero')
-    .select('modalidad')
-    .eq('id', id)
-    .single()
-  if (fetchError) throw new Error(fetchError.message)
-
-  const cobro = await cobroPorModalidad(actual.modalidad as ModalidadParqueadero)
-  const turno = await fetchTurnoAbierto('vigilante')
-
   const { data, error } = await db
-    .from('estancias_parqueadero')
-    .update({
-      estado: 'fuera',
-      hora_salida: new Date().toISOString(),
-      cobro,
-      metodo_pago: cobro > 0 ? metodoPago : undefined,
-      turno_id: turno?.id,
-    })
-    .eq('id', id)
+    .rpc('registrar_salida_parqueadero', { p_estancia_id: id, p_metodo_pago: metodoPago ?? null })
     .select(ESTANCIA_SELECT)
     .single()
   if (error) throw new Error(error.message)
