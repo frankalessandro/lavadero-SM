@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { createFileRoute, redirect } from '@tanstack/react-router'
+import { Eye, EyeOff } from 'lucide-react'
 import { Card } from '../../components/layout/Card'
 import { db, USE_LOCAL_DB } from '../../lib/db'
 import { signOut } from '../../lib/auth'
@@ -17,6 +18,8 @@ function CambiarPasswordPage() {
   const { auth } = Route.useRouteContext()
   const [password, setPassword] = useState('')
   const [confirmar, setConfirmar] = useState('')
+  // Un solo campo visible a la vez: activar el ojo de uno oculta el otro.
+  const [visible, setVisible] = useState<'nueva' | 'confirmar' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -66,25 +69,45 @@ function CambiarPasswordPage() {
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-medium text-neutral-700">Nueva contraseña</span>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="new-password"
-              className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-            />
+            <div className="relative">
+              <input
+                type={visible === 'nueva' ? 'text' : 'password'}
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
+                className="w-full rounded-lg border border-neutral-300 px-3 py-2.5 pr-10 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+              />
+              <button
+                type="button"
+                onClick={() => setVisible((v) => (v === 'nueva' ? null : 'nueva'))}
+                aria-label={visible === 'nueva' ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-neutral-400 transition-colors hover:text-neutral-700"
+              >
+                {visible === 'nueva' ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
           </label>
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-medium text-neutral-700">Confirmar contraseña</span>
-            <input
-              type="password"
-              required
-              value={confirmar}
-              onChange={(e) => setConfirmar(e.target.value)}
-              autoComplete="new-password"
-              className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-            />
+            <div className="relative">
+              <input
+                type={visible === 'confirmar' ? 'text' : 'password'}
+                required
+                value={confirmar}
+                onChange={(e) => setConfirmar(e.target.value)}
+                autoComplete="new-password"
+                className="w-full rounded-lg border border-neutral-300 px-3 py-2.5 pr-10 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+              />
+              <button
+                type="button"
+                onClick={() => setVisible((v) => (v === 'confirmar' ? null : 'confirmar'))}
+                aria-label={visible === 'confirmar' ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-neutral-400 transition-colors hover:text-neutral-700"
+              >
+                {visible === 'confirmar' ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
           </label>
 
           {error ? <p className="rounded-lg bg-danger-50 px-3 py-2.5 text-sm text-danger-700">{error}</p> : null}

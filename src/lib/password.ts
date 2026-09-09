@@ -1,16 +1,19 @@
 // Contraseña desechable para el alta y el reseteo de cuentas — se muestra una vez al admin y la
 // persona la cambia obligatoriamente en su primer ingreso (perfiles.debe_cambiar_password).
-// Sin caracteres ambiguos (0/O, 1/l/I) para que se pueda dictar sin errores.
-const ALFABETO = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+// Formato pensado para dictarse por teléfono sin errores: prefijo fijo `sm-` + una tira
+// consonante-vocal pronunciable (p. ej. "sm-kotibe"). Sin caracteres ambiguos ni dígitos.
+const CONSONANTES = 'bcdfghjkmnpqrstvwxyz'
+const VOCALES = 'aeiou'
 
-export function generarPasswordDesechable(largo = 12): string {
-  const buffer = new Uint32Array(largo)
+export function generarPasswordDesechable(silabas = 3): string {
+  const buffer = new Uint32Array(silabas * 2)
   crypto.getRandomValues(buffer)
-  let salida = ''
-  for (let i = 0; i < largo; i += 1) {
-    salida += ALFABETO[buffer[i] % ALFABETO.length]
+  let cuerpo = ''
+  for (let i = 0; i < silabas; i += 1) {
+    cuerpo += CONSONANTES[buffer[i * 2] % CONSONANTES.length]
+    cuerpo += VOCALES[buffer[i * 2 + 1] % VOCALES.length]
   }
-  return salida
+  return `sm-${cuerpo}`
 }
 
 // nombre + apellido -> "nombreapellido", sin tildes, minúsculas, solo alfanumérico. Es lo que
