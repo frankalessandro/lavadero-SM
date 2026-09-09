@@ -464,6 +464,7 @@ Migración `0053_cuentas_multi_rol.sql` + Edge Functions. Reemplaza *una cuenta 
 - **Edge Functions**: `admin-create-usuario` ahora chequea `rol_activo === 'admin'` (era `rol !== 'admin'`); `admin-reset-password` nuevo. Deploy con `supabase functions deploy`.
 - **Sandbox**: `db/local-shims.sql` agrega las 4 columnas al stub de `perfiles`. 0053 reescribe `interno.rol_actual()`/`es_admin()` para leer `perfiles`, pero en el sandbox `auth.uid()` es NULL → devolverían NULL y las RPCs de ventas fallarían el chequeo de rol. **Tras aplicar 0053 al sandbox hay que re-ejecutar `db/local-shims.sql`** (idempotente) para restaurar los stubs hardcodeados `rol_actual()='jefe_zona'` / `es_admin()=false`, y `notify pgrst`.
 - **Pendiente operativo tras el deploy**: crear las cuentas individuales reales (Frank/Laura/Julián con `roles` según cubran) e inactivar las 3 compartidas. Se hace desde el panel, no por SQL.
+- **Hotfix `0054_actor_rol_activo.sql`**: 0053 reescribió `interno.rol_actual()`/`es_admin()` pero se saltó `interno.actor()` (bitácora, 0044), que seguía leyendo `perfiles.rol`. Como el trigger de auditoría llama `actor()` en cada escritura instrumentada, tras 0053 todo UPDATE de `ordenes` (y ventas, turnos, precios, inventario, config) reventaba con `column p.rol does not exist`. 0054 lo pasa a `rol_activo`. Al reescribir un helper de `interno` que lee `perfiles`, revisar SIEMPRE `actor()` además de `rol_actual`/`es_admin`/`es_activo`.
 
 ## Autoridad del jefe de patio: control por responsable + bitácora, sin PIN
 
