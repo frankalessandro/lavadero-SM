@@ -9,6 +9,7 @@ import type { MomentoConteo, PreviewLineaConteo } from '../../schemas/conteoInve
 import type { Producto } from '../../schemas/producto'
 import type { TurnoCaja } from '../../schemas/turnoCaja'
 import { Card } from './Card'
+import { toast } from '../../lib/toast'
 
 interface ConteoInventarioProps {
   turno: TurnoCaja
@@ -70,6 +71,7 @@ export function ConteoInventario({ turno, momento, productos, onConfirmado }: Co
       setPaso('revelado')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo calcular el esperado')
+      toast.desdeError(err, 'No se pudo calcular el esperado')
     } finally {
       setLoading(false)
     }
@@ -102,8 +104,10 @@ export function ConteoInventario({ turno, momento, productos, onConfirmado }: Co
         await cerrarConteoInventario(turno.id, lineas, justificacion.trim() || undefined)
       }
       await onConfirmado()
+      toast.exito(esApertura ? 'Conteo de apertura registrado' : 'Conteo de cierre registrado')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo registrar el conteo')
+      toast.desdeError(err, 'No se pudo registrar el conteo')
     } finally {
       enVueloRef.current = false
       setLoading(false)

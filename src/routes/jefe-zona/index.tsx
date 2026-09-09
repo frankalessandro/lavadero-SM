@@ -58,6 +58,7 @@ import { fetchStockProductosOperativo } from '../../data/movimientosInventario'
 import { createVenta, anularVenta, fetchVentasPendientes, fetchVentasDeOrden } from '../../data/ventas'
 import { fetchPagosHoy } from '../../data/pagos'
 import type { Venta } from '../../schemas/venta'
+import { toast } from '../../lib/toast'
 import type { Pago } from '../../schemas/pago'
 import type { Producto } from '../../schemas/producto'
 import { clienteInfoInputSchema, type Orden } from '../../schemas/orden'
@@ -261,6 +262,10 @@ function JefeZonaDashboard() {
       enVueloRef.current = true
       try {
         await refresh()
+      } catch {
+        // Sin toast a propósito: es un refresco automático cada 12s — un toast por cada fallo de
+        // red intermitente sería ruido constante, no una señal útil. Si la conexión se cae de
+        // verdad, la próxima acción del usuario (cobrar, anular, etc.) sí falla con su propio toast.
       } finally {
         enVueloRef.current = false
       }
@@ -275,8 +280,14 @@ function JefeZonaDashboard() {
   }
 
   async function handleToggleNotificado(orden: Orden) {
-    await marcarNotificado(orden.id, !orden.notificadoListo)
-    await refresh()
+    // Sin ConfirmModal (es un check rápido, no una acción que pida confirmación) — sin este
+    // catch, un rechazo de la RPC fallaba en silencio, sin nada en pantalla.
+    try {
+      await marcarNotificado(orden.id, !orden.notificadoListo)
+      await refresh()
+    } catch (err) {
+      toast.desdeError(err, 'No se pudo actualizar el aviso')
+    }
   }
 
   async function handleVolverAProceso(orden: Orden) {
@@ -965,6 +976,7 @@ function JefeZonaDashboard() {
           message="Pasará a la columna de Listos para cobrar."
           confirmLabel="Finalizar lavado"
           variant="primary"
+          successMessage="Lavado finalizado"
           onConfirm={async () => {
             await handleMarcarListo(finalizando)
             setFinalizando(null)
@@ -979,6 +991,7 @@ function JefeZonaDashboard() {
           message="Para cuando se marcó Listo por equivocación — vuelve a la columna En proceso y se puede finalizar de nuevo cuando corresponda."
           confirmLabel="Volver a proceso"
           variant="primary"
+          successMessage="Orden devuelta a proceso"
           onConfirm={async () => {
             await handleVolverAProceso(volviendoAProceso)
             setVolviendoAProceso(null)
@@ -1650,6 +1663,9 @@ function ReasignarModal({
       if (cambioPrincipal) await reasignarLavador(orden.id, nuevoPrincipal, 1)
       if (cambioSegundo) await reasignarLavador(orden.id, nuevoSegundo, 2)
       await onReasignado()
+      toast.exito(esAsignacion ? 'Lavador asignado' : 'Lavador reasignado')
+    } catch (err) {
+      toast.desdeError(err, 'No se pudo reasignar el lavador')
     } finally {
       setSaving(false)
     }
@@ -1766,6 +1782,7 @@ function EditarClienteModal({
       await onGuardado()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo guardar el cambio')
+      toast.desdeError(err, 'No se pudo guardar el cambio')
     } finally {
       setSaving(false)
     }
@@ -1947,6 +1964,7 @@ function CobroModal({
       onCobrado(pagos, descuento ? { monto: descuento.monto, motivo: descuento.motivo } : undefined)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo registrar el cobro')
+      toast.desdeError(err, 'No se pudo registrar el cobro')
     } finally {
       setSaving(false)
     }

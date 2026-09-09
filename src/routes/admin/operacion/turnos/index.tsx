@@ -11,6 +11,9 @@ import { Card } from '../../../../components/layout/Card'
 import { StatCard } from '../../../../components/layout/StatCard'
 import { BarChart } from '../../../../components/layout/BarChart'
 import { TurnoExpedienteModal } from '../../../../components/layout/TurnoExpedienteModal'
+import { ThTexto, ThSelect } from '../../../../components/layout/TableHeadFilter'
+import { coincide } from '../../../../lib/tableFilters'
+import { toast } from '../../../../lib/toast'
 import { METODO_PAGO_LABEL } from '../../../../lib/metodoPago'
 import type { MetodoPago } from '../../../../schemas/orden'
 
@@ -90,6 +93,8 @@ function TurnosPage() {
   const correcciones: CorreccionReparto[] = initial.correcciones
   const [loading, setLoading] = useState(false)
   const [expedienteDe, setExpedienteDe] = useState<TurnoCaja | null>(null)
+  const [filtroResponsable, setFiltroResponsable] = useState('')
+  const [filtroEstado, setFiltroEstado] = useState('')
 
   const comboNombrePorId = new Map(initial.combos.map((c) => [c.id, c.nombre]))
   const lavadorNombrePorId = new Map(initial.lavadores.map((l) => [l.id, l.nombre]))
@@ -100,6 +105,8 @@ function TurnosPage() {
     setLoading(true)
     try {
       setTurnos(await fetchByFiltro(key))
+    } catch (err) {
+      toast.desdeError(err, 'No se pudieron cargar los turnos')
     } finally {
       setLoading(false)
     }
@@ -121,6 +128,13 @@ function TurnosPage() {
       data: ordenados.map((t) => t.diferencia ?? 0),
     }
   }, [turnos])
+
+  const visibles = turnos.filter((t) => {
+    if (!coincide(t.responsableActual, filtroResponsable) && !coincide(t.responsable, filtroResponsable)) return false
+    if (filtroEstado === 'abierto' && t.cerrado) return false
+    if (filtroEstado === 'cerrado' && !t.cerrado) return false
+    return true
+  })
 
   return (
     <div className="flex flex-col gap-6 text-left">
@@ -182,20 +196,34 @@ function TurnosPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
-                <th className="px-5 py-3">Rol</th>
-                <th className="px-5 py-3">Responsable</th>
-                <th className="px-5 py-3">Apertura</th>
-                <th className="px-5 py-3">Cierre</th>
-                <th className="px-5 py-3">Base inicial</th>
-                <th className="px-5 py-3">Valor esperado</th>
-                <th className="px-5 py-3">Conteo físico</th>
-                <th className="px-5 py-3">Diferencia</th>
-                <th className="px-5 py-3">Cerró</th>
-                <th className="px-5 py-3">Recibió</th>
+                <th className="px-5 py-3 align-top">Rol</th>
+                <ThTexto
+                  label="Responsable"
+                  value={filtroResponsable}
+                  onChange={setFiltroResponsable}
+                  placeholder="Buscar…"
+                />
+                <th className="px-5 py-3 align-top">Apertura</th>
+                <th className="px-5 py-3 align-top">Cierre</th>
+                <th className="px-5 py-3 align-top">Base inicial</th>
+                <th className="px-5 py-3 align-top">Valor esperado</th>
+                <th className="px-5 py-3 align-top">Conteo físico</th>
+                <th className="px-5 py-3 align-top">Diferencia</th>
+                <ThSelect
+                  label="Estado"
+                  value={filtroEstado}
+                  onChange={setFiltroEstado}
+                  options={[
+                    { value: 'abierto', label: 'Abierto' },
+                    { value: 'cerrado', label: 'Cerrado' },
+                  ]}
+                />
+                <th className="px-5 py-3 align-top">Cerró</th>
+                <th className="px-5 py-3 align-top">Recibió</th>
               </tr>
             </thead>
             <tbody>
-              {turnos.map((turno) => (
+              {visibles.map((turno) => (
                 <tr
                   key={turno.id}
                   onClick={() => setExpedienteDe(turno)}
@@ -248,14 +276,23 @@ function TurnosPage() {
                       '—'
                     )}
                   </td>
+                  <td className="px-5 py-3">
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
+                        turno.cerrado ? 'bg-neutral-100 text-neutral-600' : 'bg-success-50 text-success-700'
+                      }`}
+                    >
+                      {turno.cerrado ? 'Cerrado' : 'Abierto'}
+                    </span>
+                  </td>
                   <td className="px-5 py-3 text-neutral-700">{turno.cerrado ? (turno.cerradoPor ?? '—') : '—'}</td>
                   <td className="px-5 py-3 text-neutral-700">{turno.recibidoPor ?? '—'}</td>
                 </tr>
               ))}
-              {turnos.length === 0 ? (
+              {visibles.length === 0 ? (
                 <tr>
-                  <td className="px-5 py-6 text-center text-neutral-400" colSpan={10}>
-                    {loading ? 'Cargando…' : 'No hay turnos registrados.'}
+                  <td className="px-5 py-6 text-center text-neutral-400" colSpan={11}>
+                    {loading ? 'Cargando…' : turnos.length === 0 ? 'No hay turnos registrados.' : 'Ningún turno coincide con el filtro.'}
                   </td>
                 </tr>
               ) : null}

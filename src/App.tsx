@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { RouterProvider } from '@tanstack/react-router'
+import { Toaster } from 'sileo'
 import { resolveAuthContext, subscribeAuthChanges, type AuthContext } from './lib/auth'
 import { useIdleLogout } from './lib/idleTimer'
 
@@ -25,5 +26,15 @@ export function App({ router }: { router: AppRouter }) {
 
   if (auth === undefined) return <div className="route-status">Cargando…</div>
 
-  return <RouterProvider router={router} context={{ auth }} />
+  return (
+    <>
+      {/* `theme="light"` a propósito: el panel es intencionalmente light-only (ver CLAUDE.md,
+          "Trampa de cascade layers") — dejar `theme="system"` repetiría el mismo bug de texto
+          invisible en modo oscuro del SO que ya se corrigió una vez para el resto de la UI.
+          `top-right` porque admin/jefe-zona tienen `MobileTabBar` fija abajo en celular; un toast
+          abajo quedaría tapado o tapándolo. */}
+      <Toaster position="top-right" theme="light" />
+      <RouterProvider router={router} context={{ auth }} />
+    </>
+  )
 }

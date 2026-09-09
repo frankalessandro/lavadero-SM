@@ -6,6 +6,7 @@ import { signIn, rutaPostAuth } from '../../lib/auth'
 import { fetchPerfilActual } from '../../data/perfiles'
 import { db } from '../../lib/db'
 import logoMark from '../../assets/logo-mark.png'
+import { toast } from '../../lib/toast'
 
 export const Route = createFileRoute('/login/')({
   beforeLoad: ({ context }) => {
@@ -48,6 +49,7 @@ function LoginPage() {
       await navigate({ to: rutaPostAuth(perfil) })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo iniciar sesión.')
+      toast.desdeError(err, 'No se pudo iniciar sesión.')
     } finally {
       setLoading(false)
     }

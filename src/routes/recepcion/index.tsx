@@ -35,6 +35,7 @@ import { Card } from '../../components/layout/Card'
 import { AccordionSection } from '../../components/layout/Accordion'
 import { CustomSelect } from '../../components/layout/CustomSelect'
 import { ReciboModal, type ReciboData } from '../../components/layout/ReciboModal'
+import { toast } from '../../lib/toast'
 
 function hoyISO(): string {
   return new Date().toISOString().slice(0, 10)
@@ -591,6 +592,7 @@ function ReceptionForm({
       onCreated()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo registrar la orden')
+      toast.desdeError(err, 'No se pudo registrar la orden')
     } finally {
       setSaving(false)
     }

@@ -32,6 +32,7 @@ import { calcularDelta } from '../../../lib/kpi'
 import { BarChart } from '../../../components/layout/BarChart'
 import { CHART_COLORS } from '../../../lib/chartTheme'
 import { TablaDetalleModal, type ColumnaDetalle } from '../../../components/layout/TablaDetalleModal'
+import { toast } from '../../../lib/toast'
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 const PCT = (n: number) => `${n.toFixed(1)}%`
@@ -94,7 +95,10 @@ function RentabilidadPage() {
         }
       })
       .catch((err) => {
-        if (!cancelado) setError(err instanceof Error ? err.message : 'No se pudo cargar la rentabilidad')
+        if (!cancelado) {
+          setError(err instanceof Error ? err.message : 'No se pudo cargar la rentabilidad')
+          toast.desdeError(err, 'No se pudo cargar la rentabilidad')
+        }
       })
       .finally(() => {
         if (!cancelado) setCargando(false)

@@ -14,6 +14,7 @@ import { lavadorInputSchema, type Lavador } from '../../../../schemas/lavador'
 import { Card } from '../../../../components/layout/Card'
 import { ConfirmModal } from '../../../../components/layout/ConfirmModal'
 import { LavadorExpedienteModal } from '../../../../components/layout/LavadorExpedienteModal'
+import { toast } from '../../../../lib/toast'
 
 export const Route = createFileRoute('/admin/personal/lavadores/')({
   loader: async () => ({
@@ -175,6 +176,7 @@ function LavadoresPage() {
           }
           confirmLabel={confirmando.activo ? 'Inactivar' : 'Activar'}
           variant={confirmando.activo ? 'danger' : 'primary'}
+          successMessage={confirmando.activo ? 'Lavador inactivado' : 'Lavador activado'}
           onConfirm={async () => {
             await handleToggleActivo(confirmando)
             setConfirmando(null)
@@ -225,6 +227,10 @@ function LavadorForm({
         await createLavador(parsed.data)
       }
       onSaved()
+      toast.exito(lavador ? 'Lavador actualizado' : 'Lavador creado')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo guardar')
+      toast.desdeError(err, 'No se pudo guardar')
     } finally {
       setSaving(false)
     }

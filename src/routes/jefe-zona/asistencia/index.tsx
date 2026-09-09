@@ -15,6 +15,7 @@ import type { TurnoCaja } from '../../../schemas/turnoCaja'
 import type { Lavador } from '../../../schemas/lavador'
 import { Card } from '../../../components/layout/Card'
 import { AbrirTurnoPrompt, TurnoResponsableBanner } from '../../../components/layout/TurnoResponsableBanner'
+import { toast } from '../../../lib/toast'
 
 const SEMANAS_A_GENERAR_ADELANTE = 8
 const DIAS_DESCANSABLES = ['Lunes', 'Martes', 'Miércoles', 'Jueves']
@@ -117,6 +118,7 @@ function AsistenciaJefeZona() {
       setDescansos(nuevosDescansos)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cargar esa semana')
+      toast.desdeError(err, 'No se pudo cargar esa semana')
     } finally {
       setCargandoSemana(false)
     }
@@ -133,6 +135,7 @@ function AsistenciaJefeZona() {
       setTimeout(() => setFlashFecha((f) => (f === fecha ? null : f)), 650)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo actualizar el descanso')
+      toast.desdeError(err, 'No se pudo actualizar el descanso')
     } finally {
       setGuardandoFecha(null)
     }
@@ -145,8 +148,10 @@ function AsistenciaJefeZona() {
     try {
       const nueva = await marcarAsistencia(data.hoyISO, { lavadorId, registradoPor: turno.responsableActual })
       setAsistenciasHoy((prev) => [...prev, nueva])
+      toast.exito('Asistencia marcada')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo marcar la asistencia')
+      toast.desdeError(err, 'No se pudo marcar la asistencia')
     } finally {
       setMarcandoLavadorId(null)
     }

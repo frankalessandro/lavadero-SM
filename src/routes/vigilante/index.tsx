@@ -29,6 +29,7 @@ import type { TurnoCaja } from '../../schemas/turnoCaja'
 import { Card } from '../../components/layout/Card'
 import { CustomSelect } from '../../components/layout/CustomSelect'
 import { CurrencyInput } from '../../components/layout/CurrencyInput'
+import { toast } from '../../lib/toast'
 
 async function loadParqueadero() {
   const [estancias, resumen, turno] = await Promise.all([
@@ -321,8 +322,10 @@ function AbrirTurnoModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
         baseInicial: Math.round(base),
       })
       onSaved()
+      toast.exito('Turno abierto')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo abrir el turno')
+      toast.desdeError(err, 'No se pudo abrir el turno')
     } finally {
       setSaving(false)
     }
@@ -395,6 +398,7 @@ function CerrarTurnoModal({ turno, onClose, onSaved }: { turno: TurnoCaja; onClo
       setPaso('revelado')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo calcular el valor esperado')
+      toast.desdeError(err, 'No se pudo calcular el valor esperado')
     } finally {
       setSaving(false)
     }
@@ -420,8 +424,10 @@ function CerrarTurnoModal({ turno, onClose, onSaved }: { turno: TurnoCaja; onClo
         recibidoPor.trim() || undefined,
       )
       onSaved()
+      toast.exito('Turno cerrado')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cerrar el turno')
+      toast.desdeError(err, 'No se pudo cerrar el turno')
     } finally {
       setSaving(false)
     }
@@ -617,8 +623,10 @@ function EntradaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
     try {
       await registrarEntrada(parsed.data)
       onSaved()
+      toast.exito('Entrada registrada')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo registrar la entrada')
+      toast.desdeError(err, 'No se pudo registrar la entrada')
     } finally {
       setSaving(false)
     }
@@ -735,6 +743,11 @@ function SalidaModal({
     try {
       await registrarSalida(estancia.id, cobro > 0 ? metodoPago : undefined)
       onSaved()
+      toast.exito('Salida registrada')
+    } catch (err) {
+      // Este modal no tenía estado de error propio — un rechazo de la RPC (validación de método
+      // de pago, etc.) fallaba en silencio, sin nada en pantalla. El toast es ahora esa señal.
+      toast.desdeError(err, 'No se pudo registrar la salida')
     } finally {
       setSaving(false)
     }

@@ -15,6 +15,7 @@ import {
 import { Card } from '../../../../components/layout/Card'
 import { CustomSelect } from '../../../../components/layout/CustomSelect'
 import { ConfirmModal } from '../../../../components/layout/ConfirmModal'
+import { toast } from '../../../../lib/toast'
 
 const CATEGORIA_LABEL: Record<CategoriaVehiculo, string> = {
   auto: 'Automóviles y camionetas',
@@ -154,6 +155,7 @@ function TiposVehiculoPage() {
           }
           confirmLabel={confirmando.activo ? 'Inactivar' : 'Activar'}
           variant={confirmando.activo ? 'danger' : 'primary'}
+          successMessage={confirmando.activo ? 'Tipo de vehículo inactivado' : 'Tipo de vehículo activado'}
           onConfirm={async () => {
             await handleToggleActivo(confirmando)
             setConfirmando(null)
@@ -195,6 +197,10 @@ function TipoVehiculoForm({
         await createTipoVehiculo(parsed.data)
       }
       onSaved()
+      toast.exito(tipo ? 'Tipo de vehículo actualizado' : 'Tipo de vehículo creado')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo guardar')
+      toast.desdeError(err, 'No se pudo guardar')
     } finally {
       setSaving(false)
     }

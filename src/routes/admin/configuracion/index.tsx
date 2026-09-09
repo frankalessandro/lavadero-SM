@@ -8,6 +8,7 @@ import {
 } from '../../../data/configuracion'
 import { configuracionSchema, type Configuracion } from '../../../schemas/configuracion'
 import { Card } from '../../../components/layout/Card'
+import { toast } from '../../../lib/toast'
 import { CurrencyInput } from '../../../components/layout/CurrencyInput'
 
 export const Route = createFileRoute('/admin/configuracion/')({
@@ -90,6 +91,11 @@ function ConfiguracionPage() {
     try {
       await updateConfiguracion(parsed.data)
       setSaved(true)
+    } catch (err) {
+      // Sin catch acá esta pantalla (comisiones, recargo) fallaba en silencio — la más sensible
+      // de todas para que un cambio se pierda sin avisar.
+      setError(err instanceof Error ? err.message : 'No se pudo guardar la configuración')
+      toast.desdeError(err, 'No se pudo guardar la configuración')
     } finally {
       setSaving(false)
     }

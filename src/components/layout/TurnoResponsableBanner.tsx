@@ -7,6 +7,7 @@ import type { RolCaja, TurnoCaja, TraspasoTurno } from '../../schemas/turnoCaja'
 import { Card } from './Card'
 import { CustomSelect } from './CustomSelect'
 import { CurrencyInput } from './CurrencyInput'
+import { toast } from '../../lib/toast'
 
 // Cuentas que pueden quedar a cargo de esta caja: las activas que tengan ese rol (ver 0056 —
 // desde que el roster desapareció, la cuenta ES la persona y el rol de la cuenta es el permiso).
@@ -82,8 +83,10 @@ export function AbrirTurnoPrompt({ rol = 'jefe_zona', onAbierto }: { rol?: RolCa
         baseInicial: Math.round(base),
       })
       await onAbierto()
+      toast.exito('Turno abierto')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo abrir el turno')
+      toast.desdeError(err, 'No se pudo abrir el turno')
     } finally {
       setSaving(false)
     }
@@ -183,8 +186,10 @@ export function TurnoResponsableBanner({
       setTransfiriendo(false)
       setNuevoPersonaId('')
       setHistorial(null)
+      toast.exito('Responsabilidad transferida')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo transferir la responsabilidad')
+      toast.desdeError(err, 'No se pudo transferir la responsabilidad')
     } finally {
       setSaving(false)
     }

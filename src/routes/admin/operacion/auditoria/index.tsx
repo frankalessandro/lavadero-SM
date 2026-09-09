@@ -13,6 +13,7 @@ import type { Perfil } from '../../../../schemas/perfil'
 import { Card } from '../../../../components/layout/Card'
 import { StatCard } from '../../../../components/layout/StatCard'
 import { CustomSelect } from '../../../../components/layout/CustomSelect'
+import { toast } from '../../../../lib/toast'
 
 type RangoKey = 'hoy' | '7dias' | '30dias'
 
@@ -87,6 +88,8 @@ function Auditoria() {
       if (e) filtro.entidad = e
       if (p) filtro.personaId = p
       setEntradas(await fetchBitacora(filtro))
+    } catch (err) {
+      toast.desdeError(err, 'No se pudo cargar la bitácora')
     } finally {
       setCargando(false)
     }

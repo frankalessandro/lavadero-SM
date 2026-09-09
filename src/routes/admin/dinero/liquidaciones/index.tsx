@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { Wallet, CheckCircle2, Receipt, Clock, ShieldCheck, Ban, X } from 'lucide-react'
 import {
@@ -39,6 +39,8 @@ import type { LiquidacionJefeZona } from '../../../../schemas/liquidacionJefeZon
 import type { Lavador } from '../../../../schemas/lavador'
 import type { Configuracion } from '../../../../schemas/configuracion'
 import { Card } from '../../../../components/layout/Card'
+import { ThTexto, ThSelect } from '../../../../components/layout/TableHeadFilter'
+import { coincide } from '../../../../lib/tableFilters'
 import { StatCard } from '../../../../components/layout/StatCard'
 import { ConfirmModal } from '../../../../components/layout/ConfirmModal'
 import { BarChart } from '../../../../components/layout/BarChart'
@@ -48,6 +50,7 @@ import {
   DetalleOrdenesJefeZonaModal,
   type DetalleOrdenJefeZonaFila,
 } from '../../../../components/layout/DetalleOrdenesJefeZonaModal'
+import { toast } from '../../../../lib/toast'
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 const FECHA = new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium' })
@@ -244,6 +247,7 @@ function LiquidacionesPage() {
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo calcular el monto del periodo')
+      toast.desdeError(err, 'No se pudo calcular el monto del periodo')
     } finally {
       setCalculando(null)
     }
@@ -270,12 +274,47 @@ function LiquidacionesPage() {
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo calcular el monto del periodo')
+      toast.desdeError(err, 'No se pudo calcular el monto del periodo')
     } finally {
       setCalculandoJefeZona(null)
     }
   }
 
-  const lavadoresPorId = new Map(lavadores.map((l) => [l.id, l] as const))
+  const lavadoresPorId = useMemo(() => new Map(lavadores.map((l) => [l.id, l] as const)), [lavadores])
+
+  const [filtroHistLavador, setFiltroHistLavador] = useState('')
+  const [filtroHistEstadoLavador, setFiltroHistEstadoLavador] = useState('')
+  const [filtroHistJZ, setFiltroHistJZ] = useState('')
+  const [filtroHistEstadoJZ, setFiltroHistEstadoJZ] = useState('')
+
+  const ESTADO_LIQUIDACION_OPTIONS = [
+    { value: 'pendiente', label: 'En proceso de pago' },
+    { value: 'pagada', label: 'Pagada' },
+    { value: 'anulada', label: 'Anulada' },
+  ]
+  function coincideEstadoLiquidacion(l: { pagada: boolean; anulada: boolean }, filtro: string): boolean {
+    if (!filtro) return true
+    if (filtro === 'anulada') return l.anulada
+    if (filtro === 'pagada') return l.pagada && !l.anulada
+    return !l.pagada && !l.anulada
+  }
+
+  const historicoVisible = useMemo(
+    () =>
+      historico.filter(
+        (l) =>
+          coincide(lavadoresPorId.get(l.lavadorId)?.nombre, filtroHistLavador) &&
+          coincideEstadoLiquidacion(l, filtroHistEstadoLavador),
+      ),
+    [historico, lavadoresPorId, filtroHistLavador, filtroHistEstadoLavador],
+  )
+  const historicoJefeZonaVisible = useMemo(
+    () =>
+      historicoJefeZona.filter(
+        (l) => coincide(l.responsable, filtroHistJZ) && coincideEstadoLiquidacion(l, filtroHistEstadoJZ),
+      ),
+    [historicoJefeZona, filtroHistJZ, filtroHistEstadoJZ],
+  )
 
   async function refresh() {
     const data = await loadData()
@@ -307,6 +346,8 @@ function LiquidacionesPage() {
     setCargandoColilla(liquidacion.id)
     try {
       await abrirColilla(liquidacion, lavadoresPorId.get(liquidacion.lavadorId)?.nombre ?? '—')
+    } catch (err) {
+      toast.desdeError(err, 'No se pudo abrir la colilla')
     } finally {
       setCargandoColilla(null)
     }
@@ -332,6 +373,7 @@ function LiquidacionesPage() {
       setConfirmandoGenerar({ comision, periodicidad, periodoInicio, periodoFin, preview })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo calcular el monto del periodo')
+      toast.desdeError(err, 'No se pudo calcular el monto del periodo')
     } finally {
       setCalculando(null)
     }
@@ -349,6 +391,7 @@ function LiquidacionesPage() {
       await abrirColilla(liquidacion, comision.lavadorNombre)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo generar la liquidación')
+      toast.desdeError(err, 'No se pudo generar la liquidación')
     } finally {
       setGenerando(null)
       setConfirmandoGenerar(null)
@@ -382,6 +425,7 @@ function LiquidacionesPage() {
       setConfirmandoGenerarJefeZona({ comision, periodicidad, periodoInicio, periodoFin, preview })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo calcular el monto del periodo')
+      toast.desdeError(err, 'No se pudo calcular el monto del periodo')
     } finally {
       setCalculandoJefeZona(null)
     }
@@ -411,6 +455,7 @@ function LiquidacionesPage() {
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo generar la liquidación')
+      toast.desdeError(err, 'No se pudo generar la liquidación')
     } finally {
       setGenerandoJefeZona(null)
       setConfirmandoGenerarJefeZona(null)
@@ -428,6 +473,7 @@ function LiquidacionesPage() {
       await refreshResumen()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo anular la liquidación')
+      toast.desdeError(err, 'No se pudo anular la liquidación')
     } finally {
       setAnulandoBusy(false)
     }
@@ -465,6 +511,7 @@ function LiquidacionesPage() {
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cargar el detalle de órdenes')
+      toast.desdeError(err, 'No se pudo cargar el detalle de órdenes')
     } finally {
       setCargandoDetalleJefeZona(null)
     }
@@ -482,6 +529,8 @@ function LiquidacionesPage() {
         monto: liquidacion.monto,
         generadaEn: liquidacion.creadoEn,
       })
+    } catch (err) {
+      toast.desdeError(err, 'No se pudo abrir la colilla')
     } finally {
       setCargandoColillaJefeZona(null)
     }
@@ -731,15 +780,20 @@ function LiquidacionesPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
-                  <th className="px-5 py-3">Lavador</th>
-                  <th className="px-5 py-3">Tipo y fecha</th>
-                  <th className="px-5 py-3">Monto</th>
-                  <th className="px-5 py-3">Estado</th>
-                  <th className="px-5 py-3 text-right">Acciones</th>
+                  <ThTexto label="Lavador" value={filtroHistLavador} onChange={setFiltroHistLavador} placeholder="Buscar…" />
+                  <th className="px-5 py-3 align-top">Tipo y fecha</th>
+                  <th className="px-5 py-3 align-top">Monto</th>
+                  <ThSelect
+                    label="Estado"
+                    value={filtroHistEstadoLavador}
+                    onChange={setFiltroHistEstadoLavador}
+                    options={ESTADO_LIQUIDACION_OPTIONS}
+                  />
+                  <th className="px-5 py-3 text-right align-top">Acciones</th>
                 </tr>
               </thead>
               <tbody>
-                {historico.map((liquidacion) => (
+                {historicoVisible.map((liquidacion) => (
                   <LiquidacionRow
                     key={liquidacion.id}
                     liquidacion={liquidacion}
@@ -758,10 +812,10 @@ function LiquidacionesPage() {
                     onVerColilla={() => handleVerColilla(liquidacion)}
                   />
                 ))}
-                {historico.length === 0 ? (
+                {historicoVisible.length === 0 ? (
                   <tr>
                     <td className="px-5 py-6 text-center text-neutral-400" colSpan={5}>
-                      Todavía no se ha generado ninguna liquidación.
+                      {historico.length === 0 ? 'Todavía no se ha generado ninguna liquidación.' : 'Ninguna liquidación coincide con el filtro.'}
                     </td>
                   </tr>
                 ) : null}
@@ -846,15 +900,20 @@ function LiquidacionesPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
-                  <th className="px-5 py-3">Responsable</th>
-                  <th className="px-5 py-3">Tipo y fecha</th>
-                  <th className="px-5 py-3">Monto</th>
-                  <th className="px-5 py-3">Estado</th>
-                  <th className="px-5 py-3 text-right">Acciones</th>
+                  <ThTexto label="Responsable" value={filtroHistJZ} onChange={setFiltroHistJZ} placeholder="Buscar…" />
+                  <th className="px-5 py-3 align-top">Tipo y fecha</th>
+                  <th className="px-5 py-3 align-top">Monto</th>
+                  <ThSelect
+                    label="Estado"
+                    value={filtroHistEstadoJZ}
+                    onChange={setFiltroHistEstadoJZ}
+                    options={ESTADO_LIQUIDACION_OPTIONS}
+                  />
+                  <th className="px-5 py-3 text-right align-top">Acciones</th>
                 </tr>
               </thead>
               <tbody>
-                {historicoJefeZona.map((liquidacion) => (
+                {historicoJefeZonaVisible.map((liquidacion) => (
                   <LiquidacionJefeZonaRow
                     key={liquidacion.id}
                     liquidacion={liquidacion}
@@ -872,10 +931,12 @@ function LiquidacionesPage() {
                     onVerColilla={() => handleVerColillaJefeZona(liquidacion)}
                   />
                 ))}
-                {historicoJefeZona.length === 0 ? (
+                {historicoJefeZonaVisible.length === 0 ? (
                   <tr>
                     <td className="px-5 py-6 text-center text-neutral-400" colSpan={5}>
-                      Todavía no se ha generado ninguna liquidación de jefe de patio.
+                      {historicoJefeZona.length === 0
+                        ? 'Todavía no se ha generado ninguna liquidación de jefe de patio.'
+                        : 'Ninguna liquidación coincide con el filtro.'}
                     </td>
                   </tr>
                 ) : null}
@@ -917,6 +978,7 @@ function LiquidacionesPage() {
           message={`¿Marcar como pagada la liquidación de ${lavadoresPorId.get(confirmandoPago.lavadorId)?.nombre ?? '—'} por ${COP.format(confirmandoPago.monto)}?`}
           confirmLabel="Marcar pagada"
           variant="primary"
+          successMessage="Liquidación marcada como pagada"
           onConfirm={async () => {
             await handleMarcarPagada(confirmandoPago)
             setConfirmandoPago(null)
@@ -962,6 +1024,7 @@ function LiquidacionesPage() {
           message={`¿Marcar como pagada la liquidación de ${confirmandoPagoJefeZona.responsable} por ${COP.format(confirmandoPagoJefeZona.monto)}?`}
           confirmLabel="Marcar pagada"
           variant="primary"
+          successMessage="Liquidación marcada como pagada"
           onConfirm={async () => {
             await handleMarcarPagadaJefeZona(confirmandoPagoJefeZona)
             setConfirmandoPagoJefeZona(null)

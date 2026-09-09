@@ -3,6 +3,7 @@ import { createFileRoute, Outlet, useNavigate } from '@tanstack/react-router'
 import { LayoutDashboard, TrendingUp, ClipboardList, Coins, Package, Users, Settings } from 'lucide-react'
 import { Sidebar, type NavItem } from '../../components/layout/Sidebar'
 import { Topbar } from '../../components/layout/Topbar'
+import { NotificacionesCentro } from '../../components/layout/NotificacionesCentro'
 import { exigirRol, signOut } from '../../lib/auth'
 
 export const Route = createFileRoute('/admin')({
@@ -55,6 +56,7 @@ function AdminLayout() {
           onMenuClick={() => setMenuOpen(true)}
           responsable={auth?.perfil.nombre ?? undefined}
           roleLabel="Gerencia"
+          notificaciones={<NotificacionesCentro />}
         />
         <main className="flex-1 overflow-y-auto p-4 sm:p-6">
           <Outlet />

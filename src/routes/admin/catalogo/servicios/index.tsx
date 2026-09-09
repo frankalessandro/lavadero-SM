@@ -11,6 +11,7 @@ import type { PrecioServicio } from '../../../../schemas/precioServicio'
 import { Card } from '../../../../components/layout/Card'
 import { CustomSelect } from '../../../../components/layout/CustomSelect'
 import { ConfirmModal } from '../../../../components/layout/ConfirmModal'
+import { toast } from '../../../../lib/toast'
 import { CurrencyInput } from '../../../../components/layout/CurrencyInput'
 
 const CATEGORIA_LABEL: Record<CategoriaVehiculo, string> = {
@@ -227,6 +228,7 @@ function ServiciosPage() {
           }
           confirmLabel={confirmando.activo ? 'Inactivar' : 'Activar'}
           variant={confirmando.activo ? 'danger' : 'primary'}
+          successMessage={confirmando.activo ? 'Servicio inactivado' : 'Servicio activado'}
           onConfirm={async () => {
             await handleToggleActivo(confirmando)
             setConfirmando(null)
@@ -318,6 +320,10 @@ function ServicioForm({
       await Promise.all(escrituras)
 
       onSaved()
+      toast.exito(servicio ? 'Servicio actualizado' : 'Servicio creado')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo guardar')
+      toast.desdeError(err, 'No se pudo guardar')
     } finally {
       setSaving(false)
     }

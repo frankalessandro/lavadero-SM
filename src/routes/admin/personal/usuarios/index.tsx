@@ -1,8 +1,9 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { Pencil, X, Plus, UserPlus, KeyRound, Copy, Check } from 'lucide-react'
+import { Pencil, X, Plus, UserPlus, KeyRound, Copy, Check, Loader2 } from 'lucide-react'
 import {
   fetchPerfiles,
+  fetchEmailUsuario,
   updatePerfil,
   createUsuario,
   resetPassword,
@@ -18,6 +19,14 @@ import {
 } from '../../../../schemas/perfil'
 import { USE_LOCAL_DB } from '../../../../lib/db'
 import { Card } from '../../../../components/layout/Card'
+import { ThTexto, ThSelect } from '../../../../components/layout/TableHeadFilter'
+import { coincide } from '../../../../lib/tableFilters'
+import { toast } from '../../../../lib/toast'
+
+const ESTADO_OPTIONS = [
+  { value: 'activo', label: 'Activo' },
+  { value: 'inactivo', label: 'Inactivo' },
+]
 
 export const Route = createFileRoute('/admin/personal/usuarios/')({
   loader: async () => {
@@ -33,11 +42,28 @@ function UsuariosPage() {
   const [editing, setEditing] = useState<Perfil | null>(null)
   const [creando, setCreando] = useState(false)
   const [reseteando, setReseteando] = useState<Perfil | null>(null)
+  const [viendo, setViendo] = useState<Perfil | null>(null)
+
+  const [filtroNombre, setFiltroNombre] = useState('')
+  const [filtroRol, setFiltroRol] = useState('')
+  const [filtroEstado, setFiltroEstado] = useState('')
 
   async function refresh() {
     setPerfiles(await fetchPerfiles())
     router.invalidate()
   }
+
+  const visibles = useMemo(
+    () =>
+      perfiles.filter((p) => {
+        if (!coincide(p.nombre, filtroNombre)) return false
+        if (filtroRol && !p.roles.includes(filtroRol as Rol)) return false
+        if (filtroEstado === 'activo' && !p.activo) return false
+        if (filtroEstado === 'inactivo' && p.activo) return false
+        return true
+      }),
+    [perfiles, filtroNombre, filtroRol, filtroEstado],
+  )
 
 
   return (
@@ -67,17 +93,23 @@ function UsuariosPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
-              <th className="px-5 py-3">Nombre</th>
-              <th className="px-5 py-3">Roles</th>
-              <th className="px-5 py-3">Estado</th>
-              <th className="px-5 py-3 text-right">Acciones</th>
+              <ThTexto label="Nombre" value={filtroNombre} onChange={setFiltroNombre} placeholder="Buscar…" />
+              <ThSelect
+                label="Roles"
+                value={filtroRol}
+                onChange={setFiltroRol}
+                options={ROLES.map((r) => ({ value: r.id, label: r.label }))}
+              />
+              <ThSelect label="Estado" value={filtroEstado} onChange={setFiltroEstado} options={ESTADO_OPTIONS} />
+              <th className="px-5 py-3 text-right align-top">Acciones</th>
             </tr>
           </thead>
           <tbody>
-            {perfiles.map((perfil) => (
+            {visibles.map((perfil) => (
               <tr
                 key={perfil.id}
-                className="border-b border-neutral-100 transition-colors last:border-0 hover:bg-primary-50/40"
+                onClick={() => setViendo(perfil)}
+                className="cursor-pointer border-b border-neutral-100 transition-colors last:border-0 hover:bg-primary-50/40"
               >
                 <td className="px-5 py-3 font-medium text-neutral-900">{perfil.nombre ?? '—'}</td>
                 <td className="px-5 py-3">
@@ -114,7 +146,7 @@ function UsuariosPage() {
                     ) : null}
                   </div>
                 </td>
-                <td className="px-5 py-3">
+                <td className="px-5 py-3" onClick={(event) => event.stopPropagation()}>
                   <div className="flex justify-end gap-2">
                     {USE_LOCAL_DB ? null : (
                       <button
@@ -139,10 +171,10 @@ function UsuariosPage() {
                 </td>
               </tr>
             ))}
-            {perfiles.length === 0 ? (
+            {visibles.length === 0 ? (
               <tr>
-                <td className="px-5 py-6 text-center text-neutral-400" colSpan={5}>
-                  No hay usuarios todavía.
+                <td className="px-5 py-6 text-center text-neutral-400" colSpan={4}>
+                  {perfiles.length === 0 ? 'No hay usuarios todavía.' : 'Ningún usuario coincide con el filtro.'}
                 </td>
               </tr>
             ) : null}
@@ -177,7 +209,97 @@ function UsuariosPage() {
           onDone={refresh}
         />
       ) : null}
+
+      {viendo ? <UsuarioDetalleModal perfil={viendo} onClose={() => setViendo(null)} /> : null}
     </div>
+  )
+}
+
+// Correo + info de la cuenta, sin la contraseña — esa nunca se guarda ni se vuelve a mostrar
+// (solo aparece una vez, al crear la cuenta o al restablecerla). El correo se pide bajo demanda
+// al abrir el modal (no viaja con `fetchPerfiles()`, ver `fetchEmailUsuario`).
+function UsuarioDetalleModal({ perfil, onClose }: { perfil: Perfil; onClose: () => void }) {
+  const [email, setEmail] = useState<string | null | 'cargando' | 'error'>('cargando')
+
+  useEffect(() => {
+    let vivo = true
+    fetchEmailUsuario(perfil.id)
+      .then((valor) => {
+        if (vivo) setEmail(valor)
+      })
+      .catch(() => {
+        if (vivo) setEmail('error')
+      })
+    return () => {
+      vivo = false
+    }
+  }, [perfil.id])
+
+  return (
+    <ModalShell title={perfil.nombre ?? 'Usuario'} subtitle="Detalle de la cuenta." onClose={onClose}>
+      <div className="flex flex-col gap-3">
+        {email === 'cargando' ? (
+          <div className="flex items-center justify-between gap-3 rounded-lg bg-neutral-50 px-3 py-2">
+            <div className="min-w-0">
+              <p className="text-xs text-neutral-500">Correo</p>
+              <p className="text-sm text-neutral-400">Cargando…</p>
+            </div>
+            <Loader2 size={15} className="shrink-0 animate-spin text-neutral-400" />
+          </div>
+        ) : email === 'error' ? (
+          <p className="rounded-lg bg-danger-50 px-3 py-2 text-xs text-danger-700">No se pudo cargar el correo.</p>
+        ) : (
+          <CredencialFila label="Correo" valor={email ?? '—'} />
+        )}
+
+        <div className="flex flex-col gap-1.5 rounded-lg bg-neutral-50 px-3 py-2 text-left text-sm">
+          <span className="text-xs text-neutral-500">Roles</span>
+          {perfil.roles.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {perfil.roles.map((rol) => (
+                <span
+                  key={rol}
+                  className="inline-flex rounded-full bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary-700"
+                >
+                  {ROL_LABEL[rol]}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <span className="text-sm text-neutral-400">Sin roles asignados</span>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-1.5">
+          <span
+            className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
+              perfil.activo ? 'bg-success-50 text-success-700' : 'bg-neutral-100 text-neutral-500'
+            }`}
+          >
+            {perfil.activo ? 'Activo' : 'Inactivo'}
+          </span>
+          {perfil.debeCambiarPassword ? (
+            <span className="inline-flex rounded-full bg-warning-50 px-2.5 py-1 text-xs font-medium text-warning-700">
+              Debe cambiar contraseña
+            </span>
+          ) : null}
+        </div>
+
+        <p className="text-xs text-neutral-400">
+          Cuenta creada el {new Date(perfil.creadoEn).toLocaleDateString('es-CO', { dateStyle: 'long' })}.
+        </p>
+
+        <div className="mt-1 flex justify-end border-t border-neutral-100 pt-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </ModalShell>
   )
 }
 
@@ -325,6 +447,7 @@ function CrearUsuarioForm({
       setCreado(await createUsuario(parsed.data))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo crear el usuario')
+      toast.desdeError(err, 'No se pudo crear el usuario')
     } finally {
       setSaving(false)
     }
@@ -459,8 +582,10 @@ function PerfilForm({
     try {
       await updatePerfil(perfil.id, parsed.data)
       onSaved()
+      toast.exito('Usuario actualizado')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo guardar')
+      toast.desdeError(err, 'No se pudo guardar')
       setSaving(false)
     }
   }
@@ -542,6 +667,7 @@ function ResetPasswordModal({
       await onDone()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo restablecer la contraseña')
+      toast.desdeError(err, 'No se pudo restablecer la contraseña')
     } finally {
       setWorking(false)
     }

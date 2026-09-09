@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { LayoutGrid, LogOut, Menu } from 'lucide-react'
 import { ConfirmModal } from './ConfirmModal'
 
@@ -15,12 +15,12 @@ interface TopbarProps {
    *  en vez de cerrar sesión — el logout real vive en el selector. */
   multiRol?: boolean
   onCambiarModulo?: () => void
+  /** Slot junto al avatar — hoy solo admin pasa `<NotificacionesCentro />` acá (las alertas que
+   *  agrega son todas de datos que solo admin ve). Sin buscador: "buscar por placa" no aporta
+   *  aquí, recepción/órdenes ya tienen su propio buscador donde sí aplica. */
+  notificaciones?: ReactNode
 }
 
-// Sin buscador ni campana: no hay notificaciones reales en el sistema todavía, y "buscar por
-// placa" no aporta nada aquí (recepción/órdenes ya tienen su propio buscador donde sí aplica).
-// En su lugar, lo que sí es información real y útil en todo momento: quién es responsable ahora
-// y en qué rol — y cerrar sesión pide confirmación porque es una acción que corta el trabajo.
 export function Topbar({
   title,
   avatarInitial,
@@ -30,6 +30,7 @@ export function Topbar({
   roleLabel,
   multiRol = false,
   onCambiarModulo,
+  notificaciones,
 }: TopbarProps) {
   const [confirmando, setConfirmando] = useState(false)
 
@@ -51,6 +52,7 @@ export function Topbar({
         </h1>
       </div>
       <div className="flex shrink-0 items-center gap-3">
+        {notificaciones}
         {responsable ? (
           <div className="hidden flex-col items-end leading-tight sm:flex">
             <span className="max-w-40 truncate text-sm font-medium text-neutral-800">{responsable}</span>

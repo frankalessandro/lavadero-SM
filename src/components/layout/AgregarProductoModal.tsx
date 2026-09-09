@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { X, Minus, Plus } from 'lucide-react'
 import type { Producto } from '../../schemas/producto'
+import { toast } from '../../lib/toast'
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 
@@ -52,8 +53,10 @@ export function AgregarProductoModal({
         await onAgregar(productoId, cantidad)
       }
       onClose()
+      toast.exito('Producto agregado a la orden')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo agregar el producto')
+      toast.desdeError(err, 'No se pudo agregar el producto')
     } finally {
       setSaving(false)
     }

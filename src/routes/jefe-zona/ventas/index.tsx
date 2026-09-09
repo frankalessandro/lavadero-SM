@@ -20,6 +20,7 @@ import { AgregarProductoModal } from '../../../components/layout/AgregarProducto
 import { QuitarProductoModal } from '../../../components/layout/QuitarProductoModal'
 import { borradorAPagos, nuevaLineaBorrador, pagoLineasCuadra, type PagoLineaBorrador } from '../../../lib/pagoLineas'
 import { METODO_PAGO_LABEL } from '../../../lib/metodoPago'
+import { toast } from '../../../lib/toast'
 
 async function loadVentas() {
   const [turno, productos, stock, ventasHoy, cuentasAbiertas, cuentasHoy, pendientes] = await Promise.all([
@@ -576,6 +577,7 @@ function VentaCarrito({
       await onVendido(hechas, pagos)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo registrar la venta')
+      toast.desdeError(err, 'No se pudo registrar la venta')
     } finally {
       setSaving(false)
     }
@@ -713,8 +715,10 @@ function AnularVentaModal({
     try {
       await anularVenta(venta.id, parsed.data)
       await onAnulada()
+      toast.exito('Venta anulada')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo anular la venta')
+      toast.desdeError(err, 'No se pudo anular la venta')
     } finally {
       setSaving(false)
     }
@@ -818,8 +822,10 @@ function AbrirCuentaModal({
     try {
       await abrirCuenta(parsed.data)
       await onAbierta()
+      toast.exito('Cuenta abierta')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo abrir la cuenta')
+      toast.desdeError(err, 'No se pudo abrir la cuenta')
       setSaving(false)
     }
   }
@@ -926,6 +932,7 @@ function CerrarCuentaModal({
       await onCerrada(pagos)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cerrar la cuenta')
+      toast.desdeError(err, 'No se pudo cerrar la cuenta')
       setSaving(false)
     }
   }
@@ -1016,8 +1023,10 @@ function AnularCuentaModal({
     try {
       await anularCuenta(cuenta.id, parsed.data)
       await onAnulada()
+      toast.exito('Cuenta anulada')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo anular la cuenta')
+      toast.desdeError(err, 'No se pudo anular la cuenta')
       setSaving(false)
     }
   }

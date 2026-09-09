@@ -6,6 +6,7 @@ import { fetchCategoriasGasto, fetchGastosDeTurno, type GastoConCategoria } from
 import { fetchProductosOperativo } from '../../../data/productos'
 import { fetchConteoDeTurno } from '../../../data/conteosInventario'
 import type { ConteoInventario as ConteoInventarioType } from '../../../schemas/conteoInventario'
+import { toast } from '../../../lib/toast'
 
 import type { TurnoCaja } from '../../../schemas/turnoCaja'
 import { Card } from '../../../components/layout/Card'
@@ -244,6 +245,7 @@ function CerrarTurnoModal({
       setPaso('revelado')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo calcular el valor esperado')
+      toast.desdeError(err, 'No se pudo calcular el valor esperado')
     } finally {
       setLoading(false)
     }
@@ -273,8 +275,10 @@ function CerrarTurnoModal({
         recibidoPor.trim() || undefined,
       )
       await onCerrado()
+      toast.exito('Turno cerrado')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cerrar el turno')
+      toast.desdeError(err, 'No se pudo cerrar el turno')
     } finally {
       setLoading(false)
     }

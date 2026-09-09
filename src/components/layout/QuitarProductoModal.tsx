@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { X } from 'lucide-react'
 import { anularVentaInputSchema } from '../../schemas/venta'
 import type { Venta } from '../../schemas/venta'
+import { toast } from '../../lib/toast'
 
 // Quitar un producto ya cargado a un destino pendiente (orden o cuenta abierta) antes de
 // cobrar/cerrar — regla de negocio 13: se anula con motivo, no se borra, queda visible en
@@ -32,8 +33,10 @@ export function QuitarProductoModal({
     setSaving(true)
     try {
       await onQuitar(venta, parsed.data.motivo)
+      toast.exito('Producto quitado de la orden')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo quitar el producto')
+      toast.desdeError(err, 'No se pudo quitar el producto')
       setSaving(false)
     }
   }

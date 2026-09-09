@@ -16,6 +16,9 @@ import {
 import { fetchVentasEnRango } from '../../../../data/ventas'
 import { fetchFaltantesPendientes, type FaltantePendiente } from '../../../../data/conteosInventario'
 import { ProductoExpedienteModal } from '../../../../components/layout/ProductoExpedienteModal'
+import { NivelStockModal } from '../../../../components/layout/NivelStockModal'
+import { ThTexto, ThSelect } from '../../../../components/layout/TableHeadFilter'
+import { coincide } from '../../../../lib/tableFilters'
 import { productoInputSchema, type Producto } from '../../../../schemas/producto'
 import {
   movimientoInventarioInputSchema,
@@ -36,7 +39,9 @@ import {
   NIVEL_CHART_COLOR,
   STOCK_BAJO_MAX,
   STOCK_MEDIO_MAX,
+  type NivelStock,
 } from '../../../../lib/nivelStock'
+import { toast } from '../../../../lib/toast'
 
 function hace30DiasISO(): string {
   const fecha = new Date()
@@ -86,6 +91,7 @@ function InventarioPage() {
   const [movimientoFormOpen, setMovimientoFormOpen] = useState(false)
   const [confirmando, setConfirmando] = useState<Producto | null>(null)
   const [expedienteDe, setExpedienteDe] = useState<Producto | null>(null)
+  const [nivelModal, setNivelModal] = useState<NivelStock | null>(null)
 
   async function refresh() {
     const [nuevosProductos, nuevoStock, nuevosMovimientos, nuevasVentas] = await Promise.all([
@@ -181,15 +187,32 @@ function InventarioPage() {
             { nivel: 'bueno' as const, hint: `> ${STOCK_MEDIO_MAX} unidades` },
           ] as const
         ).map(({ nivel, hint }) => (
-          <div key={nivel} className={`rounded-2xl border border-neutral-200 p-4 shadow-card ${NIVEL_BADGE_CLASS[nivel]}`}>
+          <button
+            key={nivel}
+            type="button"
+            onClick={() => setNivelModal(nivel)}
+            className={`rounded-2xl border border-neutral-200 p-4 text-left shadow-card transition-shadow hover:shadow-card-hover ${NIVEL_BADGE_CLASS[nivel]}`}
+          >
             <p className="text-xs font-medium opacity-80">{NIVEL_LABEL[nivel]}</p>
             <p className="text-xl font-semibold">{porNivel[nivel].length}</p>
-            <p className="text-xs opacity-70" title={porNivel[nivel].map((p) => p.nombre).join(', ') || undefined}>
-              {hint}
-            </p>
-          </div>
+            <p className="text-xs opacity-70">{hint}</p>
+          </button>
         ))}
       </div>
+
+      {nivelModal ? (
+        <NivelStockModal
+          nivel={nivelModal}
+          productos={porNivel[nivelModal].map((p) => ({
+            id: p.id,
+            nombre: p.nombre,
+            unidad: p.unidadMedida,
+            stock: stockDeProducto(p),
+            stockMinimo: p.stockMinimo,
+          }))}
+          onClose={() => setNivelModal(null)}
+        />
+      ) : null}
 
       {productosActivos.length > 2 ? (
         <Card className="text-left">
@@ -367,6 +390,7 @@ function InventarioPage() {
           }
           confirmLabel={confirmando.activo ? 'Inactivar' : 'Activar'}
           variant={confirmando.activo ? 'danger' : 'primary'}
+          successMessage={confirmando.activo ? 'Producto inactivado' : 'Producto activado'}
           onConfirm={async () => {
             await handleToggleActivo(confirmando)
             setConfirmando(null)
@@ -413,6 +437,20 @@ function StockTable({
   onVerExpediente: (producto: Producto) => void
   vacio: string
 }) {
+  const [filtroNombre, setFiltroNombre] = useState('')
+  const [filtroEstado, setFiltroEstado] = useState('')
+
+  const visibles = useMemo(
+    () =>
+      productos.filter((p) => {
+        if (!coincide(p.nombre, filtroNombre)) return false
+        if (!filtroEstado) return true
+        if (filtroEstado === 'inactivo') return !p.activo
+        return p.activo && nivelStock(stockPorProducto.get(p.id)?.stock ?? 0) === filtroEstado
+      }),
+    [productos, filtroNombre, filtroEstado, stockPorProducto],
+  )
+
   return (
     <Card className={`overflow-hidden border-t-4 p-0 ${accento}`}>
       <div className="flex items-center gap-3 border-b border-neutral-100 px-5 py-4">
@@ -427,19 +465,29 @@ function StockTable({
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
-            <th className="px-5 py-3">Producto</th>
-            <th className="px-5 py-3">Stock</th>
-            <th className="px-5 py-3">Mínimo</th>
-            <th className="px-5 py-3">Costo prom.</th>
-            <th className="px-5 py-3">Valorización</th>
-            {mostrarPrecio ? <th className="px-5 py-3">Precio venta</th> : null}
-            {mostrarPrecio ? <th className="px-5 py-3">Ganancia</th> : null}
-            <th className="px-5 py-3">Estado</th>
-            <th className="px-5 py-3 text-right">Acciones</th>
+            <ThTexto label="Producto" value={filtroNombre} onChange={setFiltroNombre} placeholder="Buscar…" />
+            <th className="px-5 py-3 align-top">Stock</th>
+            <th className="px-5 py-3 align-top">Mínimo</th>
+            <th className="px-5 py-3 align-top">Costo prom.</th>
+            <th className="px-5 py-3 align-top">Valorización</th>
+            {mostrarPrecio ? <th className="px-5 py-3 align-top">Precio venta</th> : null}
+            {mostrarPrecio ? <th className="px-5 py-3 align-top">Ganancia</th> : null}
+            <ThSelect
+              label="Estado"
+              value={filtroEstado}
+              onChange={setFiltroEstado}
+              options={[
+                { value: 'bajo', label: NIVEL_LABEL.bajo },
+                { value: 'medio', label: NIVEL_LABEL.medio },
+                { value: 'bueno', label: NIVEL_LABEL.bueno },
+                { value: 'inactivo', label: 'Inactivo' },
+              ]}
+            />
+            <th className="px-5 py-3 text-right align-top">Acciones</th>
           </tr>
         </thead>
         <tbody>
-          {productos.map((producto) => {
+          {visibles.map((producto) => {
             const s = stockPorProducto.get(producto.id)
             const stockActual = s?.stock ?? 0
             const nivel = nivelStock(stockActual)
@@ -517,10 +565,10 @@ function StockTable({
               </tr>
             )
           })}
-          {productos.length === 0 ? (
+          {visibles.length === 0 ? (
             <tr>
               <td className="px-5 py-6 text-center text-neutral-400" colSpan={mostrarPrecio ? 9 : 7}>
-                {vacio}
+                {productos.length === 0 ? vacio : 'Ningún producto coincide con el filtro.'}
               </td>
             </tr>
           ) : null}
@@ -590,8 +638,10 @@ function MovimientoForm({
       await createMovimiento(parsed.data)
       reset()
       await onSaved()
+      toast.exito('Movimiento registrado')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo registrar el movimiento')
+      toast.desdeError(err, 'No se pudo registrar el movimiento')
     } finally {
       setSaving(false)
     }
@@ -785,6 +835,10 @@ function ProductoForm({
         await createProducto(parsed.data)
       }
       onSaved()
+      toast.exito(producto ? 'Producto actualizado' : 'Producto creado')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo guardar')
+      toast.desdeError(err, 'No se pudo guardar')
     } finally {
       setSaving(false)
     }

@@ -21,6 +21,7 @@
     "react": "^19.2.8",
     "react-chartjs-2": "^5.3.1",
     "react-dom": "^19.2.8",
+    "sileo": "^0.1.5",
     "tailwindcss": "^4.3.3",
     "zod": "^4.4.3"
   },

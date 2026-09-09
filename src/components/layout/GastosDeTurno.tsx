@@ -6,6 +6,7 @@ import type { TurnoCaja } from '../../schemas/turnoCaja'
 import { Card } from './Card'
 import { CustomSelect } from './CustomSelect'
 import { CurrencyInput } from './CurrencyInput'
+import { toast } from '../../lib/toast'
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 
@@ -89,8 +90,10 @@ export function GastosDeTurno({ turno, categorias, gastos, onRegistrado, size = 
       onRegistrado(creado)
       resetForm()
       setAbierto(false)
+      toast.exito('Gasto de caja registrado')
     } catch (error) {
       setErrores({ general: error instanceof Error ? error.message : 'No se pudo registrar el gasto' })
+      toast.desdeError(error, 'No se pudo registrar el gasto')
     } finally {
       enVueloRef.current = false
       setGuardando(false)

@@ -16,6 +16,7 @@ import { fetchRendimientoCombos, type RendimientoCombo } from '../../../../data/
 import { Card } from '../../../../components/layout/Card'
 import { CustomSelect } from '../../../../components/layout/CustomSelect'
 import { ConfirmModal } from '../../../../components/layout/ConfirmModal'
+import { toast } from '../../../../lib/toast'
 import { CurrencyInput } from '../../../../components/layout/CurrencyInput'
 import { BarChart } from '../../../../components/layout/BarChart'
 
@@ -257,6 +258,7 @@ function CombosPage() {
           }
           confirmLabel={confirmando.activo ? 'Inactivar' : 'Activar'}
           variant={confirmando.activo ? 'danger' : 'primary'}
+          successMessage={confirmando.activo ? 'Combo inactivado' : 'Combo activado'}
           onConfirm={async () => {
             await handleToggleActivo(confirmando)
             setConfirmando(null)
@@ -525,6 +527,10 @@ function ComboForm({
       }
 
       onSaved()
+      toast.exito(combo ? 'Combo actualizado' : 'Combo creado')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo guardar')
+      toast.desdeError(err, 'No se pudo guardar')
     } finally {
       setSaving(false)
     }

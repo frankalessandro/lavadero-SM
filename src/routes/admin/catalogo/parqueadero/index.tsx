@@ -19,6 +19,7 @@ import type { TarifaParqueadero } from '../../../../schemas/tarifaParqueadero'
 import { Card } from '../../../../components/layout/Card'
 import { CustomSelect } from '../../../../components/layout/CustomSelect'
 import { ConfirmModal } from '../../../../components/layout/ConfirmModal'
+import { toast } from '../../../../lib/toast'
 import { CurrencyInput } from '../../../../components/layout/CurrencyInput'
 
 export const Route = createFileRoute('/admin/catalogo/parqueadero/')({
@@ -214,6 +215,7 @@ function ParqueaderoPage() {
           }
           confirmLabel={confirmandoSus.activo ? 'Inactivar' : 'Activar'}
           variant={confirmandoSus.activo ? 'danger' : 'primary'}
+          successMessage={confirmandoSus.activo ? 'Suscripción inactivada' : 'Suscripción activada'}
           onCancel={() => setConfirmandoSus(null)}
           onConfirm={async () => {
             await setSuscripcionActiva(confirmandoSus.id, !confirmandoSus.activo)
@@ -275,8 +277,10 @@ function SuscripcionModal({
       if (suscripcion) await updateSuscripcion(suscripcion.id, parsed.data)
       else await createSuscripcion(parsed.data, 'Admin')
       await onGuardado()
+      toast.exito(suscripcion ? 'Suscripción actualizada' : 'Suscripción creada')
     } catch (err) {
       setErrores({ general: err instanceof Error ? err.message : 'No se pudo guardar' })
+      toast.desdeError(err, 'No se pudo guardar')
     } finally {
       enVueloRef.current = false
       setGuardando(false)
@@ -411,6 +415,10 @@ function TarifaCard({ tarifa, onSaved }: { tarifa: TarifaParqueadero; onSaved: (
       await updateTarifaParqueadero(tarifa.id, numero)
       setEditing(false)
       await onSaved()
+      toast.exito('Tarifa actualizada')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo guardar la tarifa')
+      toast.desdeError(err, 'No se pudo guardar la tarifa')
     } finally {
       setSaving(false)
     }

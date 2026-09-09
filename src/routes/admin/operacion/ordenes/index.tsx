@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { Ban, ClipboardList, Wallet, X } from 'lucide-react'
 import { anularOrden, fetchOrdenesEnRango } from '../../../../data/ordenes'
@@ -13,6 +13,9 @@ import { fetchProductos } from '../../../../data/productos'
 import { StatCard } from '../../../../components/layout/StatCard'
 import { OrdenExpedienteModal } from '../../../../components/layout/OrdenExpedienteModal'
 import { duracion } from '../../../../lib/ordenFormato'
+import { ThTexto, ThSelect } from '../../../../components/layout/TableHeadFilter'
+import { coincide } from '../../../../lib/tableFilters'
+import { toast } from '../../../../lib/toast'
 
 type RangoKey = 'hoy' | '7d' | '30d'
 
@@ -69,12 +72,18 @@ function OrdenesPage() {
   const [rango, setRango] = useState<RangoKey>('hoy')
   const [ordenes, setOrdenes] = useState(initial.ordenes)
   const [loading, setLoading] = useState(false)
-  const lavadoresPorId = new Map(initial.lavadores.map((l) => [l.id, l.nombre]))
-  const combosPorId = new Map(initial.combos.map((c) => [c.id, c.nombre]))
+  const lavadoresPorId = useMemo(() => new Map(initial.lavadores.map((l) => [l.id, l.nombre])), [initial.lavadores])
+  const combosPorId = useMemo(() => new Map(initial.combos.map((c) => [c.id, c.nombre])), [initial.combos])
   const [anulando, setAnulando] = useState<Orden | null>(null)
   const [corrigiendoPago, setCorrigiendoPago] = useState<Orden | null>(null)
   const [expedienteDe, setExpedienteDe] = useState<Orden | null>(null)
   const productosPorId = new Map(initial.productos.map((p) => [p.id, p.nombre]))
+
+  const [filtroPlaca, setFiltroPlaca] = useState('')
+  const [filtroCombo, setFiltroCombo] = useState('')
+  const [filtroLavador, setFiltroLavador] = useState('')
+  const [filtroEstado, setFiltroEstado] = useState('')
+  const [filtroPago, setFiltroPago] = useState('')
 
   async function cambiarRango(key: RangoKey) {
     setRango(key)
@@ -83,6 +92,8 @@ function OrdenesPage() {
       const dias = RANGOS.find((r) => r.key === key)?.dias ?? 1
       const { desdeISO, hastaISO } = rangoFechas(dias)
       setOrdenes(await fetchOrdenesEnRango(desdeISO, hastaISO))
+    } catch (err) {
+      toast.desdeError(err, 'No se pudieron cargar las órdenes')
     } finally {
       setLoading(false)
     }
@@ -119,6 +130,23 @@ function OrdenesPage() {
     .filter((x) => x.n > 0)
     .map((x) => `${METODO_PAGO_LABEL[x.m]} ${x.n}`)
     .join(' · ')
+
+  const visibles = useMemo(
+    () =>
+      ordenes.filter((o) => {
+        if (!coincide(o.placa, filtroPlaca)) return false
+        const comboNombre = o.comboId ? combosPorId.get(o.comboId) : undefined
+        if (!coincide(comboNombre, filtroCombo)) return false
+        const lavadorNombre = o.lavadorId ? lavadoresPorId.get(o.lavadorId) : undefined
+        if (!coincide(lavadorNombre, filtroLavador)) return false
+        if (filtroEstado && o.estado !== filtroEstado) return false
+        if (filtroPago) {
+          if (filtroPago === 'sin_cobrar' ? o.metodoPago != null : o.metodoPago !== filtroPago) return false
+        }
+        return true
+      }),
+    [ordenes, filtroPlaca, filtroCombo, filtroLavador, filtroEstado, filtroPago, combosPorId, lavadoresPorId],
+  )
 
   return (
     <div className="flex flex-col gap-6 text-left">
@@ -161,19 +189,38 @@ function OrdenesPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
-                <th className="px-5 py-3">Consec.</th>
-                <th className="px-5 py-3">Placa</th>
-                <th className="px-5 py-3">Cliente</th>
-                <th className="px-5 py-3">Combo</th>
-                <th className="px-5 py-3">Lavador</th>
-                <th className="px-5 py-3">Precio</th>
-                <th className="px-5 py-3">Pago</th>
-                <th className="px-5 py-3">Estado</th>
-                <th className="px-5 py-3 text-right">Acciones</th>
+                <th className="px-5 py-3 align-top">Consec.</th>
+                <ThTexto label="Placa" value={filtroPlaca} onChange={setFiltroPlaca} placeholder="Placa…" />
+                <th className="px-5 py-3 align-top">Cliente</th>
+                <ThTexto label="Combo" value={filtroCombo} onChange={setFiltroCombo} placeholder="Combo…" />
+                <ThTexto label="Lavador" value={filtroLavador} onChange={setFiltroLavador} placeholder="Lavador…" />
+                <th className="px-5 py-3 align-top">Precio</th>
+                <ThSelect
+                  label="Pago"
+                  value={filtroPago}
+                  onChange={setFiltroPago}
+                  options={[
+                    { value: 'efectivo', label: METODO_PAGO_LABEL.efectivo },
+                    { value: 'transferencia', label: METODO_PAGO_LABEL.transferencia },
+                    { value: 'datafono', label: METODO_PAGO_LABEL.datafono },
+                    { value: 'mixto', label: METODO_PAGO_LABEL.mixto },
+                    { value: 'sin_cobrar', label: 'Sin cobrar' },
+                  ]}
+                />
+                <ThSelect
+                  label="Estado"
+                  value={filtroEstado}
+                  onChange={setFiltroEstado}
+                  options={(['en_proceso', 'listo', 'entregado', 'anulada'] as const).map((e) => ({
+                    value: e,
+                    label: ESTADO_LABEL[e],
+                  }))}
+                />
+                <th className="px-5 py-3 text-right align-top">Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {ordenes.map((orden) => (
+              {visibles.map((orden) => (
                 <tr
                   key={orden.id}
                   onClick={() => setExpedienteDe(orden)}
@@ -249,10 +296,10 @@ function OrdenesPage() {
                   </td>
                 </tr>
               ))}
-              {ordenes.length === 0 ? (
+              {visibles.length === 0 ? (
                 <tr>
                   <td className="px-5 py-6 text-center text-neutral-400" colSpan={9}>
-                    {loading ? 'Cargando…' : 'No hay órdenes en este rango.'}
+                    {loading ? 'Cargando…' : ordenes.length === 0 ? 'No hay órdenes en este rango.' : 'Ninguna orden coincide con el filtro.'}
                   </td>
                 </tr>
               ) : null}
@@ -359,8 +406,10 @@ function AnularModal({
     try {
       await anularOrden(orden.id, parsed.data)
       await onAnulada()
+      toast.exito(`Orden #${orden.consecutivo} anulada`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo anular la orden')
+      toast.desdeError(err, 'No se pudo anular la orden')
     } finally {
       setSaving(false)
     }

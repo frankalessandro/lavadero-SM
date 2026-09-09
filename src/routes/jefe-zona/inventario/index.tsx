@@ -13,7 +13,19 @@ import type { Producto } from '../../../schemas/producto'
 import { Card } from '../../../components/layout/Card'
 import { StatCard } from '../../../components/layout/StatCard'
 import { CustomSelect } from '../../../components/layout/CustomSelect'
-import { nivelStock, ordenarPorNivelStock, NIVEL_LABEL, NIVEL_BADGE_CLASS, STOCK_BAJO_MAX, STOCK_MEDIO_MAX } from '../../../lib/nivelStock'
+import { NivelStockModal } from '../../../components/layout/NivelStockModal'
+import { ThTexto, ThSelect } from '../../../components/layout/TableHeadFilter'
+import { coincide } from '../../../lib/tableFilters'
+import {
+  nivelStock,
+  ordenarPorNivelStock,
+  NIVEL_LABEL,
+  NIVEL_BADGE_CLASS,
+  STOCK_BAJO_MAX,
+  STOCK_MEDIO_MAX,
+  type NivelStock,
+} from '../../../lib/nivelStock'
+import { toast } from '../../../lib/toast'
 
 // Hoja inferior en móvil, centrada en desktop — mismo patrón que src/routes/vigilante/index.tsx,
 // es la convención del repo para formularios modales nuevos en pantallas operativas mobile-first.
@@ -74,6 +86,7 @@ function StockPage() {
   const [stock, setStock] = useState(data.stock)
   const [movimientos, setMovimientos] = useState(data.movimientos)
   const [movimientoFormOpen, setMovimientoFormOpen] = useState(false)
+  const [nivelModal, setNivelModal] = useState<NivelStock | null>(null)
 
   async function refresh() {
     const nuevo = await loadStock()
@@ -137,13 +150,32 @@ function StockPage() {
             { nivel: 'bueno' as const, hint: `> ${STOCK_MEDIO_MAX} unid.` },
           ] as const
         ).map(({ nivel, hint }) => (
-          <div key={nivel} className={`rounded-2xl border border-neutral-200 p-3 shadow-card ${NIVEL_BADGE_CLASS[nivel]}`}>
+          <button
+            key={nivel}
+            type="button"
+            onClick={() => setNivelModal(nivel)}
+            className={`rounded-2xl border border-neutral-200 p-3 text-left shadow-card transition-shadow hover:shadow-card-hover ${NIVEL_BADGE_CLASS[nivel]}`}
+          >
             <p className="text-xs font-medium opacity-80">{NIVEL_LABEL[nivel]}</p>
             <p className="text-xl font-semibold">{porNivel[nivel].length}</p>
             <p className="text-[11px] opacity-70">{hint}</p>
-          </div>
+          </button>
         ))}
       </div>
+
+      {nivelModal ? (
+        <NivelStockModal
+          nivel={nivelModal}
+          productos={porNivel[nivelModal].map((p) => ({
+            id: p.id,
+            nombre: p.nombre,
+            unidad: p.unidadMedida,
+            stock: stockPorProducto.get(p.id) ?? 0,
+            stockMinimo: p.stockMinimo,
+          }))}
+          onClose={() => setNivelModal(null)}
+        />
+      ) : null}
 
       {movimientoFormOpen ? (
         <ModalSheet title="Registrar movimiento" onClose={() => setMovimientoFormOpen(false)}>
@@ -234,6 +266,19 @@ function StockTable({
   mostrarPrecio?: boolean
   vacio: string
 }) {
+  const [filtroNombre, setFiltroNombre] = useState('')
+  const [filtroEstado, setFiltroEstado] = useState('')
+
+  const visibles = useMemo(
+    () =>
+      productos.filter((p) => {
+        if (!coincide(p.nombre, filtroNombre)) return false
+        if (!filtroEstado) return true
+        return nivelStock(stockPorProducto.get(p.id) ?? 0) === filtroEstado
+      }),
+    [productos, filtroNombre, filtroEstado, stockPorProducto],
+  )
+
   return (
     <Card className={`overflow-hidden border-t-4 p-0 ${accento}`}>
       <div className="flex items-center gap-3 border-b border-neutral-100 px-5 py-4">
@@ -248,15 +293,24 @@ function StockTable({
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
-            <th className="px-5 py-3">Producto</th>
-            <th className="px-5 py-3">Stock</th>
-            <th className="px-5 py-3">Mínimo</th>
-            {mostrarPrecio ? <th className="px-5 py-3">Precio</th> : null}
-            <th className="px-5 py-3">Estado</th>
+            <ThTexto label="Producto" value={filtroNombre} onChange={setFiltroNombre} placeholder="Buscar…" />
+            <th className="px-5 py-3 align-top">Stock</th>
+            <th className="px-5 py-3 align-top">Mínimo</th>
+            {mostrarPrecio ? <th className="px-5 py-3 align-top">Precio</th> : null}
+            <ThSelect
+              label="Estado"
+              value={filtroEstado}
+              onChange={setFiltroEstado}
+              options={[
+                { value: 'bajo', label: NIVEL_LABEL.bajo },
+                { value: 'medio', label: NIVEL_LABEL.medio },
+                { value: 'bueno', label: NIVEL_LABEL.bueno },
+              ]}
+            />
           </tr>
         </thead>
         <tbody>
-          {productos.map((producto) => {
+          {visibles.map((producto) => {
             const stockActual = stockPorProducto.get(producto.id) ?? 0
             const nivel = nivelStock(stockActual)
             const bajoMin = nivel === 'bajo'
@@ -283,10 +337,10 @@ function StockTable({
               </tr>
             )
           })}
-          {productos.length === 0 ? (
+          {visibles.length === 0 ? (
             <tr>
               <td className="px-5 py-6 text-center text-neutral-400" colSpan={mostrarPrecio ? 5 : 4}>
-                {vacio}
+                {productos.length === 0 ? vacio : 'Ningún producto coincide con el filtro.'}
               </td>
             </tr>
           ) : null}
@@ -343,8 +397,10 @@ function MovimientoForm({
       await createMovimientoOperativo(parsed.data)
       reset()
       await onSaved()
+      toast.exito('Movimiento registrado')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo registrar el movimiento')
+      toast.desdeError(err, 'No se pudo registrar el movimiento')
     } finally {
       setSaving(false)
     }

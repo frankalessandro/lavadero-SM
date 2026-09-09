@@ -6,6 +6,7 @@ import { db, USE_LOCAL_DB } from '../../lib/db'
 import { signOut } from '../../lib/auth'
 import { marcarPasswordCambiada } from '../../data/perfiles'
 import logoMark from '../../assets/logo-mark.png'
+import { toast } from '../../lib/toast'
 
 export const Route = createFileRoute('/cambiar-password/')({
   beforeLoad: ({ context }) => {
@@ -49,6 +50,7 @@ function CambiarPasswordPage() {
       window.location.assign('/')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cambiar la contraseña.')
+      toast.desdeError(err, 'No se pudo cambiar la contraseña.')
       setLoading(false)
     }
   }

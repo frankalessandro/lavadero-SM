@@ -10,6 +10,7 @@ import {
 } from '../../lib/pagoLineas'
 import { corregirReparto, fetchPagosDeGrupo, fetchPagosDeOrden, type CorreccionTarget } from '../../data/pagos'
 import type { MetodoPagoBase } from '../../schemas/orden'
+import { toast } from '../../lib/toast'
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 
@@ -65,7 +66,10 @@ export function CorregirPagoModal({
           ),
         )
       } catch (err) {
-        if (vivo) setError(err instanceof Error ? err.message : 'No se pudo cargar el pago')
+        if (vivo) {
+          setError(err instanceof Error ? err.message : 'No se pudo cargar el pago')
+          toast.desdeError(err, 'No se pudo cargar el pago')
+        }
       } finally {
         if (vivo) setCargando(false)
       }
@@ -93,8 +97,10 @@ export function CorregirPagoModal({
     try {
       await corregirReparto(target, borradorAPagos(lineas), motivo.trim(), corregidoPor.trim())
       await onCorregido()
+      toast.exito('Reparto de pago corregido')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo corregir el pago')
+      toast.desdeError(err, 'No se pudo corregir el pago')
     } finally {
       setSaving(false)
     }

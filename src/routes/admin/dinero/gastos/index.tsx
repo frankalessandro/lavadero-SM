@@ -16,6 +16,7 @@ import { StatCard } from '../../../../components/layout/StatCard'
 import { CustomSelect } from '../../../../components/layout/CustomSelect'
 import { ConfirmModal } from '../../../../components/layout/ConfirmModal'
 import { CurrencyInput } from '../../../../components/layout/CurrencyInput'
+import { toast } from '../../../../lib/toast'
 
 function inicioDelMesISO(): string {
   const now = new Date()
@@ -319,6 +320,11 @@ function GastoForm({ categorias, onSaved }: { categorias: CategoriaGasto[]; onSa
       await createGasto(parsed.data)
       reset()
       await onSaved()
+      toast.exito('Gasto registrado')
+    } catch (err) {
+      // Sin catch acá un rechazo (ej. turno cerrado) fallaba en silencio, sin nada en pantalla.
+      setError(err instanceof Error ? err.message : 'No se pudo registrar el gasto')
+      toast.desdeError(err, 'No se pudo registrar el gasto')
     } finally {
       enVuelo.current = false
       setSaving(false)
@@ -447,6 +453,10 @@ function CategoriasModal({
       await createCategoriaGasto(parsed.data)
       setNombre('')
       await onChanged()
+      toast.exito('Categoría creada')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo crear la categoría')
+      toast.desdeError(err, 'No se pudo crear la categoría')
     } finally {
       enVuelo.current = false
       setSaving(false)
@@ -532,6 +542,7 @@ function CategoriasModal({
           }
           confirmLabel={confirmando.activo ? 'Inactivar' : 'Activar'}
           variant={confirmando.activo ? 'danger' : 'primary'}
+          successMessage={confirmando.activo ? 'Categoría inactivada' : 'Categoría activada'}
           onConfirm={async () => {
             await handleToggle(confirmando)
             setConfirmando(null)

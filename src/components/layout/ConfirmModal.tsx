@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { AlertTriangle, HelpCircle } from 'lucide-react'
+import { toast } from '../../lib/toast'
 
 interface ConfirmModalProps {
   title: string
@@ -10,12 +11,19 @@ interface ConfirmModalProps {
   variant?: 'primary' | 'danger'
   onConfirm: () => void | Promise<void>
   onCancel: () => void
+  /** Toast al confirmar con éxito — opcional, sin él no hay toast de éxito (algunos llamadores
+   *  ya muestran su propia confirmación visual, como ReciboModal, y no hace falta duplicarla). */
+  successMessage?: string
 }
 
 // Confirmación genérica de un clic — para acciones que hoy se ejecutan directo al tocar un
 // botón (activar/inactivar, marcar pagada, finalizar lavado). No se usa donde ya existe un modal
 // con campos propios (cobrar, anular, abrir/cerrar turno) — ahí el formulario ya es la confirmación,
 // duplicarla sería un paso de más.
+//
+// `onConfirm` no tenía `catch` acá: si la acción fallaba (red, RPC rechazada), el modal se
+// quedaba ahí con el botón reactivado y NADA le decía al usuario que no pasó nada — fallaba en
+// silencio. El toast de error es automático para las ~15 pantallas que usan este componente.
 export function ConfirmModal({
   title,
   message,
@@ -24,6 +32,7 @@ export function ConfirmModal({
   variant = 'primary',
   onConfirm,
   onCancel,
+  successMessage,
 }: ConfirmModalProps) {
   const [saving, setSaving] = useState(false)
 
@@ -31,6 +40,9 @@ export function ConfirmModal({
     setSaving(true)
     try {
       await onConfirm()
+      if (successMessage) toast.exito(successMessage)
+    } catch (err) {
+      toast.desdeError(err, 'No se pudo completar la acción')
     } finally {
       setSaving(false)
     }
