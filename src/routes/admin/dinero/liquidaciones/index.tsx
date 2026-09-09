@@ -39,7 +39,7 @@ import type { LiquidacionJefeZona } from '../../../../schemas/liquidacionJefeZon
 import type { Lavador } from '../../../../schemas/lavador'
 import type { Configuracion } from '../../../../schemas/configuracion'
 import { Card } from '../../../../components/layout/Card'
-import { ThTexto, ThSelect } from '../../../../components/layout/TableHeadFilter'
+import { FilaFiltros, FiltroTexto, FiltroSelect, FiltroVacio } from '../../../../components/layout/TableHeadFilter'
 import { coincide } from '../../../../lib/tableFilters'
 import { StatCard } from '../../../../components/layout/StatCard'
 import { ConfirmModal } from '../../../../components/layout/ConfirmModal'
@@ -780,17 +780,23 @@ function LiquidacionesPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
-                  <ThTexto label="Lavador" value={filtroHistLavador} onChange={setFiltroHistLavador} placeholder="Buscar…" />
-                  <th className="px-5 py-3 align-top">Tipo y fecha</th>
-                  <th className="px-5 py-3 align-top">Monto</th>
-                  <ThSelect
-                    label="Estado"
+                  <th className="px-5 py-3">Lavador</th>
+                  <th className="px-5 py-3">Tipo y fecha</th>
+                  <th className="px-5 py-3">Monto</th>
+                  <th className="px-5 py-3">Estado</th>
+                  <th className="px-5 py-3 text-right">Acciones</th>
+                </tr>
+                <FilaFiltros>
+                  <FiltroTexto value={filtroHistLavador} onChange={setFiltroHistLavador} placeholder="Buscar…" />
+                  <FiltroVacio />
+                  <FiltroVacio />
+                  <FiltroSelect
                     value={filtroHistEstadoLavador}
                     onChange={setFiltroHistEstadoLavador}
                     options={ESTADO_LIQUIDACION_OPTIONS}
                   />
-                  <th className="px-5 py-3 text-right align-top">Acciones</th>
-                </tr>
+                  <FiltroVacio />
+                </FilaFiltros>
               </thead>
               <tbody>
                 {historicoVisible.map((liquidacion) => (
@@ -900,17 +906,23 @@ function LiquidacionesPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
-                  <ThTexto label="Responsable" value={filtroHistJZ} onChange={setFiltroHistJZ} placeholder="Buscar…" />
-                  <th className="px-5 py-3 align-top">Tipo y fecha</th>
-                  <th className="px-5 py-3 align-top">Monto</th>
-                  <ThSelect
-                    label="Estado"
+                  <th className="px-5 py-3">Responsable</th>
+                  <th className="px-5 py-3">Tipo y fecha</th>
+                  <th className="px-5 py-3">Monto</th>
+                  <th className="px-5 py-3">Estado</th>
+                  <th className="px-5 py-3 text-right">Acciones</th>
+                </tr>
+                <FilaFiltros>
+                  <FiltroTexto value={filtroHistJZ} onChange={setFiltroHistJZ} placeholder="Buscar…" />
+                  <FiltroVacio />
+                  <FiltroVacio />
+                  <FiltroSelect
                     value={filtroHistEstadoJZ}
                     onChange={setFiltroHistEstadoJZ}
                     options={ESTADO_LIQUIDACION_OPTIONS}
                   />
-                  <th className="px-5 py-3 text-right align-top">Acciones</th>
-                </tr>
+                  <FiltroVacio />
+                </FilaFiltros>
               </thead>
               <tbody>
                 {historicoJefeZonaVisible.map((liquidacion) => (

@@ -4,8 +4,10 @@ import { LayoutDashboard, Wallet, ShoppingCart, Boxes, Coins, CalendarCheck } fr
 import { Sidebar, type NavItem } from '../../components/layout/Sidebar'
 import { Topbar } from '../../components/layout/Topbar'
 import { MobileTabBar } from '../../components/layout/MobileTabBar'
+import { NotificacionesCentro } from '../../components/layout/NotificacionesCentro'
 import { exigirRol, signOut } from '../../lib/auth'
 import { fetchTurnoAbierto } from '../../data/turnos'
+import { fetchAlertasJefeZona } from '../../data/alertas'
 
 export const Route = createFileRoute('/jefe-zona')({
   beforeLoad: ({ context }) => exigirRol(context.auth, 'jefe_zona'),
@@ -56,6 +58,7 @@ function JefeZonaLayout() {
           onMenuClick={() => setMenuOpen(true)}
           responsable={turno?.responsableActual ?? auth?.perfil.nombre ?? undefined}
           roleLabel="Jefe de patio"
+          notificaciones={<NotificacionesCentro cargarAlertas={fetchAlertasJefeZona} />}
         />
         <main className="flex-1 overflow-y-auto p-4 pb-24 sm:p-6 md:pb-6">
           <Outlet />

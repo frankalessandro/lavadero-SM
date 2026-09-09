@@ -13,7 +13,7 @@ import { fetchProductos } from '../../../../data/productos'
 import { StatCard } from '../../../../components/layout/StatCard'
 import { OrdenExpedienteModal } from '../../../../components/layout/OrdenExpedienteModal'
 import { duracion } from '../../../../lib/ordenFormato'
-import { ThTexto, ThSelect } from '../../../../components/layout/TableHeadFilter'
+import { FilaFiltros, FiltroTexto, FiltroSelect, FiltroVacio } from '../../../../components/layout/TableHeadFilter'
 import { coincide } from '../../../../lib/tableFilters'
 import { toast } from '../../../../lib/toast'
 
@@ -189,14 +189,24 @@ function OrdenesPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
-                <th className="px-5 py-3 align-top">Consec.</th>
-                <ThTexto label="Placa" value={filtroPlaca} onChange={setFiltroPlaca} placeholder="Placa…" />
-                <th className="px-5 py-3 align-top">Cliente</th>
-                <ThTexto label="Combo" value={filtroCombo} onChange={setFiltroCombo} placeholder="Combo…" />
-                <ThTexto label="Lavador" value={filtroLavador} onChange={setFiltroLavador} placeholder="Lavador…" />
-                <th className="px-5 py-3 align-top">Precio</th>
-                <ThSelect
-                  label="Pago"
+                <th className="px-5 py-3">Consec.</th>
+                <th className="px-5 py-3">Placa</th>
+                <th className="px-5 py-3">Cliente</th>
+                <th className="px-5 py-3">Combo</th>
+                <th className="px-5 py-3">Lavador</th>
+                <th className="px-5 py-3">Precio</th>
+                <th className="px-5 py-3">Pago</th>
+                <th className="px-5 py-3">Estado</th>
+                <th className="px-5 py-3 text-right">Acciones</th>
+              </tr>
+              <FilaFiltros>
+                <FiltroVacio />
+                <FiltroTexto value={filtroPlaca} onChange={setFiltroPlaca} placeholder="Placa…" />
+                <FiltroVacio />
+                <FiltroTexto value={filtroCombo} onChange={setFiltroCombo} placeholder="Combo…" />
+                <FiltroTexto value={filtroLavador} onChange={setFiltroLavador} placeholder="Lavador…" />
+                <FiltroVacio />
+                <FiltroSelect
                   value={filtroPago}
                   onChange={setFiltroPago}
                   options={[
@@ -207,8 +217,7 @@ function OrdenesPage() {
                     { value: 'sin_cobrar', label: 'Sin cobrar' },
                   ]}
                 />
-                <ThSelect
-                  label="Estado"
+                <FiltroSelect
                   value={filtroEstado}
                   onChange={setFiltroEstado}
                   options={(['en_proceso', 'listo', 'entregado', 'anulada'] as const).map((e) => ({
@@ -216,8 +225,8 @@ function OrdenesPage() {
                     label: ESTADO_LABEL[e],
                   }))}
                 />
-                <th className="px-5 py-3 text-right align-top">Acciones</th>
-              </tr>
+                <FiltroVacio />
+              </FilaFiltros>
             </thead>
             <tbody>
               {visibles.map((orden) => (

@@ -1,70 +1,82 @@
+import type { ReactNode } from 'react'
 import { CustomSelect } from './CustomSelect'
 
-// Filtro por columna, embebido en el propio <th> — para no repetir una franja de inputs aparte
-// arriba de cada tabla grande (admin ya tiene varias así: Órdenes, Clientes, Turnos, Usuarios,
-// Liquidaciones, Stock). Dos variantes: texto libre (substring, case-insensitive) y select (para
-// columnas de valores discretos: estado, rol, nivel, método de pago). Filtrado 100% en cliente,
-// sobre los datos que ya trajo el loader — mismo patrón que `busquedaPlaca`/`lavadorFiltro` del
-// dashboard de jefe de zona.
+// Franja de filtros — una SEGUNDA fila del <thead>, aparte de la fila de etiquetas de columna.
 //
-// El `<tr>` padre de estas tablas trae `uppercase tracking-wide text-xs font-medium` para las
-// etiquetas — hay que neutralizar eso en el control (`normal-case`, `font-normal`, `text-sm`) o
-// el input/select hereda mayúsculas y el tamaño de letra del encabezado.
+// La primera versión metía el filtro DENTRO de cada <th> de etiqueta (label arriba, control
+// abajo, apilados). Se veía mal: el input de texto y el CustomSelect no medían lo mismo, así que
+// la fila de encabezado quedaba dispareja según qué tipo de filtro tocaba cada columna, y las
+// columnas sin filtro se quedaban más cortas que las que sí tenían uno — nada alineado.
+//
+// Ahora es una tira propia con su propio fondo (`FilaFiltros`), debajo de la fila de etiquetas de
+// siempre (que vuelve a ser un <th> plano, sin nada apilado). Cada celda de esa tira —tenga
+// filtro o no— usa el mismo `CONTROL_CLASS`, así que un input de texto, un CustomSelect (tamaño
+// `sm`, que ya usa exactamente ese padding/tipografía) y el espacio en blanco de una columna sin
+// filtro (`FiltroVacio`) miden EXACTO lo mismo. `FiltroVacio` es literalmente el mismo control,
+// solo invisible — así nunca se puede desalinear del resto aunque cambie el padding acá.
 
-export function ThTexto({
-  label,
+const CONTROL_CLASS =
+  'w-full rounded-lg border border-neutral-300 bg-white px-3 py-2.5 text-sm text-neutral-700 outline-none transition-colors placeholder:text-neutral-400 focus:border-primary-500 focus:ring-1 focus:ring-primary-500'
+
+export function FilaFiltros({ children }: { children: ReactNode }) {
+  return <tr className="border-b border-neutral-200 bg-neutral-50/60">{children}</tr>
+}
+
+export function FiltroTexto({
   value,
   onChange,
   placeholder = 'Filtrar…',
   align = 'left',
 }: {
-  label: string
   value: string
   onChange: (value: string) => void
   placeholder?: string
   align?: 'left' | 'right'
 }) {
   return (
-    <th className={`px-5 py-3 align-top ${align === 'right' ? 'text-right' : 'text-left'}`}>
-      <span className="block">{label}</span>
+    <td className="px-5 py-2">
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        onClick={(event) => event.stopPropagation()}
         placeholder={placeholder}
-        className={`mt-1.5 w-full min-w-[7rem] rounded-md border border-neutral-200 bg-white px-2 py-1 text-xs font-normal normal-case tracking-normal text-neutral-700 outline-none transition-colors placeholder:text-neutral-400 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 ${
-          align === 'right' ? 'text-right' : ''
-        }`}
+        className={`${CONTROL_CLASS} ${align === 'right' ? 'text-right' : ''}`}
       />
-    </th>
+    </td>
   )
 }
 
-export function ThSelect({
-  label,
+export function FiltroSelect({
   value,
   onChange,
   options,
   todosLabel = 'Todos',
 }: {
-  label: string
   value: string
   onChange: (value: string) => void
   options: { value: string; label: string }[]
   todosLabel?: string
 }) {
   return (
-    <th className="px-5 py-3 align-top">
-      <span className="block">{label}</span>
-      <div className="mt-1.5 min-w-[8rem] normal-case" onClick={(event) => event.stopPropagation()}>
-        <CustomSelect
-          size="sm"
-          value={value}
-          onChange={onChange}
-          options={[{ value: '', label: todosLabel }, ...options]}
-          placeholder={todosLabel}
-        />
+    <td className="px-5 py-2">
+      <CustomSelect
+        size="sm"
+        value={value}
+        onChange={onChange}
+        options={[{ value: '', label: todosLabel }, ...options]}
+        placeholder={todosLabel}
+      />
+    </td>
+  )
+}
+
+// Relleno para una columna sin filtro (ej. "Acciones") — mismo alto exacto que las de al lado,
+// para que la tira no quede dispareja.
+export function FiltroVacio() {
+  return (
+    <td className="px-5 py-2">
+      <div className={`${CONTROL_CLASS} invisible`} aria-hidden="true">
+        —
       </div>
-    </th>
+    </td>
   )
 }

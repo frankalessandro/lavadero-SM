@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { Bell } from 'lucide-react'
-import { fetchAlertas, type Alerta } from '../../data/alertas'
+import type { Alerta } from '../../data/alertas'
 import { toast } from '../../lib/toast'
 
-// Campana junto al avatar del Topbar de admin — antes ese comentario decía "no hay notificaciones
-// reales en el sistema todavía". Ahora sí: agrega en un solo panel señales que ya existían cada
-// una en su propia pantalla (stock bajo, huecos de consecutivo, faltantes de conteo, suscripciones
-// de parqueadero por vencer, correcciones de reparto de pago) — sin tabla nueva, es una relectura.
-export function NotificacionesCentro() {
+// Campana junto al avatar del Topbar — antes ese comentario decía "no hay notificaciones reales
+// en el sistema todavía". Ahora sí, y el mismo componente sirve para admin y jefe de patio: cada
+// rol pasa su propia función de carga (`fetchAlertas`/`fetchAlertasJefeZona` en
+// src/data/alertas.ts) porque las alertas que puede ver uno no son las que puede ver el otro —
+// jefe de patio no tiene RLS sobre faltantes de inventario (llevan costo) ni sobre suscripciones
+// de parqueadero, así que su función solo agrega lo que sí puede leer (stock, principalmente).
+export function NotificacionesCentro({ cargarAlertas }: { cargarAlertas: () => Promise<Alerta[]> }) {
   const [alertas, setAlertas] = useState<Alerta[]>([])
   const [abierto, setAbierto] = useState(false)
   const [cargando, setCargando] = useState(true)
@@ -16,7 +18,7 @@ export function NotificacionesCentro() {
   async function cargar() {
     setCargando(true)
     try {
-      setAlertas(await fetchAlertas())
+      setAlertas(await cargarAlertas())
     } catch (err) {
       toast.desdeError(err, 'No se pudieron cargar las notificaciones')
     } finally {
@@ -24,14 +26,14 @@ export function NotificacionesCentro() {
     }
   }
 
-  // Al montar el panel de admin, una sola vez — no es una pantalla operativa de tiempo real
-  // (como el polling de 12s de ventas pendientes en jefe-zona), es un vistazo de "qué necesita
-  // atención hoy" que se refresca al abrir el panel. `cargando` ya arranca en `true`, así que acá
-  // no hace falta (ni conviene, react-hooks/set-state-in-effect) volver a ponerlo — solo la carga
-  // inicial en sí, mismo patrón que `usePersonalElegible` en TurnoResponsableBanner.
+  // Al montar el panel, una sola vez — no es una pantalla operativa de tiempo real (como el
+  // polling de 12s de ventas pendientes en jefe-zona), es un vistazo de "qué necesita atención
+  // hoy" que se refresca al abrir el panel. `cargando` ya arranca en `true`, así que acá no hace
+  // falta (ni conviene, react-hooks/set-state-in-effect) volver a ponerlo — solo la carga inicial
+  // en sí, mismo patrón que `usePersonalElegible` en TurnoResponsableBanner.
   useEffect(() => {
     let vivo = true
-    fetchAlertas()
+    cargarAlertas()
       .then((data) => {
         if (vivo) setAlertas(data)
       })
@@ -44,7 +46,9 @@ export function NotificacionesCentro() {
     return () => {
       vivo = false
     }
-  }, [])
+    // `cargarAlertas` es siempre `fetchAlertas`/`fetchAlertasJefeZona` importadas directo (mismo
+    // patrón que las demás funciones del data layer) — referencia estable, no dispara de nuevo.
+  }, [cargarAlertas])
 
   return (
     <div className="relative">

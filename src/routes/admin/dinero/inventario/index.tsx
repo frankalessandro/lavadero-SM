@@ -17,7 +17,7 @@ import { fetchVentasEnRango } from '../../../../data/ventas'
 import { fetchFaltantesPendientes, type FaltantePendiente } from '../../../../data/conteosInventario'
 import { ProductoExpedienteModal } from '../../../../components/layout/ProductoExpedienteModal'
 import { NivelStockModal } from '../../../../components/layout/NivelStockModal'
-import { ThTexto, ThSelect } from '../../../../components/layout/TableHeadFilter'
+import { FilaFiltros, FiltroTexto, FiltroSelect, FiltroVacio } from '../../../../components/layout/TableHeadFilter'
 import { coincide } from '../../../../lib/tableFilters'
 import { productoInputSchema, type Producto } from '../../../../schemas/producto'
 import {
@@ -465,15 +465,25 @@ function StockTable({
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
-            <ThTexto label="Producto" value={filtroNombre} onChange={setFiltroNombre} placeholder="Buscar…" />
-            <th className="px-5 py-3 align-top">Stock</th>
-            <th className="px-5 py-3 align-top">Mínimo</th>
-            <th className="px-5 py-3 align-top">Costo prom.</th>
-            <th className="px-5 py-3 align-top">Valorización</th>
-            {mostrarPrecio ? <th className="px-5 py-3 align-top">Precio venta</th> : null}
-            {mostrarPrecio ? <th className="px-5 py-3 align-top">Ganancia</th> : null}
-            <ThSelect
-              label="Estado"
+            <th className="px-5 py-3">Producto</th>
+            <th className="px-5 py-3">Stock</th>
+            <th className="px-5 py-3">Mínimo</th>
+            <th className="px-5 py-3">Costo prom.</th>
+            <th className="px-5 py-3">Valorización</th>
+            {mostrarPrecio ? <th className="px-5 py-3">Precio venta</th> : null}
+            {mostrarPrecio ? <th className="px-5 py-3">Ganancia</th> : null}
+            <th className="px-5 py-3">Estado</th>
+            <th className="px-5 py-3 text-right">Acciones</th>
+          </tr>
+          <FilaFiltros>
+            <FiltroTexto value={filtroNombre} onChange={setFiltroNombre} placeholder="Buscar producto…" />
+            <FiltroVacio />
+            <FiltroVacio />
+            <FiltroVacio />
+            <FiltroVacio />
+            {mostrarPrecio ? <FiltroVacio /> : null}
+            {mostrarPrecio ? <FiltroVacio /> : null}
+            <FiltroSelect
               value={filtroEstado}
               onChange={setFiltroEstado}
               options={[
@@ -483,8 +493,8 @@ function StockTable({
                 { value: 'inactivo', label: 'Inactivo' },
               ]}
             />
-            <th className="px-5 py-3 text-right align-top">Acciones</th>
-          </tr>
+            <FiltroVacio />
+          </FilaFiltros>
         </thead>
         <tbody>
           {visibles.map((producto) => {

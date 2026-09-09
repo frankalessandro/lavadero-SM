@@ -14,7 +14,7 @@ import { Card } from '../../../components/layout/Card'
 import { StatCard } from '../../../components/layout/StatCard'
 import { CustomSelect } from '../../../components/layout/CustomSelect'
 import { NivelStockModal } from '../../../components/layout/NivelStockModal'
-import { ThTexto, ThSelect } from '../../../components/layout/TableHeadFilter'
+import { FilaFiltros, FiltroTexto, FiltroSelect, FiltroVacio } from '../../../components/layout/TableHeadFilter'
 import { coincide } from '../../../lib/tableFilters'
 import {
   nivelStock,
@@ -293,12 +293,18 @@ function StockTable({
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
-            <ThTexto label="Producto" value={filtroNombre} onChange={setFiltroNombre} placeholder="Buscar…" />
-            <th className="px-5 py-3 align-top">Stock</th>
-            <th className="px-5 py-3 align-top">Mínimo</th>
-            {mostrarPrecio ? <th className="px-5 py-3 align-top">Precio</th> : null}
-            <ThSelect
-              label="Estado"
+            <th className="px-5 py-3">Producto</th>
+            <th className="px-5 py-3">Stock</th>
+            <th className="px-5 py-3">Mínimo</th>
+            {mostrarPrecio ? <th className="px-5 py-3">Precio</th> : null}
+            <th className="px-5 py-3">Estado</th>
+          </tr>
+          <FilaFiltros>
+            <FiltroTexto value={filtroNombre} onChange={setFiltroNombre} placeholder="Buscar producto…" />
+            <FiltroVacio />
+            <FiltroVacio />
+            {mostrarPrecio ? <FiltroVacio /> : null}
+            <FiltroSelect
               value={filtroEstado}
               onChange={setFiltroEstado}
               options={[
@@ -307,7 +313,7 @@ function StockTable({
                 { value: 'bueno', label: NIVEL_LABEL.bueno },
               ]}
             />
-          </tr>
+          </FilaFiltros>
         </thead>
         <tbody>
           {visibles.map((producto) => {

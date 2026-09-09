@@ -9,7 +9,7 @@ import { fetchProductos } from '../../../../data/productos'
 import { Card } from '../../../../components/layout/Card'
 import { StatCard } from '../../../../components/layout/StatCard'
 import { ClienteExpedienteModal } from '../../../../components/layout/ClienteExpedienteModal'
-import { ThTexto } from '../../../../components/layout/TableHeadFilter'
+import { FilaFiltros, FiltroTexto, FiltroVacio } from '../../../../components/layout/TableHeadFilter'
 import { coincide } from '../../../../lib/tableFilters'
 
 // Mismo criterio de indicativo que src/components/layout/ContactoModal.tsx.
@@ -107,15 +107,25 @@ function ClientesPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
-                <ThTexto label="Cliente" value={filtroCliente} onChange={setFiltroCliente} placeholder="Buscar…" />
-                <th className="px-5 py-3 align-top">Contacto</th>
-                <th className="px-5 py-3 align-top">Vehículo</th>
-                <ThTexto label="Placa" value={filtroPlaca} onChange={setFiltroPlaca} placeholder="Placa…" />
-                <th className="px-5 py-3 align-top">Último servicio</th>
-                <th className="px-5 py-3 text-right align-top">Servicios</th>
-                <th className="px-5 py-3 text-right align-top">Total gastado</th>
-                <th className="px-5 py-3 text-right align-top">Ticket prom.</th>
+                <th className="px-5 py-3">Cliente</th>
+                <th className="px-5 py-3">Contacto</th>
+                <th className="px-5 py-3">Vehículo</th>
+                <th className="px-5 py-3">Placa</th>
+                <th className="px-5 py-3">Último servicio</th>
+                <th className="px-5 py-3 text-right">Servicios</th>
+                <th className="px-5 py-3 text-right">Total gastado</th>
+                <th className="px-5 py-3 text-right">Ticket prom.</th>
               </tr>
+              <FilaFiltros>
+                <FiltroTexto value={filtroCliente} onChange={setFiltroCliente} placeholder="Buscar…" />
+                <FiltroVacio />
+                <FiltroVacio />
+                <FiltroTexto value={filtroPlaca} onChange={setFiltroPlaca} placeholder="Placa…" />
+                <FiltroVacio />
+                <FiltroVacio />
+                <FiltroVacio />
+                <FiltroVacio />
+              </FilaFiltros>
             </thead>
             <tbody>
               {filtrados.map((cliente) => (

@@ -19,7 +19,7 @@ import {
 } from '../../../../schemas/perfil'
 import { USE_LOCAL_DB } from '../../../../lib/db'
 import { Card } from '../../../../components/layout/Card'
-import { ThTexto, ThSelect } from '../../../../components/layout/TableHeadFilter'
+import { FilaFiltros, FiltroTexto, FiltroSelect, FiltroVacio } from '../../../../components/layout/TableHeadFilter'
 import { coincide } from '../../../../lib/tableFilters'
 import { toast } from '../../../../lib/toast'
 
@@ -93,16 +93,22 @@ function UsuariosPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
-              <ThTexto label="Nombre" value={filtroNombre} onChange={setFiltroNombre} placeholder="Buscar…" />
-              <ThSelect
-                label="Roles"
+              <th className="px-5 py-3">Nombre</th>
+              <th className="px-5 py-3">Roles</th>
+              <th className="px-5 py-3">Estado</th>
+              <th className="px-5 py-3 text-right">Acciones</th>
+            </tr>
+            <FilaFiltros>
+              <FiltroTexto value={filtroNombre} onChange={setFiltroNombre} placeholder="Buscar por nombre…" />
+              <FiltroSelect
                 value={filtroRol}
                 onChange={setFiltroRol}
                 options={ROLES.map((r) => ({ value: r.id, label: r.label }))}
+                todosLabel="Todos los roles"
               />
-              <ThSelect label="Estado" value={filtroEstado} onChange={setFiltroEstado} options={ESTADO_OPTIONS} />
-              <th className="px-5 py-3 text-right align-top">Acciones</th>
-            </tr>
+              <FiltroSelect value={filtroEstado} onChange={setFiltroEstado} options={ESTADO_OPTIONS} todosLabel="Todos" />
+              <FiltroVacio />
+            </FilaFiltros>
           </thead>
           <tbody>
             {visibles.map((perfil) => (

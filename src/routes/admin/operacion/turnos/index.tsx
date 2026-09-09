@@ -11,7 +11,7 @@ import { Card } from '../../../../components/layout/Card'
 import { StatCard } from '../../../../components/layout/StatCard'
 import { BarChart } from '../../../../components/layout/BarChart'
 import { TurnoExpedienteModal } from '../../../../components/layout/TurnoExpedienteModal'
-import { ThTexto, ThSelect } from '../../../../components/layout/TableHeadFilter'
+import { FilaFiltros, FiltroTexto, FiltroSelect, FiltroVacio } from '../../../../components/layout/TableHeadFilter'
 import { coincide } from '../../../../lib/tableFilters'
 import { toast } from '../../../../lib/toast'
 import { METODO_PAGO_LABEL } from '../../../../lib/metodoPago'
@@ -196,21 +196,28 @@ function TurnosPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
-                <th className="px-5 py-3 align-top">Rol</th>
-                <ThTexto
-                  label="Responsable"
-                  value={filtroResponsable}
-                  onChange={setFiltroResponsable}
-                  placeholder="Buscar…"
-                />
-                <th className="px-5 py-3 align-top">Apertura</th>
-                <th className="px-5 py-3 align-top">Cierre</th>
-                <th className="px-5 py-3 align-top">Base inicial</th>
-                <th className="px-5 py-3 align-top">Valor esperado</th>
-                <th className="px-5 py-3 align-top">Conteo físico</th>
-                <th className="px-5 py-3 align-top">Diferencia</th>
-                <ThSelect
-                  label="Estado"
+                <th className="px-5 py-3">Rol</th>
+                <th className="px-5 py-3">Responsable</th>
+                <th className="px-5 py-3">Apertura</th>
+                <th className="px-5 py-3">Cierre</th>
+                <th className="px-5 py-3">Base inicial</th>
+                <th className="px-5 py-3">Valor esperado</th>
+                <th className="px-5 py-3">Conteo físico</th>
+                <th className="px-5 py-3">Diferencia</th>
+                <th className="px-5 py-3">Estado</th>
+                <th className="px-5 py-3">Cerró</th>
+                <th className="px-5 py-3">Recibió</th>
+              </tr>
+              <FilaFiltros>
+                <FiltroVacio />
+                <FiltroTexto value={filtroResponsable} onChange={setFiltroResponsable} placeholder="Buscar…" />
+                <FiltroVacio />
+                <FiltroVacio />
+                <FiltroVacio />
+                <FiltroVacio />
+                <FiltroVacio />
+                <FiltroVacio />
+                <FiltroSelect
                   value={filtroEstado}
                   onChange={setFiltroEstado}
                   options={[
@@ -218,9 +225,9 @@ function TurnosPage() {
                     { value: 'cerrado', label: 'Cerrado' },
                   ]}
                 />
-                <th className="px-5 py-3 align-top">Cerró</th>
-                <th className="px-5 py-3 align-top">Recibió</th>
-              </tr>
+                <FiltroVacio />
+                <FiltroVacio />
+              </FilaFiltros>
             </thead>
             <tbody>
               {visibles.map((turno) => (
