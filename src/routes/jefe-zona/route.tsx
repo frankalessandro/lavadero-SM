@@ -42,7 +42,7 @@ function JefeZonaLayout() {
     <div className="fixed inset-0 z-10 flex bg-neutral-50 text-left">
       <Sidebar
         navItems={NAV_ITEMS}
-        roleLabel="Jefe de zona"
+        roleLabel="Jefe de patio"
         mobileOpen={menuOpen}
         onMobileClose={() => setMenuOpen(false)}
       />
@@ -55,7 +55,7 @@ function JefeZonaLayout() {
           onCambiarModulo={() => navigate({ to: '/seleccionar-modulo' })}
           onMenuClick={() => setMenuOpen(true)}
           responsable={turno?.responsableActual ?? auth?.perfil.nombre ?? undefined}
-          roleLabel="Jefe de zona"
+          roleLabel="Jefe de patio"
         />
         <main className="flex-1 overflow-y-auto p-4 pb-24 sm:p-6 md:pb-6">
           <Outlet />

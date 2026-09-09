@@ -18,12 +18,12 @@ type FiltroKey = 'todos' | 'jefe_zona' | 'vigilante'
 
 const FILTROS: { key: FiltroKey; label: string }[] = [
   { key: 'todos', label: 'Todos' },
-  { key: 'jefe_zona', label: 'Jefe de zona' },
+  { key: 'jefe_zona', label: 'Jefe de patio' },
   { key: 'vigilante', label: 'Vigilante' },
 ]
 
 const ROL_LABEL: Record<RolCaja, string> = {
-  jefe_zona: 'Jefe de zona',
+  jefe_zona: 'Jefe de patio',
   vigilante: 'Vigilante',
 }
 

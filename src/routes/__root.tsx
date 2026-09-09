@@ -37,7 +37,7 @@ function RootLayout() {
           Admin
         </Link>
         <Link to="/jefe-zona" activeProps={{ className: 'active' }}>
-          Jefe de zona
+          Jefe de patio
         </Link>
         <Link to="/recepcion" activeProps={{ className: 'active' }}>
           Recepción

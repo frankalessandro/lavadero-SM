@@ -12,8 +12,8 @@ import { fetchPersonalOperativo } from '../../../../data/personalOperativo'
 import {
   perfilInputSchema,
   crearUsuarioInputSchema,
-  rolSchema,
   ROL_LABEL,
+  ROLES,
   type Perfil,
   type Rol,
 } from '../../../../schemas/perfil'
@@ -21,8 +21,6 @@ import type { PersonalOperativo } from '../../../../schemas/personalOperativo'
 import { USE_LOCAL_DB } from '../../../../lib/db'
 import { Card } from '../../../../components/layout/Card'
 import { CustomSelect } from '../../../../components/layout/CustomSelect'
-
-const ROLES: Rol[] = [...rolSchema.options]
 
 export const Route = createFileRoute('/admin/personal/usuarios/')({
   loader: async () => {
@@ -160,6 +158,8 @@ function UsuariosPage() {
         </table>
       </Card>
 
+      <RolesReferencia />
+
       {editing ? (
         <PerfilForm
           perfil={editing}
@@ -191,21 +191,57 @@ function UsuariosPage() {
   )
 }
 
+// Referencia estática — los 3 roles vienen de src/lib/roles.ts, espejados por el `check` de
+// `perfiles` y por las ~78 políticas RLS. No son cuentas ni son editables desde acá (agregar
+// un rol es un cambio de código + migración). "Gerencia" se guarda como el rol `admin`.
+function RolesReferencia() {
+  return (
+    <Card className="p-0">
+      <div className="border-b border-neutral-200 px-5 py-4">
+        <h3 className="text-base font-semibold text-neutral-900">Roles del sistema</h3>
+        <p className="text-sm text-neutral-500">
+          Fijos: son 3 y no se editan. Un rol no es una cuenta — se asigna a los usuarios de arriba.
+        </p>
+      </div>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
+            <th className="px-5 py-3">Rol</th>
+            <th className="px-5 py-3">Qué ve y puede</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ROLES.map((rol) => (
+            <tr key={rol.id} className="border-b border-neutral-100 last:border-0">
+              <td className="px-5 py-3 align-top">
+                <span className="inline-flex rounded-full bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary-700">
+                  {rol.label}
+                </span>
+              </td>
+              <td className="px-5 py-3 text-neutral-600">{rol.acceso}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Card>
+  )
+}
+
 function RolesCheckboxes({ value, onChange }: { value: Rol[]; onChange: (roles: Rol[]) => void }) {
   function toggle(rol: Rol) {
     onChange(value.includes(rol) ? value.filter((r) => r !== rol) : [...value, rol])
   }
   return (
     <div className="flex flex-col gap-2">
-      {ROLES.map((rol) => (
-        <label key={rol} className="flex items-center gap-2 text-sm text-neutral-700">
+      {ROLES.map(({ id }) => (
+        <label key={id} className="flex items-center gap-2 text-sm text-neutral-700">
           <input
             type="checkbox"
-            checked={value.includes(rol)}
-            onChange={() => toggle(rol)}
+            checked={value.includes(id)}
+            onChange={() => toggle(id)}
             className="size-4 rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
           />
-          {ROL_LABEL[rol]}
+          {ROL_LABEL[id]}
         </label>
       ))}
     </div>

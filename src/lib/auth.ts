@@ -2,19 +2,16 @@ import { redirect } from '@tanstack/react-router'
 import type { Session } from '@supabase/supabase-js'
 import { db, USE_LOCAL_DB } from './db'
 import { fetchPerfilActual, setRolActivo } from '../data/perfiles'
-import type { Perfil, Rol } from '../schemas/perfil'
+import type { Perfil } from '../schemas/perfil'
+import { ROL_HOME, type Rol } from './roles'
 
 export interface AuthContext {
   session: Session | null
   perfil: Perfil
 }
 
-// Pantalla de inicio por rol tras elegir módulo (o al entrar a "/" ya con sesión y un solo rol).
-export const ROL_HOME: Record<Rol, string> = {
-  admin: '/admin',
-  jefe_zona: '/jefe-zona',
-  vigilante: '/vigilante',
-}
+// Pantalla de inicio por rol tras elegir módulo — se re-exporta desde ./roles (fuente única).
+export { ROL_HOME } from './roles'
 
 // A dónde mandar a alguien recién autenticado:
 //  - debe cambiar la contraseña desechable  -> /cambiar-password

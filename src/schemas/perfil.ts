@@ -1,12 +1,9 @@
 import { z } from 'zod'
+import { rolSchema } from '../lib/roles'
 
-export const rolSchema = z.enum(['admin', 'jefe_zona', 'vigilante'])
-
-export const ROL_LABEL: Record<Rol, string> = {
-  admin: 'Administrador',
-  jefe_zona: 'Jefe de zona',
-  vigilante: 'Vigilante',
-}
+// La lista de roles y sus etiquetas viven en un solo lugar (src/lib/roles.ts). Se re-exportan
+// acá por compatibilidad con los imports existentes desde '../schemas/perfil'.
+export { rolSchema, ROL_LABEL, ROLES, type Rol, type RolInfo } from '../lib/roles'
 
 export const perfilSchema = z.object({
   id: z.string(),
@@ -40,7 +37,6 @@ export const crearUsuarioInputSchema = z.object({
   personaId: z.string().trim().optional(),
 })
 
-export type Rol = z.infer<typeof rolSchema>
 export type Perfil = z.infer<typeof perfilSchema>
 export type PerfilInput = z.infer<typeof perfilInputSchema>
 export type CrearUsuarioInput = z.infer<typeof crearUsuarioInputSchema>

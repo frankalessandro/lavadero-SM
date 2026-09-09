@@ -41,7 +41,7 @@ function AdminLayout() {
     <div className="fixed inset-0 z-10 flex bg-neutral-50 text-left">
       <Sidebar
         navItems={NAV_ITEMS}
-        roleLabel="Administrador"
+        roleLabel="Gerencia"
         mobileOpen={menuOpen}
         onMobileClose={() => setMenuOpen(false)}
       />
@@ -54,7 +54,7 @@ function AdminLayout() {
           onCambiarModulo={() => navigate({ to: '/seleccionar-modulo' })}
           onMenuClick={() => setMenuOpen(true)}
           responsable={auth?.perfil.nombre ?? undefined}
-          roleLabel="Administrador"
+          roleLabel="Gerencia"
         />
         <main className="flex-1 overflow-y-auto p-4 sm:p-6">
           <Outlet />
