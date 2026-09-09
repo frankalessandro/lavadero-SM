@@ -111,6 +111,16 @@ export async function createUsuario(input: CrearUsuarioInput): Promise<UsuarioCr
   return { perfil, email, password }
 }
 
+// Correo de una cuenta, para el modal de detalle — no viaja en `fetchPerfiles()` (no vive en
+// `perfiles`, PostgREST no expone `auth.users`) y solo se pide bajo demanda, al abrir el modal.
+// La RPC es admin-only (ver 0057_email_usuario_rpc.sql); cualquier otro rol recibe el error de la
+// función, no un correo vacío.
+export async function fetchEmailUsuario(id: string): Promise<string | null> {
+  const { data, error } = await db.rpc('email_de_usuario', { p_id: id })
+  if (error) throw new Error(error.message)
+  return (data as string | null) ?? null
+}
+
 // Genera una contraseña desechable nueva para una cuenta y marca que debe cambiarla en el próximo
 // ingreso. Sin correos — el admin le pasa la contraseña a la persona por fuera del sistema.
 export async function resetPassword(userId: string): Promise<{ password: string }> {

@@ -9,6 +9,8 @@ import { fetchProductos } from '../../../../data/productos'
 import { Card } from '../../../../components/layout/Card'
 import { StatCard } from '../../../../components/layout/StatCard'
 import { ClienteExpedienteModal } from '../../../../components/layout/ClienteExpedienteModal'
+import { ThTexto } from '../../../../components/layout/TableHeadFilter'
+import { coincide } from '../../../../lib/tableFilters'
 
 // Mismo criterio de indicativo que src/components/layout/ContactoModal.tsx.
 function whatsappHref(telefono: string, mensaje: string): string {
@@ -35,7 +37,8 @@ export const Route = createFileRoute('/admin/operacion/clientes/')({
 
 function ClientesPage() {
   const { clientes, tiposVehiculo, combos, lavadores, productos } = Route.useLoaderData()
-  const [busqueda, setBusqueda] = useState('')
+  const [filtroCliente, setFiltroCliente] = useState('')
+  const [filtroPlaca, setFiltroPlaca] = useState('')
   const [orden, setOrden] = useState<'recientes' | 'gastado' | 'frecuencia'>('recientes')
   const [expedienteDe, setExpedienteDe] = useState<{ placa: string; nombre: string } | null>(null)
 
@@ -45,19 +48,16 @@ function ClientesPage() {
   const productoNombrePorId = new Map(productos.map((p) => [p.id, p.nombre]))
 
   const filtrados = useMemo(() => {
-    const termino = busqueda.trim().toLowerCase()
-    const base: ClienteResumen[] = !termino
-      ? clientes
-      : clientes.filter(
-          (c) => c.placa.toLowerCase().includes(termino) || c.clienteNombre.toLowerCase().includes(termino),
-        )
+    const base = clientes.filter(
+      (c) => coincide(c.clienteNombre, filtroCliente) && coincide(c.placa, filtroPlaca),
+    )
     const cmp: Record<typeof orden, (a: ClienteResumen, b: ClienteResumen) => number> = {
       recientes: (a, b) => new Date(b.ultimoServicioEn).getTime() - new Date(a.ultimoServicioEn).getTime(),
       gastado: (a, b) => b.totalGastado - a.totalGastado,
       frecuencia: (a, b) => b.totalServicios - a.totalServicios,
     }
     return [...base].sort(cmp[orden])
-  }, [clientes, busqueda, orden])
+  }, [clientes, filtroCliente, filtroPlaca, orden])
 
   const conTelefono = clientes.filter((c) => c.clienteTelefono).length
   const recurrentes = clientes.filter((c) => c.totalServicios > 1).length
@@ -102,29 +102,19 @@ function ClientesPage() {
         )}
       </div>
 
-      <label className="flex items-center gap-2 rounded-lg border border-neutral-300 px-3 py-2.5 text-sm focus-within:border-primary-500 focus-within:ring-1 focus-within:ring-primary-500 sm:max-w-xs">
-        <Search size={16} className="shrink-0 text-neutral-400" />
-        <input
-          value={busqueda}
-          onChange={(event) => setBusqueda(event.target.value)}
-          placeholder="Buscar por placa o nombre…"
-          className="w-full outline-none"
-        />
-      </label>
-
       <Card className="p-0">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
-                <th className="px-5 py-3">Cliente</th>
-                <th className="px-5 py-3">Contacto</th>
-                <th className="px-5 py-3">Vehículo</th>
-                <th className="px-5 py-3">Placa</th>
-                <th className="px-5 py-3">Último servicio</th>
-                <th className="px-5 py-3 text-right">Servicios</th>
-                <th className="px-5 py-3 text-right">Total gastado</th>
-                <th className="px-5 py-3 text-right">Ticket prom.</th>
+                <ThTexto label="Cliente" value={filtroCliente} onChange={setFiltroCliente} placeholder="Buscar…" />
+                <th className="px-5 py-3 align-top">Contacto</th>
+                <th className="px-5 py-3 align-top">Vehículo</th>
+                <ThTexto label="Placa" value={filtroPlaca} onChange={setFiltroPlaca} placeholder="Placa…" />
+                <th className="px-5 py-3 align-top">Último servicio</th>
+                <th className="px-5 py-3 text-right align-top">Servicios</th>
+                <th className="px-5 py-3 text-right align-top">Total gastado</th>
+                <th className="px-5 py-3 text-right align-top">Ticket prom.</th>
               </tr>
             </thead>
             <tbody>
