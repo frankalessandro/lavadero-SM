@@ -41,8 +41,10 @@ create or replace function interno.es_admin() returns boolean
 -- `auth.uid()` — lo usa `interno.actor()` (0044_bitacora_auditoria.sql) para saber con qué cuenta
 -- se hizo cada cosa. En el sandbox no hay GoTrue ni schema `auth`, así que sin este stub las
 -- migraciones de la bitácora fallan al crearse y cualquier insert con trigger revienta. Devuelve
--- NULL: en el log local queda "sin usuario", que es la verdad — no hay sesión que registrar. La
--- persona (`persona_id`) sí se resuelve normal, porque sale del turno abierto, no del JWT.
+-- NULL: en el log local queda "sin usuario", que es la verdad — no hay sesión que registrar.
+-- Desde 0056 la persona TAMBIÉN sale de `auth.uid()` (la cuenta es la persona), así que en el
+-- sandbox la bitácora queda sin usuario y sin persona. Antes la persona se resolvía por el turno
+-- abierto y sí aparecía.
 create schema if not exists auth;
 grant usage on schema auth to web_anon, authenticated, anon;
 create or replace function auth.uid() returns uuid
@@ -52,7 +54,7 @@ create or replace function auth.uid() returns uuid
 -- 0044 la consulta — y como es `language sql`, Postgres valida el cuerpo al CREAR la función, así
 -- que sin la tabla la migración de la bitácora ni siquiera se puede aplicar en el sandbox. Stub
 -- vacío: en local `auth.uid()` es NULL, así que nunca hace match y la bitácora queda con usuario
--- nulo (la verdad — no hay sesión). La persona sí se resuelve, sale del turno abierto.
+-- nulo (la verdad — no hay sesión).
 create table if not exists public.perfiles (
   id uuid primary key,
   nombre text,
@@ -64,5 +66,13 @@ create table if not exists public.perfiles (
 alter table public.perfiles add column if not exists roles text[] not null default '{}';
 alter table public.perfiles add column if not exists rol_activo text;
 alter table public.perfiles add column if not exists debe_cambiar_password boolean not null default false;
-alter table public.perfiles add column if not exists persona_id uuid;
+-- `persona_id` (0053) es el puente que 0056 usa para repuntar el histórico del roster a las
+-- cuentas, y esa misma migración lo elimina al terminar. Se crea solo si el roster todavía existe;
+-- si no, re-ejecutar este shim después de 0056 resucitaría una columna muerta.
+do $$
+begin
+  if to_regclass('public.personal_operativo') is not null then
+    alter table public.perfiles add column if not exists persona_id uuid;
+  end if;
+end $$;
 grant select on public.perfiles to web_anon, authenticated, anon;

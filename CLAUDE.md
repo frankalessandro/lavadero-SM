@@ -436,7 +436,12 @@ Migración `0042_gastos_caja_turno.sql`. **Arregla un hueco latente del arqueo**
 - RLS del vigilante: 0012 nunca le dio ninguna policy sobre `gastos`. 0042 le da select **acotado** (`origen = 'caja'` **y** turno de rol vigilante — ve su caja menuda, ni una fila del gasto administrativo, respetando §Roles) e insert exigiendo además turno **no cerrado** (regla 14 a nivel de policy, no solo de UI).
 - **La UI de gastos en `/vigilante` no se construyó todavía** — el componente ya acepta `size="md"`, queda para la pasada dedicada de ese rol (no hay ni un turno de vigilante en producción).
 
-## Personal operativo: la persona real detrás de la cuenta compartida
+## Personal operativo: la persona real detrás de la cuenta compartida *(histórico — superado por 0056)*
+
+> **Esta sección describe un estado que ya no existe.** La tabla `personal_operativo` fue eliminada
+> por `0056_roster_a_cuentas.sql`: ahora la cuenta ES la persona (ver §El roster desaparece).
+> Se conserva porque explica de dónde vienen las columnas `*_persona_id` y por qué el texto
+> tecleado sigue guardado al lado de ellas.
 
 Migración `0043_personal_operativo.sql`. Hay **una sola cuenta de Auth por rol** ('Gerencia', 'Jefe de patio', 'Vigilante'), compartida por varias personas, y la persona real solo existía como texto tecleado. Medido en producción: **13 grafías para 3 personas**, con la comisión de jefe de patio de Julián partida en seis pedazos (`Julian Salinas` $38.100 · `Julian` $26.250 · `JULIAN SALINAS` $24.000 · `Julian salinas` $5.400 · `Julián salinas` $3.450 · `Uulian` $1.050 — total real $98.250). Ninguna estaba liquidada, así que se corrigió antes de pagar mal.
 
@@ -454,21 +459,83 @@ Migración `0043_personal_operativo.sql`. Hay **una sola cuenta de Auth por rol*
 
 Migración `0053_cuentas_multi_rol.sql` + Edge Functions. Reemplaza *una cuenta de Auth compartida por rol* (0043) por **una cuenta por persona** con 1–3 roles. Decisión de Alessandro (2026-09-08); detalle funcional en `docs/funcionalidades.md` §9.
 
-- **`perfiles`**: `rol` (único) → **`roles text[]`** (`admin` / `jefe_zona` / `vigilante`, `check roles <@ array[...]`) + **`rol_activo text`** (`check null or = any(roles)`) + **`debe_cambiar_password boolean default true`** + **`persona_id uuid → personal_operativo(id)`**. El backfill dejó las cuentas actuales con `roles = array[rol]`, `rol_activo = rol`, `debe_cambiar_password = false`. **El roster de 0043 NO se toca** — sigue siendo la persona de registro de turnos/liquidaciones/bitácora; `persona_id` es solo el enlace, **sin consumidores todavía** (recablear esos flujos por `persona_id` es una migración aparte, diferida).
+- **`perfiles`**: `rol` (único) → **`roles text[]`** (`admin` / `jefe_zona` / `vigilante`, `check roles <@ array[...]`) + **`rol_activo text`** (`check null or = any(roles)`) + **`debe_cambiar_password boolean default true`** + `persona_id uuid → personal_operativo(id)`. El backfill dejó las cuentas actuales con `roles = array[rol]`, `rol_activo = rol`, `debe_cambiar_password = false`. `persona_id` era el puente al roster de 0043 y **ya no existe**: `0056_roster_a_cuentas.sql` lo usó para repuntar el histórico y lo eliminó junto con el roster (ver §El roster desaparece).
 - **RLS intacto — no se tocó ninguna de las ~78 políticas.** Solo cambia qué devuelven los helpers: `interno.rol_actual()` → `perfiles.rol_activo`; `interno.es_admin()` → `rol_activo = 'admin'`. `create or replace` conserva OID/grants (moved a `interno` en 0017). Un multi-rol dentro del panel de jefe de zona tiene `rol_activo = 'jefe_zona'`, así que `es_admin()` es falso y ve exactamente lo de ese rol.
 - **Escrituras a `perfiles` por RPC `public` (security definer), no por policy `id = auth.uid()`** (eso dejaría al usuario cambiarse `roles`): `set_rol_activo(p_rol text)` (valida `p_rol = any(roles) and activo`; `null` limpia) y `marcar_password_cambiada()`. Generan el WARN de advisor "Signed-In Users Can Execute SECURITY DEFINER Function" — intencional, mismo criterio que 0032/0035/0036.
 - **`signOut()` (`src/lib/auth.ts`) llama `set_rol_activo(null)` best-effort antes de cerrar** — así una cuenta multi-rol no se salta el selector con un bookmark viejo entre sesiones.
 - **Guard `exigirRol(auth, rol)` en `src/lib/auth.ts`** (usado por los `beforeLoad` de `/admin`, `/jefe-zona`, `/recepcion`, `/vigilante`): sin sesión → `/login`; `debeCambiarPassword` → `/cambiar-password`; sin ese rol/inactivo → selector (si multi-rol) o `/login`; multi-rol con `rolActivo` distinto → `/seleccionar-modulo`. Con un solo rol NO mira `rolActivo` (evita un bucle) — la RLS igual depende de que `rol_activo` esté puesto, lo hace `updatePerfil` al asignar un único rol.
 - **Rutas nuevas**: `src/routes/seleccionar-modulo/index.tsx` (un botón por rol + "Cerrar sesión"; al elegir: `setRolActivo` → `window.location.assign(ROL_HOME[rol])`, hard nav para que `App` re-resuelva y la RLS vea el `rol_activo` nuevo) y `src/routes/cambiar-password/index.tsx` (`db.auth.updateUser` → `marcarPasswordCambiada` → `location.assign('/')`). `rutaPostAuth(perfil)` centraliza el ruteo post-login. `<Topbar>`/`<SimpleTopbar>` con `multiRol` → el botón de avatar pasa de "Cerrar sesión" a "Cambiar de módulo".
-- **Alta de usuario** (`/admin/personal/usuarios`): nombre + apellido → usuario `nombreapellido@carwashsm.com` (sin tildes, minúsculas; el dominio no recibe correo, `email_confirm: true`), contraseña desechable **generada en el cliente** (se muestra una vez), checkboxes de roles, `CustomSelect` opcional de persona del roster. **Recuperación sin correo = solo reseteo por admin**: botón "Restablecer contraseña" → Edge Function `admin-reset-password` (`auth.admin.updateUserById` + `debe_cambiar_password = true`). En `/login` el aviso de "olvidé" solo dice pedírselo a un admin. Nunca se muestran contraseñas existentes.
+- **Alta de usuario** (`/admin/personal/usuarios`): nombre + apellido → usuario `nombreapellido@carwashsm.com` (sin tildes, minúsculas; el dominio no recibe correo, `email_confirm: true`), contraseña desechable **generada en el cliente** (se muestra una vez), checkboxes de roles. **Recuperación sin correo = solo reseteo por admin**: botón "Restablecer contraseña" → Edge Function `admin-reset-password` (`auth.admin.updateUserById` + `debe_cambiar_password = true`). En `/login` el aviso de "olvidé" solo dice pedírselo a un admin. Nunca se muestran contraseñas existentes.
 - **Gerencia = admin nominal** (mismos permisos que cualquier `roles` con `admin`; su única particularidad operativa es no inactivarla). Sin nivel super-admin en RLS.
 - **Edge Functions**: `admin-create-usuario` ahora chequea `rol_activo === 'admin'` (era `rol !== 'admin'`); `admin-reset-password` nuevo. Deploy con `supabase functions deploy`.
-- **Sandbox**: `db/local-shims.sql` agrega las 4 columnas al stub de `perfiles`. 0053 reescribe `interno.rol_actual()`/`es_admin()` para leer `perfiles`, pero en el sandbox `auth.uid()` es NULL → devolverían NULL y las RPCs de ventas fallarían el chequeo de rol. **Tras aplicar 0053 al sandbox hay que re-ejecutar `db/local-shims.sql`** (idempotente) para restaurar los stubs hardcodeados `rol_actual()='jefe_zona'` / `es_admin()=false`, y `notify pgrst`.
-- **Pendiente operativo tras el deploy**: crear las cuentas individuales reales (Frank/Laura/Julián con `roles` según cubran) e inactivar las 3 compartidas. Se hace desde el panel, no por SQL.
+- **Sandbox**: `db/local-shims.sql` agrega las 4 columnas al stub de `perfiles`. 0053 reescribe `interno.rol_actual()`/`es_admin()` para leer `perfiles`, pero en el sandbox `auth.uid()` es NULL → devolverían NULL y las RPCs de ventas fallarían el chequeo de rol. **Tras aplicar 0053 al sandbox hay que re-ejecutar `db/local-shims.sql`** (idempotente) para restaurar los stubs hardcodeados `rol_actual()='jefe_zona'` / `es_admin()=false`, y `notify pgrst`. El shim solo agrega `perfiles.persona_id` si el roster todavía existe, para no resucitar una columna muerta si se re-ejecuta después de 0056.
+- **`0055_cuentas_individuales.sql` — las 3 cuentas reales, creadas a mano** (`auth.users` + `auth.identities` + `perfiles`, porque el alta por panel necesita la Edge Function y esto se hizo por SQL): `frank.roldan@` (`{admin,jefe_zona,vigilante}`), `julian.salinas@` y `laura.montealegre@` (`{admin,jefe_zona}`), las tres en `carwashsm.com` con contraseña desechable y `debe_cambiar_password = true`. **Trampa de GoTrue**: `confirmation_token` y las demás columnas de token de `auth.users` tienen que quedar en `''`, no en NULL, o el login responde 500.
+- **Fix de `rol_activo` que se perdía entre sesiones** (`src/lib/auth.ts`): `signOut()` limpia `rol_activo`, pero una cuenta de un solo rol no lo volvía a fijar al re-loguear, así que la RLS leía `rol_activo = null` y **devolvía 0 filas en todo el panel**. `resolveAuthContext()` ahora lo auto-corrige al resolver la sesión.
+- **Pendiente operativo**: inactivar `gerencia@carwashsm.com` cuando Alessandro confirme que entra con la suya. `jefepatio@` y `vigilante@` quedaron redundantes desde que las 3 cuentas reales llevan `jefe_zona` (y Frank además `vigilante`) — se inactivan igual desde el panel, no por SQL. Mientras sigan activas **aparecen en el selector de responsable de caja**, porque el filtro es `activo` + rol y no hay forma de distinguir una cuenta compartida sin agregar una columna; inactivarlas es lo que las saca.
+- **Generador de correo**: `normalizaParaEmail` (`src/lib/password.ts`) produce hoy `frankroldan@`; Alessandro pidió `frank.roldan@`. Las 3 cuentas actuales ya tienen el punto (creadas por SQL) — cambiar el generador antes de dar de alta a alguien más desde el panel.
 - **Hotfix `0054_actor_rol_activo.sql`**: 0053 reescribió `interno.rol_actual()`/`es_admin()` pero se saltó `interno.actor()` (bitácora, 0044), que seguía leyendo `perfiles.rol`. Como el trigger de auditoría llama `actor()` en cada escritura instrumentada, tras 0053 todo UPDATE de `ordenes` (y ventas, turnos, precios, inventario, config) reventaba con `column p.rol does not exist`. 0054 lo pasa a `rol_activo`. Al reescribir un helper de `interno` que lee `perfiles`, revisar SIEMPRE `actor()` además de `rol_actual`/`es_admin`/`es_activo`.
 - **La lista de roles vive en código, no en una tabla** (`src/lib/roles.ts` — RBAC con roles estáticos). Son 3, fijos desde la planeación, **no editables desde la UI**: el set es una constante (`rolSchema` Zod enum + `ROLES` con `{ id, label, home, acceso }`), espejada por el `check (roles <@ array[...])` de `perfiles` y por las ~78 políticas RLS (que nombran cada rol literalmente). No hay tabla `roles` a propósito — sería solo un almacén de etiquetas desincronizable del enforcement. `src/schemas/perfil.ts` y `src/lib/auth.ts` re-exportan de ahí (`rolSchema`, `ROL_LABEL`, `ROL_HOME`) por compat. Agregar un 4º rol = cambio de código + migración (check + políticas), nunca de datos.
 - **Etiquetas visibles = términos de la planeación**: `admin`→"Gerencia", `jefe_zona`→"Jefe de patio", `vigilante`→"Vigilante". Los **ids en BD/RLS no cambian** (renombrar `admin`→`gerencia` = tocar ~78 políticas + helpers + edge functions por una etiqueta). "Gerencia" es una cuenta de login real con `roles: ['admin']`, nunca se inactiva (≠ jefe de patio / vigilante, que dejan de existir como cuenta una vez que hay personas con esos roles).
 - **"Usuarios del sistema"** (`/admin/personal/usuarios`) tiene abajo un panel **`RolesReferencia`** de solo lectura (renderiza `ROLES`, sin query) — el catálogo de qué ve cada rol. No es CRUD.
+
+## El roster desaparece: la cuenta ES la persona
+
+Migración `0056_roster_a_cuentas.sql`. Cierra el desdoblamiento que dejó 0053: había **dos tablas de
+personas en paralelo** — `personal_operativo` (el roster de 0043) y `perfiles` (las cuentas) — unidas
+por `perfiles.persona_id`, que había que mantener sincronizadas a mano y que ya divergían (el `nivel`
+del roster decía "administrador" mientras `roles` decía `{admin,jefe_zona}`). Con una cuenta
+individual por persona (0055) el roster dejó de tener razón de ser.
+
+- **Se repuntan 9 FK de negocio** de `personal_operativo(id)` a `perfiles(id)` usando `persona_id`
+  como puente: `turnos_caja.responsable_persona_id` / `responsable_actual_persona_id`,
+  `ordenes.jefe_zona_persona_id`, `traspasos_turno.de_persona_id` / `a_persona_id`,
+  `liquidaciones_jefe_zona.persona_id`, `conteos_inventario.contado_por_persona_id`,
+  `conteos_inventario_lineas.responde_persona_id`, `bitacora.persona_id`. Es un repunte de
+  referencias, **no se borra ni se reescribe ninguna fila**; el texto original
+  (`turnos_caja.responsable`, `ordenes.jefe_zona_responsable`) sigue intacto como evidencia
+  (regla 13). Luego se dropean `personal_operativo`, `personal_operativo_pin` y
+  `perfiles.persona_id`.
+- **Las FK nuevas van `on delete restrict`, y eso NO es decorativo.** `perfiles.id` referencia
+  `auth.users(id) on delete cascade`: al colgar el histórico de `perfiles`, borrar un usuario desde
+  el dashboard de Supabase intentaría cascadear hasta las órdenes y la bitácora. Con `restrict` ese
+  borrado falla en seco. **Las cuentas se inactivan (`perfiles.activo = false`), nunca se borran.**
+- **Dos triggers de `turnos_caja` hay que apagar durante el repunte** — los dos bloqueantes, los dos
+  encontrados por el test del sandbox, no a ojo:
+  1. `turnos_caja_cerrado_inmutable` (0045, regla 14) rechaza cualquier UPDATE sobre un turno
+     cerrado, y casi todos los turnos de producción lo están: **la migración abortaba en la primera
+     fila**. Acá no se toca ni una cifra del arqueo, solo a qué tabla apunta el id de la misma
+     persona.
+  2. `bitacora_turnos_update` vigila `responsable_actual_persona_id`, así que el repunte habría
+     escrito ~52 filas de bitácora "editar" sin usuario — eventos que nunca ocurrieron, en la única
+     tabla append-only que no se puede limpiar después. Un cambio de esquema se registra en el
+     historial de migraciones, no en la bitácora de operación.
+  Se re-habilitan al terminar (el test lo afirma explícitamente). `ordenes` no necesita nada:
+  `jefe_zona_persona_id` no está entre las columnas vigiladas.
+- **`interno.actor()` (bitácora) resuelve la persona por `auth.uid()`**, ya no buscando el
+  responsable del turno abierto. Con cuentas individuales la cuenta ES la persona, y además es más
+  preciso: registra a quien ejecutó la escritura, no a quien estaba a cargo del turno. Desde acá
+  `persona_id == usuario_id` en cada fila nueva; **las dos columnas se conservan** porque en las
+  filas históricas sí difieren (cuenta compartida + persona resuelta por turno) y esa distinción es
+  justo lo que no se puede perder. Sin sesión `actor()` devuelve NULL en vez de un jsonb de campos
+  nulos — el trigger usa `->>` sobre él, que da NULL en ambos casos, así que no hay regresión.
+- **Se acabó `NIVELES_POR_CAJA`.** Quién puede quedar a cargo de una caja ya no se traduce desde un
+  "nivel" jerárquico: **para responder por la caja de un rol hay que tener ese rol**. Un
+  administrador que cubre el mostrador lo hace porque su cuenta lleva `jefe_zona` explícito en
+  `roles`, no por ser administrador. `fetchPerfilesElegibles(rol)` en `src/data/perfiles.ts`
+  (`activo` + `roles cs {rol}`) alimenta `AbrirTurnoPrompt`, `TurnoResponsableBanner` y el modal de
+  abrir turno de `/vigilante`. Si nadie tiene ese rol, la caja no se puede abrir — comportamiento
+  correcto, no un bug.
+- **Fuera la pestaña "Personal de caja"** (`/admin/personal/caja`) y el campo "Persona del roster"
+  del alta/edición de usuario. Personal queda en dos pestañas: Lavadores y Usuarios del sistema.
+- `interno.persona_por_texto()` (el resolvedor de las 13 grafías, solo usado por el backfill de
+  0043) se dropea con el roster.
+- **Verificado contra el sandbox**: 24 aserciones en una transacción revertida (repunte fila por
+  fila en las 9 columnas, ninguna fila borrada *ni agregada* — o sea sin bitácora fantasma, sumas de
+  comisión/precio intactas, texto original sin tocar, las 9 FK a `perfiles` y `restrict`, borrar una
+  cuenta con histórico falla, turnos cerrados repuntados y vuelven a ser inmutables) + una corrida
+  aparte que confirma que la migración **aborta** ante una referencia sin cuenta enlazada. Después,
+  aplicada de verdad al sandbox y probadas por PostgREST las consultas nuevas: el filtro
+  `roles=cs.{rol}`, el embed `perfiles(nombre)` de los conteos y un traspaso de turno entre cuentas.
 
 ## Autoridad del jefe de patio: control por responsable + bitácora, sin PIN
 

@@ -62,7 +62,6 @@ const LOCAL_AUTH_CONTEXT: AuthContext = {
     rolActivo: LOCAL_ROLES.length === 1 ? LOCAL_ROLES[0] : null,
     activo: true,
     debeCambiarPassword: false,
-    personaId: null,
     creadoEn: new Date().toISOString(),
   },
 }

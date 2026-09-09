@@ -8,7 +8,6 @@ import {
   resetPassword,
   type UsuarioCreado,
 } from '../../../../data/perfiles'
-import { fetchPersonalOperativo } from '../../../../data/personalOperativo'
 import {
   perfilInputSchema,
   crearUsuarioInputSchema,
@@ -17,15 +16,12 @@ import {
   type Perfil,
   type Rol,
 } from '../../../../schemas/perfil'
-import type { PersonalOperativo } from '../../../../schemas/personalOperativo'
 import { USE_LOCAL_DB } from '../../../../lib/db'
 import { Card } from '../../../../components/layout/Card'
-import { CustomSelect } from '../../../../components/layout/CustomSelect'
 
 export const Route = createFileRoute('/admin/personal/usuarios/')({
   loader: async () => {
-    const [perfiles, personal] = await Promise.all([fetchPerfiles(), fetchPersonalOperativo()])
-    return { perfiles, personal }
+    return { perfiles: await fetchPerfiles() }
   },
   component: UsuariosPage,
 })
@@ -34,7 +30,6 @@ function UsuariosPage() {
   const initial = Route.useLoaderData()
   const router = useRouter()
   const [perfiles, setPerfiles] = useState(initial.perfiles)
-  const personal = initial.personal
   const [editing, setEditing] = useState<Perfil | null>(null)
   const [creando, setCreando] = useState(false)
   const [reseteando, setReseteando] = useState<Perfil | null>(null)
@@ -44,7 +39,6 @@ function UsuariosPage() {
     router.invalidate()
   }
 
-  const personaNombre = (id: string | null) => personal.find((p) => p.id === id)?.nombre
 
   return (
     <div className="flex flex-col gap-6 text-left">
@@ -75,7 +69,6 @@ function UsuariosPage() {
             <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
               <th className="px-5 py-3">Nombre</th>
               <th className="px-5 py-3">Roles</th>
-              <th className="px-5 py-3">Persona</th>
               <th className="px-5 py-3">Estado</th>
               <th className="px-5 py-3 text-right">Acciones</th>
             </tr>
@@ -105,7 +98,6 @@ function UsuariosPage() {
                     </span>
                   )}
                 </td>
-                <td className="px-5 py-3 text-neutral-600">{personaNombre(perfil.personaId) ?? '—'}</td>
                 <td className="px-5 py-3">
                   <div className="flex flex-wrap gap-1">
                     <span
@@ -163,7 +155,6 @@ function UsuariosPage() {
       {editing ? (
         <PerfilForm
           perfil={editing}
-          personal={personal}
           onClose={() => setEditing(null)}
           onSaved={async () => {
             setEditing(null)
@@ -174,7 +165,6 @@ function UsuariosPage() {
 
       {creando ? (
         <CrearUsuarioForm
-          personal={personal}
           onClose={() => setCreando(false)}
           onSaved={refresh}
         />
@@ -248,29 +238,6 @@ function RolesCheckboxes({ value, onChange }: { value: Rol[]; onChange: (roles: 
   )
 }
 
-function PersonaSelect({
-  personal,
-  value,
-  onChange,
-}: {
-  personal: PersonalOperativo[]
-  value: string
-  onChange: (value: string) => void
-}) {
-  return (
-    <CustomSelect
-      size="sm"
-      value={value}
-      onChange={onChange}
-      placeholder="Sin persona asignada…"
-      options={[
-        { value: '', label: 'Sin persona asignada' },
-        ...personal.filter((p) => p.activo).map((p) => ({ value: p.id, label: p.nombre })),
-      ]}
-    />
-  )
-}
-
 function CredencialFila({ label, valor }: { label: string; valor: string }) {
   const [copiado, setCopiado] = useState(false)
   return (
@@ -328,18 +295,15 @@ function ModalShell({ title, subtitle, icon, onClose, children }: {
 }
 
 function CrearUsuarioForm({
-  personal,
   onClose,
   onSaved,
 }: {
-  personal: PersonalOperativo[]
   onClose: () => void
   onSaved: () => Promise<void>
 }) {
   const [nombre, setNombre] = useState('')
   const [apellido, setApellido] = useState('')
   const [roles, setRoles] = useState<Rol[]>([])
-  const [personaId, setPersonaId] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [creado, setCreado] = useState<UsuarioCreado | null>(null)
@@ -350,7 +314,6 @@ function CrearUsuarioForm({
       nombre,
       apellido,
       roles,
-      personaId: personaId || undefined,
     })
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Datos inválidos')
@@ -434,11 +397,6 @@ function CrearUsuarioForm({
           <RolesCheckboxes value={roles} onChange={setRoles} />
         </div>
 
-        <label className="flex flex-col gap-1.5 text-left text-sm">
-          <span className="font-medium text-neutral-700">Persona del roster</span>
-          <PersonaSelect personal={personal} value={personaId} onChange={setPersonaId} />
-        </label>
-
         {error ? <p className="text-xs text-danger-600">{error}</p> : null}
 
         <div className="mt-1 flex justify-end gap-2 border-t border-neutral-100 pt-4">
@@ -472,18 +430,15 @@ function soloAlfanum(s: string): string {
 
 function PerfilForm({
   perfil,
-  personal,
   onClose,
   onSaved,
 }: {
   perfil: Perfil
-  personal: PersonalOperativo[]
   onClose: () => void
   onSaved: () => void
 }) {
   const [nombre, setNombre] = useState(perfil.nombre ?? '')
   const [roles, setRoles] = useState<Rol[]>(perfil.roles)
-  const [personaId, setPersonaId] = useState(perfil.personaId ?? '')
   const [activo, setActivo] = useState(perfil.activo)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -494,7 +449,6 @@ function PerfilForm({
       nombre,
       roles,
       activo,
-      personaId: personaId || undefined,
     })
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Datos inválidos')
@@ -512,7 +466,7 @@ function PerfilForm({
   }
 
   return (
-    <ModalShell title="Editar usuario" subtitle="Nombre, roles, persona y estado de la cuenta." onClose={onClose}>
+    <ModalShell title="Editar usuario" subtitle="Nombre, roles y estado de la cuenta." onClose={onClose}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
         <label className="flex flex-col gap-1.5 text-left text-sm">
           <span className="font-medium text-neutral-700">Nombre</span>
@@ -532,11 +486,6 @@ function PerfilForm({
             Sin roles, la cuenta no puede entrar. Con más de uno, la persona elige el módulo tras iniciar sesión.
           </span>
         </div>
-
-        <label className="flex flex-col gap-1.5 text-left text-sm">
-          <span className="font-medium text-neutral-700">Persona del roster</span>
-          <PersonaSelect personal={personal} value={personaId} onChange={setPersonaId} />
-        </label>
 
         <label className="flex items-center gap-2 text-sm text-neutral-700">
           <input

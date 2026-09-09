@@ -1,25 +1,30 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { LockOpen, Lock, ArrowLeftRight, History, X } from 'lucide-react'
 import { abrirTurno, fetchTraspasos, transferirResponsable } from '../../data/turnos'
-import { fetchPersonalOperativo } from '../../data/personalOperativo'
-import { NIVELES_POR_CAJA, type PersonalOperativo } from '../../schemas/personalOperativo'
+import { fetchPerfilesElegibles } from '../../data/perfiles'
+import type { Perfil } from '../../schemas/perfil'
 import type { RolCaja, TurnoCaja, TraspasoTurno } from '../../schemas/turnoCaja'
 import { Card } from './Card'
 import { CustomSelect } from './CustomSelect'
 import { CurrencyInput } from './CurrencyInput'
 
-// Roster elegible para quedar a cargo de una caja. Se carga desde el componente (y no desde el
-// loader de cada ruta) porque el banner se monta en cuatro pantallas distintas — jefe-zona/caja,
-// jefe-zona/asistencia y vigilante — y no vale la pena repetir el fetch en cada loader.
+// Cuentas que pueden quedar a cargo de esta caja: las activas que tengan ese rol (ver 0056 —
+// desde que el roster desapareció, la cuenta ES la persona y el rol de la cuenta es el permiso).
+// Se carga desde el componente (y no desde el loader de cada ruta) porque el banner se monta en
+// tres pantallas distintas — jefe-zona/caja, jefe-zona/asistencia y vigilante — y no vale la pena
+// repetir el fetch en cada loader.
 function usePersonalElegible(rol: RolCaja) {
-  const [personal, setPersonal] = useState<PersonalOperativo[]>([])
+  const [elegibles, setElegibles] = useState<Perfil[]>([])
   const [cargando, setCargando] = useState(true)
 
   useEffect(() => {
     let vivo = true
-    fetchPersonalOperativo()
+    fetchPerfilesElegibles(rol)
       .then((lista) => {
-        if (vivo) setPersonal(lista)
+        if (vivo) setElegibles(lista)
+      })
+      .catch(() => {
+        if (vivo) setElegibles([])
       })
       .finally(() => {
         if (vivo) setCargando(false)
@@ -27,13 +32,15 @@ function usePersonalElegible(rol: RolCaja) {
     return () => {
       vivo = false
     }
-  }, [])
+  }, [rol])
 
-  const elegibles = useMemo(
-    () => personal.filter((p) => p.activo && NIVELES_POR_CAJA[rol].includes(p.nivel)),
-    [personal, rol],
-  )
   return { elegibles, cargando }
+}
+
+// `perfiles.nombre` es nullable en el esquema (la fila la crea un trigger de Auth antes de que un
+// admin le ponga nombre). En un selector eso no puede quedar en blanco.
+function nombreDe(perfil: Perfil) {
+  return perfil.nombre?.trim() || 'Sin nombre'
 }
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
@@ -71,7 +78,7 @@ export function AbrirTurnoPrompt({ rol = 'jefe_zona', onAbierto }: { rol?: RolCa
       await abrirTurno({
         rol,
         responsablePersonaId: persona.id,
-        responsable: persona.nombre,
+        responsable: nombreDe(persona),
         baseInicial: Math.round(base),
       })
       await onAbierto()
@@ -102,15 +109,15 @@ export function AbrirTurnoPrompt({ rol = 'jefe_zona', onAbierto }: { rol?: RolCa
           <CustomSelect
             value={personaId}
             onChange={setPersonaId}
-            options={elegibles.map((p) => ({ value: p.id, label: p.nombre }))}
+            options={elegibles.map((p) => ({ value: p.id, label: nombreDe(p) }))}
             placeholder={cargando ? 'Cargando…' : 'Selecciona quién abre el turno'}
             disabled={cargando || elegibles.length === 0}
-            emptyLabel="No hay personas registradas para esta caja"
+            emptyLabel="No hay cuentas habilitadas para esta caja"
           />
           {!cargando && elegibles.length === 0 ? (
             <span className="text-xs text-warning-700">
-              Ningún miembro del personal está habilitado para esta caja. Un administrador debe agregarlo en
-              Personal › Personal de caja.
+              Ninguna cuenta activa tiene este rol, así que nadie puede responder por esta caja. Un
+              administrador debe asignárselo en Personal › Usuarios del sistema.
             </span>
           ) : null}
         </label>
@@ -168,7 +175,7 @@ export function TurnoResponsableBanner({
       const actualizado = await transferirResponsable(
         turno.id,
         turno.responsableActual,
-        persona.nombre,
+        nombreDe(persona),
         turno.responsableActualPersonaId,
         persona.id,
       )
@@ -237,10 +244,10 @@ export function TurnoResponsableBanner({
               size="sm"
               value={nuevoPersonaId}
               onChange={setNuevoPersonaId}
-              options={destinos.map((p) => ({ value: p.id, label: p.nombre }))}
+              options={destinos.map((p) => ({ value: p.id, label: nombreDe(p) }))}
               placeholder={cargando ? 'Cargando…' : 'Selecciona quién queda a cargo'}
               disabled={cargando || destinos.length === 0}
-              emptyLabel="No hay nadie más habilitado para esta caja"
+              emptyLabel="No hay otra cuenta habilitada para esta caja"
             />
           </label>
           {error ? <p className="text-xs text-danger-600">{error}</p> : null}

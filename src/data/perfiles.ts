@@ -11,10 +11,26 @@ import {
 } from '../schemas/perfil'
 
 const PERFIL_SELECT =
-  'id, nombre, roles, rolActivo:rol_activo, activo, debeCambiarPassword:debe_cambiar_password, personaId:persona_id, creadoEn:creado_en'
+  'id, nombre, roles, rolActivo:rol_activo, activo, debeCambiarPassword:debe_cambiar_password, creadoEn:creado_en'
 
 export async function fetchPerfiles(): Promise<Perfil[]> {
   const { data, error } = await db.from('perfiles').select(PERFIL_SELECT).order('creado_en')
+  if (error) throw new Error(error.message)
+  return perfilSchema.array().parse(data)
+}
+
+// Cuentas que pueden quedar a cargo de una caja. Desde 0056 la cuenta ES la persona: se acabó el
+// roster aparte (`personal_operativo`) y con él la tabla NIVELES_POR_CAJA, que traducía un
+// "nivel" jerárquico a permisos de caja. El criterio ahora es directo: para responder por la caja
+// de un rol hay que tener ese rol. Un administrador que además cubre el mostrador lo hace porque
+// su cuenta lleva 'jefe_zona' explícito en `roles`, no por ser administrador.
+export async function fetchPerfilesElegibles(rol: Rol): Promise<Perfil[]> {
+  const { data, error } = await db
+    .from('perfiles')
+    .select(PERFIL_SELECT)
+    .eq('activo', true)
+    .contains('roles', [rol])
+    .order('nombre')
   if (error) throw new Error(error.message)
   return perfilSchema.array().parse(data)
 }
@@ -26,16 +42,15 @@ export async function fetchPerfilActual(userId: string): Promise<Perfil | null> 
 }
 
 // Las filas de `perfiles` las crea el trigger on_auth_user_created al registrarse el usuario en
-// Supabase Auth (ver 0011_perfiles.sql) — acá solo se asignan nombre/roles/activo/persona. Si la
-// cuenta queda con un solo rol, se fija también `rol_activo` para que entre directo sin pasar por
-// el selector de módulo.
+// Supabase Auth (ver 0011_perfiles.sql) — acá solo se asignan nombre/roles/activo. Si la cuenta
+// queda con un solo rol, se fija también `rol_activo` para que entre directo sin pasar por el
+// selector de módulo.
 export async function updatePerfil(id: string, input: PerfilInput): Promise<Perfil> {
   const parsed = perfilInputSchema.parse(input)
   const payload: Record<string, unknown> = {
     nombre: parsed.nombre,
     roles: parsed.roles,
     activo: parsed.activo,
-    persona_id: parsed.personaId || null,
     rol_activo: parsed.roles.length === 1 ? parsed.roles[0] : null,
   }
   const { data, error } = await db.from('perfiles').update(payload).eq('id', id).select(PERFIL_SELECT).single()
@@ -92,7 +107,6 @@ export async function createUsuario(input: CrearUsuarioInput): Promise<UsuarioCr
     nombre: nombreCompleto,
     roles: parsed.roles,
     activo: true,
-    personaId: parsed.personaId,
   })
   return { perfil, email, password }
 }

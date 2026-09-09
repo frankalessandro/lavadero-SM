@@ -122,7 +122,7 @@ export interface FaltantePendiente {
 export async function fetchFaltantesPendientes(): Promise<FaltantePendiente[]> {
   const { data, error } = await db
     .from('conteos_inventario_lineas')
-    .select(`${LINEA_SELECT}, productos(nombre), personal_operativo(nombre), conteos_inventario(turno_id, creado_en)`)
+    .select(`${LINEA_SELECT}, productos(nombre), perfiles(nombre), conteos_inventario(turno_id, creado_en)`)
     .eq('estado_faltante', 'pendiente')
     .order('id', { ascending: false })
   if (error) throw new Error(error.message)
@@ -132,7 +132,7 @@ export async function fetchFaltantesPendientes(): Promise<FaltantePendiente[]> {
     return {
       linea: conteoLineaSchema.parse(row),
       productoNombre: (row.productos as { nombre: string } | null)?.nombre ?? '—',
-      respondeNombre: (row.personal_operativo as { nombre: string } | null)?.nombre ?? 'Sin asignar',
+      respondeNombre: (row.perfiles as { nombre: string | null } | null)?.nombre ?? 'Sin asignar',
       turnoId: conteo?.turno_id ?? '',
       fecha: conteo?.creado_en ?? '',
     }

@@ -1,7 +1,7 @@
 import { db } from '../lib/db'
 import { liquidacionJefeZonaSchema, type LiquidacionJefeZona } from '../schemas/liquidacionJefeZona'
 import { fetchOrdenesEnRango } from './ordenes'
-import { fetchPersonalOperativo } from './personalOperativo'
+import { fetchPerfiles } from './perfiles'
 
 const LIQUIDACION_SELECT =
   'id, responsable, personaId:persona_id, periodoInicio:periodo_inicio, periodoFin:periodo_fin, monto, pagada, pagadaEn:pagada_en, anulada, motivoAnulacion:motivo_anulacion, anuladaPor:anulada_por, anuladaEn:anulada_en, creadoEn:creado_en'
@@ -24,9 +24,10 @@ export interface ComisionPendienteJefeZona {
 
 // Agrupa por `jefe_zona_persona_id`, NO por el texto `jefe_zona_responsable`. Ese texto se tecleaba
 // a mano y produjo 13 grafías para 3 personas — la comisión de Julián llegó a estar partida en seis
-// pedazos (ver 0043_personal_operativo.sql). El nombre que se muestra sale del roster, no de la
-// orden. Las órdenes anteriores a 0043 que no mapearon a nadie quedan fuera (no hay a quién
-// pagarles); la migración aborta si existiera alguna así, de modo que en la práctica no las hay.
+// pedazos (ver 0043_personal_operativo.sql). El nombre que se muestra sale de la cuenta
+// (`perfiles`, que desde 0056 ES la persona), no de la orden. Las órdenes que no mapearon a nadie
+// quedan fuera (no hay a quién pagarles); las migraciones 0043 y 0056 abortan si existiera alguna
+// así, de modo que en la práctica no las hay.
 export async function fetchComisionesPendientesJefeZona(): Promise<ComisionPendienteJefeZona[]> {
   const [{ data, error }, personal] = await Promise.all([
     db
@@ -34,11 +35,11 @@ export async function fetchComisionesPendientesJefeZona(): Promise<ComisionPendi
       .select('jefe_zona_persona_id, comision_jefe_zona')
       .is('liquidacion_jefe_zona_id', null)
       .neq('estado', 'anulada'),
-    fetchPersonalOperativo(),
+    fetchPerfiles(),
   ])
   if (error) throw new Error(error.message)
 
-  const nombrePorId = new Map(personal.map((p) => [p.id, p.nombre]))
+  const nombrePorId = new Map(personal.map((p) => [p.id, p.nombre?.trim() || 'Sin nombre']))
   const acumulado = new Map<string, { monto: number; cantidad: number }>()
   for (const fila of data as { jefe_zona_persona_id: string | null; comision_jefe_zona: number }[]) {
     if (!fila.jefe_zona_persona_id) continue
@@ -129,7 +130,7 @@ export async function fetchResumenPeriodoJefeZona(periodoInicio: string, periodo
   hastaExclusivoISO.setUTCDate(hastaExclusivoISO.getUTCDate() + 1)
   const ordenes = await fetchOrdenesEnRango(new Date(`${periodoInicio}T00:00:00.000Z`).toISOString(), hastaExclusivoISO.toISOString())
 
-  const nombrePorId = new Map((await fetchPersonalOperativo()).map((p) => [p.id, p.nombre]))
+  const nombrePorId = new Map((await fetchPerfiles()).map((p) => [p.id, p.nombre?.trim() || 'Sin nombre']))
   const acumulado = new Map<string, { cantidad: number; total: number; pendiente: number }>()
   for (const orden of ordenes) {
     if (orden.estado === 'anulada' || !orden.jefeZonaPersonaId) continue

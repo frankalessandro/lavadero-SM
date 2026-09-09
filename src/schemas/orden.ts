@@ -94,7 +94,8 @@ export const ordenSchema = z.object({
   // del lavador) — comisionNegocio ya no es "el resto del lavador", es el resto de los dos.
   comisionJefeZona: z.number().int().nonnegative(),
   jefeZonaResponsable: nullableTrimmedString,
-  // Persona real a cargo del turno cuando se creó la orden (FK a `personal_operativo`, 0043).
+  // Persona real a cargo del turno cuando se creó la orden (FK a `perfiles` — la cuenta ES la
+  // persona desde 0056; antes apuntaba al roster `personal_operativo` de 0043).
   // Es la clave por la que se agrupa y liquida la comisión de jefe de patio; el texto de arriba
   // queda como evidencia de lo que se tecleó en su momento.
   jefeZonaPersonaId: nullableTrimmedString,

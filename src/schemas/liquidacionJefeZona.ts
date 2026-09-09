@@ -1,8 +1,9 @@
 import { z } from 'zod'
 
 // Liquidación de la comisión del jefe de patio (3% configurable, ver Configuración) — mismo
-// shape que liquidacionSchema (src/schemas/liquidacion.ts). Desde 0043 el sujeto es una FK a
-// `personal_operativo` (`personaId`); `responsable` quedó como snapshot del nombre al momento del
+// shape que liquidacionSchema (src/schemas/liquidacion.ts). El sujeto es una FK (`personaId`):
+// desde 0043 apuntaba al roster `personal_operativo`, y desde 0056 apunta a `perfiles`, porque la
+// cuenta pasó a ser la persona. `responsable` quedó como snapshot del nombre al momento del
 // corte, para que renombrar a alguien después no reescriba las colillas ya emitidas.
 export const liquidacionJefeZonaSchema = z.object({
   id: z.string(),

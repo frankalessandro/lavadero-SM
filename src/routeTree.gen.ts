@@ -49,7 +49,6 @@ import { Route as AdminOperacionAuditoriaIndexRouteImport } from './routes/admin
 import { Route as AdminOperacionClientesIndexRouteImport } from './routes/admin/operacion/clientes/index'
 import { Route as AdminOperacionOrdenesIndexRouteImport } from './routes/admin/operacion/ordenes/index'
 import { Route as AdminOperacionTurnosIndexRouteImport } from './routes/admin/operacion/turnos/index'
-import { Route as AdminPersonalCajaIndexRouteImport } from './routes/admin/personal/caja/index'
 import { Route as AdminPersonalLavadoresIndexRouteImport } from './routes/admin/personal/lavadores/index'
 import { Route as AdminPersonalUsuariosIndexRouteImport } from './routes/admin/personal/usuarios/index'
 
@@ -264,11 +263,6 @@ const AdminOperacionTurnosIndexRoute =
     path: '/turnos/',
     getParentRoute: () => AdminOperacionRouteRoute,
   } as any)
-const AdminPersonalCajaIndexRoute = AdminPersonalCajaIndexRouteImport.update({
-  id: '/caja/',
-  path: '/caja/',
-  getParentRoute: () => AdminPersonalRouteRoute,
-} as any)
 const AdminPersonalLavadoresIndexRoute =
   AdminPersonalLavadoresIndexRouteImport.update({
     id: '/lavadores/',
@@ -323,7 +317,6 @@ export interface FileRoutesByFullPath {
   '/admin/operacion/clientes/': typeof AdminOperacionClientesIndexRoute
   '/admin/operacion/ordenes/': typeof AdminOperacionOrdenesIndexRoute
   '/admin/operacion/turnos/': typeof AdminOperacionTurnosIndexRoute
-  '/admin/personal/caja/': typeof AdminPersonalCajaIndexRoute
   '/admin/personal/lavadores/': typeof AdminPersonalLavadoresIndexRoute
   '/admin/personal/usuarios/': typeof AdminPersonalUsuariosIndexRoute
 }
@@ -360,7 +353,6 @@ export interface FileRoutesByTo {
   '/admin/operacion/clientes': typeof AdminOperacionClientesIndexRoute
   '/admin/operacion/ordenes': typeof AdminOperacionOrdenesIndexRoute
   '/admin/operacion/turnos': typeof AdminOperacionTurnosIndexRoute
-  '/admin/personal/caja': typeof AdminPersonalCajaIndexRoute
   '/admin/personal/lavadores': typeof AdminPersonalLavadoresIndexRoute
   '/admin/personal/usuarios': typeof AdminPersonalUsuariosIndexRoute
 }
@@ -406,7 +398,6 @@ export interface FileRoutesById {
   '/admin/operacion/clientes/': typeof AdminOperacionClientesIndexRoute
   '/admin/operacion/ordenes/': typeof AdminOperacionOrdenesIndexRoute
   '/admin/operacion/turnos/': typeof AdminOperacionTurnosIndexRoute
-  '/admin/personal/caja/': typeof AdminPersonalCajaIndexRoute
   '/admin/personal/lavadores/': typeof AdminPersonalLavadoresIndexRoute
   '/admin/personal/usuarios/': typeof AdminPersonalUsuariosIndexRoute
 }
@@ -453,7 +444,6 @@ export interface FileRouteTypes {
     | '/admin/operacion/clientes/'
     | '/admin/operacion/ordenes/'
     | '/admin/operacion/turnos/'
-    | '/admin/personal/caja/'
     | '/admin/personal/lavadores/'
     | '/admin/personal/usuarios/'
   fileRoutesByTo: FileRoutesByTo
@@ -490,7 +480,6 @@ export interface FileRouteTypes {
     | '/admin/operacion/clientes'
     | '/admin/operacion/ordenes'
     | '/admin/operacion/turnos'
-    | '/admin/personal/caja'
     | '/admin/personal/lavadores'
     | '/admin/personal/usuarios'
   id:
@@ -535,7 +524,6 @@ export interface FileRouteTypes {
     | '/admin/operacion/clientes/'
     | '/admin/operacion/ordenes/'
     | '/admin/operacion/turnos/'
-    | '/admin/personal/caja/'
     | '/admin/personal/lavadores/'
     | '/admin/personal/usuarios/'
   fileRoutesById: FileRoutesById
@@ -835,13 +823,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminOperacionTurnosIndexRouteImport
       parentRoute: typeof AdminOperacionRouteRoute
     }
-    '/admin/personal/caja/': {
-      id: '/admin/personal/caja/'
-      path: '/caja'
-      fullPath: '/admin/personal/caja/'
-      preLoaderRoute: typeof AdminPersonalCajaIndexRouteImport
-      parentRoute: typeof AdminPersonalRouteRoute
-    }
     '/admin/personal/lavadores/': {
       id: '/admin/personal/lavadores/'
       path: '/lavadores'
@@ -916,14 +897,12 @@ const AdminOperacionRouteRouteWithChildren =
 
 interface AdminPersonalRouteRouteChildren {
   AdminPersonalIndexRoute: typeof AdminPersonalIndexRoute
-  AdminPersonalCajaIndexRoute: typeof AdminPersonalCajaIndexRoute
   AdminPersonalLavadoresIndexRoute: typeof AdminPersonalLavadoresIndexRoute
   AdminPersonalUsuariosIndexRoute: typeof AdminPersonalUsuariosIndexRoute
 }
 
 const AdminPersonalRouteRouteChildren: AdminPersonalRouteRouteChildren = {
   AdminPersonalIndexRoute: AdminPersonalIndexRoute,
-  AdminPersonalCajaIndexRoute: AdminPersonalCajaIndexRoute,
   AdminPersonalLavadoresIndexRoute: AdminPersonalLavadoresIndexRoute,
   AdminPersonalUsuariosIndexRoute: AdminPersonalUsuariosIndexRoute,
 }

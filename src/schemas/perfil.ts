@@ -15,8 +15,6 @@ export const perfilSchema = z.object({
   rolActivo: rolSchema.nullable(),
   activo: z.boolean(),
   debeCambiarPassword: z.boolean(),
-  // Enlace a la persona real del roster (personal_operativo). Puede ser null en cuentas viejas.
-  personaId: z.string().nullable(),
   creadoEn: z.string(),
 })
 
@@ -24,7 +22,6 @@ export const perfilInputSchema = z.object({
   nombre: z.string().trim().min(2, 'El nombre debe tener al menos 2 caracteres'),
   roles: rolSchema.array().min(1, 'Asigna al menos un rol'),
   activo: z.boolean(),
-  personaId: z.string().trim().optional(),
 })
 
 // Crear la cuenta completa desde /admin/personal/usuarios — solo funciona contra Supabase real
@@ -34,7 +31,6 @@ export const crearUsuarioInputSchema = z.object({
   nombre: z.string().trim().min(2, 'El nombre debe tener al menos 2 caracteres'),
   apellido: z.string().trim().min(2, 'El apellido debe tener al menos 2 caracteres'),
   roles: rolSchema.array().min(1, 'Asigna al menos un rol'),
-  personaId: z.string().trim().optional(),
 })
 
 export type Perfil = z.infer<typeof perfilSchema>

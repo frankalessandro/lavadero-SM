@@ -2,14 +2,14 @@ import { useMemo, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { ScrollText, ShieldCheck, User, X } from 'lucide-react'
 import { fetchBitacora, type FiltroBitacora } from '../../../../data/bitacora'
-import { fetchPersonalOperativo } from '../../../../data/personalOperativo'
+import { fetchPerfiles } from '../../../../data/perfiles'
 import {
   ACCIONES_FILTRO,
   ACCION_LABEL,
   ENTIDAD_LABEL,
   type BitacoraEntrada,
 } from '../../../../schemas/bitacora'
-import type { PersonalOperativo } from '../../../../schemas/personalOperativo'
+import type { Perfil } from '../../../../schemas/perfil'
 import { Card } from '../../../../components/layout/Card'
 import { StatCard } from '../../../../components/layout/StatCard'
 import { CustomSelect } from '../../../../components/layout/CustomSelect'
@@ -32,9 +32,11 @@ function rangoISO(dias: number): { desdeISO: string; hastaISO: string } {
 
 async function loadAuditoria() {
   const { desdeISO, hastaISO } = rangoISO(6)
+  // El filtro incluye las cuentas inactivas a propósito: la bitácora es histórica y hay que poder
+  // filtrar por alguien que ya no opera.
   const [entradas, personal] = await Promise.all([
     fetchBitacora({ desdeISO, hastaISO }),
-    fetchPersonalOperativo(),
+    fetchPerfiles(),
   ])
   return { entradas, personal }
 }
@@ -170,7 +172,7 @@ function Auditoria() {
               onChange={(v) => recargar({ personaId: v })}
               options={[
                 { value: '', label: 'Todas' },
-                ...data.personal.map((p: PersonalOperativo) => ({ value: p.id, label: p.nombre })),
+                ...data.personal.map((p: Perfil) => ({ value: p.id, label: p.nombre?.trim() || 'Sin nombre' })),
               ]}
               placeholder="Todas"
             />

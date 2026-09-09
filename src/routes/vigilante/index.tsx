@@ -23,8 +23,8 @@ import { METODO_PAGO_LABEL } from '../../lib/metodoPago'
 import { fetchSuscripcionActivaPorPlaca } from '../../data/suscripcionesParqueadero'
 import { estadoVigencia, ESTADO_VIGENCIA_LABEL, type SuscripcionParqueadero } from '../../schemas/suscripcionParqueadero'
 import { fetchTurnoAbierto, abrirTurno, calcularValorEsperado, cerrarTurno } from '../../data/turnos'
-import { fetchPersonalOperativo } from '../../data/personalOperativo'
-import { NIVELES_POR_CAJA, type PersonalOperativo } from '../../schemas/personalOperativo'
+import { fetchPerfilesElegibles } from '../../data/perfiles'
+import type { Perfil } from '../../schemas/perfil'
 import type { TurnoCaja } from '../../schemas/turnoCaja'
 import { Card } from '../../components/layout/Card'
 import { CustomSelect } from '../../components/layout/CustomSelect'
@@ -277,16 +277,20 @@ function AbrirTurnoModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
   const [baseInicial, setBaseInicial] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const [personal, setPersonal] = useState<PersonalOperativo[]>([])
+  const [personal, setPersonal] = useState<Perfil[]>([])
   const [cargando, setCargando] = useState(true)
 
-  // Quién puede quedar a cargo de la caja del parqueadero (ver NIVELES_POR_CAJA): vigilantes y
-  // administradores. Se acabó el nombre tecleado a mano — ver 0043_personal_operativo.sql.
+  // Quién puede quedar a cargo de la caja del parqueadero: las cuentas activas con rol
+  // 'vigilante'. Desde 0056 no hay roster aparte — la cuenta ES la persona, y tener el rol ES el
+  // permiso. Si nadie tiene ese rol no se puede abrir la caja, que es el comportamiento correcto.
   useEffect(() => {
     let vivo = true
-    fetchPersonalOperativo()
+    fetchPerfilesElegibles('vigilante')
       .then((lista) => {
-        if (vivo) setPersonal(lista.filter((p) => p.activo && NIVELES_POR_CAJA.vigilante.includes(p.nivel)))
+        if (vivo) setPersonal(lista)
+      })
+      .catch(() => {
+        if (vivo) setPersonal([])
       })
       .finally(() => {
         if (vivo) setCargando(false)
@@ -313,7 +317,7 @@ function AbrirTurnoModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
       await abrirTurno({
         rol: 'vigilante',
         responsablePersonaId: persona.id,
-        responsable: persona.nombre,
+        responsable: persona.nombre?.trim() || 'Sin nombre',
         baseInicial: Math.round(base),
       })
       onSaved()
@@ -332,15 +336,15 @@ function AbrirTurnoModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
           <CustomSelect
             value={personaId}
             onChange={setPersonaId}
-            options={personal.map((p) => ({ value: p.id, label: p.nombre }))}
+            options={personal.map((p) => ({ value: p.id, label: p.nombre?.trim() || 'Sin nombre' }))}
             placeholder={cargando ? 'Cargando…' : 'Selecciona quién abre el turno'}
             disabled={cargando || personal.length === 0}
-            emptyLabel="No hay personas registradas para esta caja"
+            emptyLabel="No hay cuentas habilitadas para esta caja"
           />
           {!cargando && personal.length === 0 ? (
             <span className="text-xs text-warning-700">
-              Ningún vigilante está registrado todavía. Un administrador debe agregarlo en Personal › Personal de
-              caja antes de poder abrir la caja del parqueadero.
+              Ninguna cuenta activa tiene el rol de vigilante, así que nadie puede responder por esta caja.
+              Un administrador debe asignarlo en Personal › Usuarios del sistema.
             </span>
           ) : null}
         </label>
