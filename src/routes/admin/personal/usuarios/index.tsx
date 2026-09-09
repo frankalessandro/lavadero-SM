@@ -1,44 +1,62 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type FormEvent, type ReactNode } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { Pencil, X, Plus, UserPlus } from 'lucide-react'
-import { fetchPerfiles, updatePerfil, createUsuario } from '../../../../data/perfiles'
-import { perfilInputSchema, crearUsuarioInputSchema, type Perfil, type Rol } from '../../../../schemas/perfil'
+import { Pencil, X, Plus, UserPlus, KeyRound, Copy, Check } from 'lucide-react'
+import {
+  fetchPerfiles,
+  updatePerfil,
+  createUsuario,
+  resetPassword,
+  type UsuarioCreado,
+} from '../../../../data/perfiles'
+import { fetchPersonalOperativo } from '../../../../data/personalOperativo'
+import {
+  perfilInputSchema,
+  crearUsuarioInputSchema,
+  rolSchema,
+  ROL_LABEL,
+  type Perfil,
+  type Rol,
+} from '../../../../schemas/perfil'
+import type { PersonalOperativo } from '../../../../schemas/personalOperativo'
 import { USE_LOCAL_DB } from '../../../../lib/db'
 import { Card } from '../../../../components/layout/Card'
 import { CustomSelect } from '../../../../components/layout/CustomSelect'
 
-const ROL_LABEL: Record<Rol, string> = {
-  admin: 'Administrador',
-  jefe_zona: 'Jefe de zona',
-  vigilante: 'Vigilante',
-}
+const ROLES: Rol[] = [...rolSchema.options]
 
 export const Route = createFileRoute('/admin/personal/usuarios/')({
-  loader: fetchPerfiles,
+  loader: async () => {
+    const [perfiles, personal] = await Promise.all([fetchPerfiles(), fetchPersonalOperativo()])
+    return { perfiles, personal }
+  },
   component: UsuariosPage,
 })
 
 function UsuariosPage() {
   const initial = Route.useLoaderData()
   const router = useRouter()
-  const [perfiles, setPerfiles] = useState(initial)
+  const [perfiles, setPerfiles] = useState(initial.perfiles)
+  const personal = initial.personal
   const [editing, setEditing] = useState<Perfil | null>(null)
   const [creando, setCreando] = useState(false)
+  const [reseteando, setReseteando] = useState<Perfil | null>(null)
 
   async function refresh() {
     setPerfiles(await fetchPerfiles())
     router.invalidate()
   }
 
+  const personaNombre = (id: string | null) => personal.find((p) => p.id === id)?.nombre
+
   return (
     <div className="flex flex-col gap-6 text-left">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold text-neutral-900">Usuarios</h2>
+          <h2 className="text-base font-semibold text-neutral-900">Usuarios del sistema</h2>
           <p className="text-sm text-neutral-500">
             {USE_LOCAL_DB
               ? 'Las cuentas reales (login) solo existen en Supabase — este sandbox local no tiene Auth.'
-              : 'Crea la cuenta (correo + contraseña + rol) directo desde acá, o edita nombre/rol/activo de una que ya exista. Sin rol asignado, la cuenta no puede iniciar sesión.'}
+              : 'Una cuenta por persona, con uno o varios roles. El usuario es nombreapellido@carwashsm.com y la contraseña es desechable: la persona la cambia en su primer ingreso.'}
           </p>
         </div>
         {USE_LOCAL_DB ? null : (
@@ -58,37 +76,67 @@ function UsuariosPage() {
           <thead>
             <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
               <th className="px-5 py-3">Nombre</th>
-              <th className="px-5 py-3">Rol</th>
+              <th className="px-5 py-3">Roles</th>
+              <th className="px-5 py-3">Persona</th>
               <th className="px-5 py-3">Estado</th>
               <th className="px-5 py-3 text-right">Acciones</th>
             </tr>
           </thead>
           <tbody>
             {perfiles.map((perfil) => (
-              <tr key={perfil.id} className="border-b border-neutral-100 transition-colors last:border-0 hover:bg-primary-50/40">
+              <tr
+                key={perfil.id}
+                className="border-b border-neutral-100 transition-colors last:border-0 hover:bg-primary-50/40"
+              >
                 <td className="px-5 py-3 font-medium text-neutral-900">{perfil.nombre ?? '—'}</td>
                 <td className="px-5 py-3">
-                  {perfil.rol ? (
-                    <span className="inline-flex rounded-full bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary-700">
-                      {ROL_LABEL[perfil.rol]}
-                    </span>
+                  {perfil.roles.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {perfil.roles.map((rol) => (
+                        <span
+                          key={rol}
+                          className="inline-flex rounded-full bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary-700"
+                        >
+                          {ROL_LABEL[rol]}
+                        </span>
+                      ))}
+                    </div>
                   ) : (
                     <span className="inline-flex rounded-full bg-warning-50 px-2.5 py-1 text-xs font-medium text-warning-700">
                       Pendiente
                     </span>
                   )}
                 </td>
+                <td className="px-5 py-3 text-neutral-600">{personaNombre(perfil.personaId) ?? '—'}</td>
                 <td className="px-5 py-3">
-                  <span
-                    className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
-                      perfil.activo ? 'bg-success-50 text-success-700' : 'bg-neutral-100 text-neutral-500'
-                    }`}
-                  >
-                    {perfil.activo ? 'Activo' : 'Inactivo'}
-                  </span>
+                  <div className="flex flex-wrap gap-1">
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
+                        perfil.activo ? 'bg-success-50 text-success-700' : 'bg-neutral-100 text-neutral-500'
+                      }`}
+                    >
+                      {perfil.activo ? 'Activo' : 'Inactivo'}
+                    </span>
+                    {perfil.debeCambiarPassword ? (
+                      <span className="inline-flex rounded-full bg-warning-50 px-2.5 py-1 text-xs font-medium text-warning-700">
+                        Debe cambiar contraseña
+                      </span>
+                    ) : null}
+                  </div>
                 </td>
                 <td className="px-5 py-3">
                   <div className="flex justify-end gap-2">
+                    {USE_LOCAL_DB ? null : (
+                      <button
+                        type="button"
+                        onClick={() => setReseteando(perfil)}
+                        className="flex size-8 items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-primary-100 hover:text-primary-700"
+                        aria-label={`Restablecer contraseña de ${perfil.nombre ?? 'usuario'}`}
+                        title="Restablecer contraseña"
+                      >
+                        <KeyRound size={15} />
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => setEditing(perfil)}
@@ -103,8 +151,8 @@ function UsuariosPage() {
             ))}
             {perfiles.length === 0 ? (
               <tr>
-                <td className="px-5 py-6 text-center text-neutral-400" colSpan={4}>
-                  No hay usuarios todavía — créalos en Supabase Studio → Authentication → Users.
+                <td className="px-5 py-6 text-center text-neutral-400" colSpan={5}>
+                  No hay usuarios todavía.
                 </td>
               </tr>
             ) : null}
@@ -115,6 +163,7 @@ function UsuariosPage() {
       {editing ? (
         <PerfilForm
           perfil={editing}
+          personal={personal}
           onClose={() => setEditing(null)}
           onSaved={async () => {
             setEditing(null)
@@ -125,54 +174,108 @@ function UsuariosPage() {
 
       {creando ? (
         <CrearUsuarioForm
+          personal={personal}
           onClose={() => setCreando(false)}
-          onSaved={async () => {
-            setCreando(false)
-            await refresh()
-          }}
+          onSaved={refresh}
+        />
+      ) : null}
+
+      {reseteando ? (
+        <ResetPasswordModal
+          perfil={reseteando}
+          onClose={() => setReseteando(null)}
+          onDone={refresh}
         />
       ) : null}
     </div>
   )
 }
 
-function CrearUsuarioForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => Promise<void> }) {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [nombre, setNombre] = useState('')
-  const [rol, setRol] = useState<Rol | ''>('')
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault()
-    const parsed = crearUsuarioInputSchema.safeParse({ email, password, nombre, rol: rol || undefined })
-    if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? 'Datos inválidos')
-      return
-    }
-    setError(null)
-    setSaving(true)
-    try {
-      await createUsuario(parsed.data)
-      await onSaved()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo crear el usuario')
-    } finally {
-      setSaving(false)
-    }
+function RolesCheckboxes({ value, onChange }: { value: Rol[]; onChange: (roles: Rol[]) => void }) {
+  function toggle(rol: Rol) {
+    onChange(value.includes(rol) ? value.filter((r) => r !== rol) : [...value, rol])
   }
+  return (
+    <div className="flex flex-col gap-2">
+      {ROLES.map((rol) => (
+        <label key={rol} className="flex items-center gap-2 text-sm text-neutral-700">
+          <input
+            type="checkbox"
+            checked={value.includes(rol)}
+            onChange={() => toggle(rol)}
+            className="size-4 rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
+          />
+          {ROL_LABEL[rol]}
+        </label>
+      ))}
+    </div>
+  )
+}
 
+function PersonaSelect({
+  personal,
+  value,
+  onChange,
+}: {
+  personal: PersonalOperativo[]
+  value: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <CustomSelect
+      size="sm"
+      value={value}
+      onChange={onChange}
+      placeholder="Sin persona asignada…"
+      options={[
+        { value: '', label: 'Sin persona asignada' },
+        ...personal.filter((p) => p.activo).map((p) => ({ value: p.id, label: p.nombre })),
+      ]}
+    />
+  )
+}
+
+function CredencialFila({ label, valor }: { label: string; valor: string }) {
+  const [copiado, setCopiado] = useState(false)
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg bg-neutral-50 px-3 py-2">
+      <div className="min-w-0">
+        <p className="text-xs text-neutral-500">{label}</p>
+        <p className="truncate font-mono text-sm text-neutral-900">{valor}</p>
+      </div>
+      <button
+        type="button"
+        onClick={() => {
+          void navigator.clipboard?.writeText(valor)
+          setCopiado(true)
+          setTimeout(() => setCopiado(false), 1500)
+        }}
+        className="flex size-8 shrink-0 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-200 hover:text-neutral-700"
+        aria-label={`Copiar ${label}`}
+      >
+        {copiado ? <Check size={15} className="text-success-600" /> : <Copy size={15} />}
+      </button>
+    </div>
+  )
+}
+
+function ModalShell({ title, subtitle, icon, onClose, children }: {
+  title: string
+  subtitle?: string
+  icon?: ReactNode
+  onClose: () => void
+  children: ReactNode
+}) {
   return (
     <div className="fixed inset-0 z-20 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-[2px]">
       <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-card-hover sm:p-7">
         <div className="mb-5 flex items-center justify-between">
           <div>
             <h3 className="flex items-center gap-2 text-base font-semibold text-neutral-900">
-              <UserPlus size={17} className="text-primary-500" />
-              Nuevo usuario
+              {icon}
+              {title}
             </h3>
-            <p className="text-xs text-neutral-500">Crea la cuenta (correo + contraseña) y le asigna rol de una vez.</p>
+            {subtitle ? <p className="text-xs text-neutral-500">{subtitle}</p> : null}
           </div>
           <button
             type="button"
@@ -182,100 +285,181 @@ function CrearUsuarioForm({ onClose, onSaved }: { onClose: () => void; onSaved: 
             <X size={18} />
           </button>
         </div>
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-          <label className="flex flex-col gap-1.5 text-left text-sm">
-            <span className="font-medium text-neutral-700">Correo</span>
-            <input
-              autoFocus
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="nombre@carwashsm.com"
-              className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-            />
-          </label>
-
-          <label className="flex flex-col gap-1.5 text-left text-sm">
-            <span className="font-medium text-neutral-700">Contraseña</span>
-            <input
-              type="text"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="Mínimo 6 caracteres"
-              className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-            />
-            <span className="text-xs text-neutral-400">Compártela con la persona por fuera del sistema — acá no queda guardada.</span>
-          </label>
-
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-            <label className="flex flex-col gap-1.5 text-left text-sm">
-              <span className="font-medium text-neutral-700">Nombre</span>
-              <input
-                value={nombre}
-                onChange={(event) => setNombre(event.target.value)}
-                placeholder="Nombre completo"
-                className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-              />
-            </label>
-            <label className="flex flex-col gap-1.5 text-left text-sm">
-              <span className="font-medium text-neutral-700">Rol</span>
-              <CustomSelect
-                size="sm"
-                value={rol}
-                onChange={(value) => setRol(value as Rol)}
-                placeholder="Selecciona un rol…"
-                options={[
-                  { value: 'admin', label: ROL_LABEL.admin },
-                  { value: 'jefe_zona', label: ROL_LABEL.jefe_zona },
-                  { value: 'vigilante', label: ROL_LABEL.vigilante },
-                ]}
-              />
-            </label>
-          </div>
-
-          {error ? <p className="text-xs text-danger-600">{error}</p> : null}
-
-          <div className="mt-1 flex justify-end gap-2 border-t border-neutral-100 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg px-4 py-2 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-100"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
-            >
-              {saving ? 'Creando…' : 'Crear usuario'}
-            </button>
-          </div>
-        </form>
+        {children}
       </div>
     </div>
   )
 }
 
+function CrearUsuarioForm({
+  personal,
+  onClose,
+  onSaved,
+}: {
+  personal: PersonalOperativo[]
+  onClose: () => void
+  onSaved: () => Promise<void>
+}) {
+  const [nombre, setNombre] = useState('')
+  const [apellido, setApellido] = useState('')
+  const [roles, setRoles] = useState<Rol[]>([])
+  const [personaId, setPersonaId] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [creado, setCreado] = useState<UsuarioCreado | null>(null)
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault()
+    const parsed = crearUsuarioInputSchema.safeParse({
+      nombre,
+      apellido,
+      roles,
+      personaId: personaId || undefined,
+    })
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.message ?? 'Datos inválidos')
+      return
+    }
+    setError(null)
+    setSaving(true)
+    try {
+      setCreado(await createUsuario(parsed.data))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo crear el usuario')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (creado) {
+    return (
+      <ModalShell
+        title="Usuario creado"
+        subtitle="Estas credenciales no se vuelven a mostrar — pásalas a la persona ahora."
+        icon={<UserPlus size={17} className="text-primary-500" />}
+        onClose={() => void onSaved().then(onClose)}
+      >
+        <div className="flex flex-col gap-3">
+          <CredencialFila label="Usuario" valor={creado.email} />
+          <CredencialFila label="Contraseña temporal" valor={creado.password} />
+          <p className="text-xs text-neutral-500">
+            La persona deberá cambiar esta contraseña en su primer ingreso.
+          </p>
+          <div className="mt-1 flex justify-end border-t border-neutral-100 pt-4">
+            <button
+              type="button"
+              onClick={() => void onSaved().then(onClose)}
+              className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700"
+            >
+              Listo
+            </button>
+          </div>
+        </div>
+      </ModalShell>
+    )
+  }
+
+  return (
+    <ModalShell
+      title="Nuevo usuario"
+      subtitle="El usuario y la contraseña temporal se generan solos."
+      icon={<UserPlus size={17} className="text-primary-500" />}
+      onClose={onClose}
+    >
+      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <label className="flex flex-col gap-1.5 text-left text-sm">
+            <span className="font-medium text-neutral-700">Nombre</span>
+            <input
+              autoFocus
+              value={nombre}
+              onChange={(event) => setNombre(event.target.value)}
+              className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5 text-left text-sm">
+            <span className="font-medium text-neutral-700">Apellido</span>
+            <input
+              value={apellido}
+              onChange={(event) => setApellido(event.target.value)}
+              className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+            />
+          </label>
+        </div>
+
+        {nombre.trim() && apellido.trim() ? (
+          <p className="-mt-2 text-xs text-neutral-400">
+            Usuario: <span className="font-mono text-neutral-600">{`${soloAlfanum(nombre)}${soloAlfanum(apellido)}@carwashsm.com`}</span>
+          </p>
+        ) : null}
+
+        <div className="flex flex-col gap-1.5 text-left text-sm">
+          <span className="font-medium text-neutral-700">Roles</span>
+          <RolesCheckboxes value={roles} onChange={setRoles} />
+        </div>
+
+        <label className="flex flex-col gap-1.5 text-left text-sm">
+          <span className="font-medium text-neutral-700">Persona del roster</span>
+          <PersonaSelect personal={personal} value={personaId} onChange={setPersonaId} />
+        </label>
+
+        {error ? <p className="text-xs text-danger-600">{error}</p> : null}
+
+        <div className="mt-1 flex justify-end gap-2 border-t border-neutral-100 pt-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg px-4 py-2 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-100"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
+          >
+            {saving ? 'Creando…' : 'Crear usuario'}
+          </button>
+        </div>
+      </form>
+    </ModalShell>
+  )
+}
+
+function soloAlfanum(s: string): string {
+  return s
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+}
+
 function PerfilForm({
   perfil,
+  personal,
   onClose,
   onSaved,
 }: {
   perfil: Perfil
+  personal: PersonalOperativo[]
   onClose: () => void
   onSaved: () => void
 }) {
   const [nombre, setNombre] = useState(perfil.nombre ?? '')
-  const [rol, setRol] = useState<Rol | ''>(perfil.rol ?? '')
+  const [roles, setRoles] = useState<Rol[]>(perfil.roles)
+  const [personaId, setPersonaId] = useState(perfil.personaId ?? '')
   const [activo, setActivo] = useState(perfil.activo)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    const parsed = perfilInputSchema.safeParse({ nombre, rol: rol || undefined, activo })
+    const parsed = perfilInputSchema.safeParse({
+      nombre,
+      roles,
+      activo,
+      personaId: personaId || undefined,
+    })
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Datos inválidos')
       return
@@ -285,88 +469,150 @@ function PerfilForm({
     try {
       await updatePerfil(perfil.id, parsed.data)
       onSaved()
-    } finally {
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo guardar')
       setSaving(false)
     }
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-[2px]">
-      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-card-hover sm:p-7">
-        <div className="mb-5 flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-semibold text-neutral-900">Editar usuario</h3>
-            <p className="text-xs text-neutral-500">Asigna nombre, rol y si la cuenta está activa.</p>
-          </div>
+    <ModalShell title="Editar usuario" subtitle="Nombre, roles, persona y estado de la cuenta." onClose={onClose}>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+        <label className="flex flex-col gap-1.5 text-left text-sm">
+          <span className="font-medium text-neutral-700">Nombre</span>
+          <input
+            autoFocus
+            value={nombre}
+            onChange={(event) => setNombre(event.target.value)}
+            placeholder="Nombre y apellido"
+            className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+          />
+        </label>
+
+        <div className="flex flex-col gap-1.5 text-left text-sm">
+          <span className="font-medium text-neutral-700">Roles</span>
+          <RolesCheckboxes value={roles} onChange={setRoles} />
+          <span className="text-xs text-neutral-400">
+            Sin roles, la cuenta no puede entrar. Con más de uno, la persona elige el módulo tras iniciar sesión.
+          </span>
+        </div>
+
+        <label className="flex flex-col gap-1.5 text-left text-sm">
+          <span className="font-medium text-neutral-700">Persona del roster</span>
+          <PersonaSelect personal={personal} value={personaId} onChange={setPersonaId} />
+        </label>
+
+        <label className="flex items-center gap-2 text-sm text-neutral-700">
+          <input
+            type="checkbox"
+            checked={activo}
+            onChange={(event) => setActivo(event.target.checked)}
+            className="size-4 rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
+          />
+          Cuenta activa
+        </label>
+
+        {error ? <p className="text-xs text-danger-600">{error}</p> : null}
+
+        <div className="mt-1 flex justify-end gap-2 border-t border-neutral-100 pt-4">
           <button
             type="button"
             onClick={onClose}
-            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
+            className="rounded-lg px-4 py-2 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-100"
           >
-            <X size={18} />
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
+          >
+            {saving ? 'Guardando…' : 'Guardar'}
           </button>
         </div>
+      </form>
+    </ModalShell>
+  )
+}
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-          <label className="flex flex-col gap-1.5 text-left text-sm">
-            <span className="font-medium text-neutral-700">Nombre</span>
-            <input
-              autoFocus
-              value={nombre}
-              onChange={(event) => setNombre(event.target.value)}
-              placeholder="Nombre completo"
-              className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-            />
-          </label>
+function ResetPasswordModal({
+  perfil,
+  onClose,
+  onDone,
+}: {
+  perfil: Perfil
+  onClose: () => void
+  onDone: () => Promise<void>
+}) {
+  const [password, setPassword] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [working, setWorking] = useState(false)
 
-          <label className="flex flex-col gap-1.5 text-left text-sm">
-            <span className="font-medium text-neutral-700">Rol</span>
-            <CustomSelect
-              size="sm"
-              value={rol}
-              onChange={(value) => setRol(value as Rol)}
-              placeholder="Selecciona un rol…"
-              options={[
-                { value: 'admin', label: ROL_LABEL.admin },
-                { value: 'jefe_zona', label: ROL_LABEL.jefe_zona },
-                { value: 'vigilante', label: ROL_LABEL.vigilante },
-              ]}
-            />
-            <span className="text-xs text-neutral-400">
-              Sin rol asignado, la cuenta no puede entrar a ninguna pantalla del sistema.
-            </span>
-          </label>
+  async function confirmar() {
+    setWorking(true)
+    setError(null)
+    try {
+      const { password: nueva } = await resetPassword(perfil.id)
+      setPassword(nueva)
+      await onDone()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo restablecer la contraseña')
+    } finally {
+      setWorking(false)
+    }
+  }
 
-          <label className="flex items-center gap-2 text-sm text-neutral-700">
-            <input
-              type="checkbox"
-              checked={activo}
-              onChange={(event) => setActivo(event.target.checked)}
-              className="size-4 rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
-            />
-            Cuenta activa
-          </label>
+  return (
+    <ModalShell
+      title={password ? 'Contraseña restablecida' : '¿Restablecer contraseña?'}
+      subtitle={
+        password
+          ? 'No se vuelve a mostrar — pásala a la persona ahora.'
+          : `Se generará una contraseña temporal nueva para ${perfil.nombre ?? 'esta cuenta'}. La actual dejará de funcionar.`
+      }
+      icon={<KeyRound size={17} className="text-primary-500" />}
+      onClose={onClose}
+    >
+      <div className="flex flex-col gap-3">
+        {password ? (
+          <>
+            <CredencialFila label={`Contraseña temporal de ${perfil.nombre ?? 'la cuenta'}`} valor={password} />
+            <p className="text-xs text-neutral-500">Deberá cambiarla en su siguiente ingreso.</p>
+          </>
+        ) : null}
 
-          {error ? <p className="text-xs text-danger-600">{error}</p> : null}
+        {error ? <p className="text-xs text-danger-600">{error}</p> : null}
 
-          <div className="mt-1 flex justify-end gap-2 border-t border-neutral-100 pt-4">
+        <div className="mt-1 flex justify-end gap-2 border-t border-neutral-100 pt-4">
+          {password ? (
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg px-4 py-2 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-100"
+              className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700"
             >
-              Cancelar
+              Listo
             </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
-            >
-              {saving ? 'Guardando…' : 'Guardar'}
-            </button>
-          </div>
-        </form>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg px-4 py-2 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-100"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmar()}
+                disabled={working}
+                className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
+              >
+                {working ? 'Generando…' : 'Restablecer'}
+              </button>
+            </>
+          )}
+        </div>
       </div>
-    </div>
+    </ModalShell>
   )
 }

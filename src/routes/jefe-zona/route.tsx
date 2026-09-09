@@ -1,20 +1,14 @@
 import { useState } from 'react'
-import { createFileRoute, Outlet, redirect } from '@tanstack/react-router'
+import { createFileRoute, Outlet, useNavigate } from '@tanstack/react-router'
 import { LayoutDashboard, Wallet, ShoppingCart, Boxes, Coins, CalendarCheck } from 'lucide-react'
 import { Sidebar, type NavItem } from '../../components/layout/Sidebar'
 import { Topbar } from '../../components/layout/Topbar'
 import { MobileTabBar } from '../../components/layout/MobileTabBar'
-import { signOut } from '../../lib/auth'
+import { exigirRol, signOut } from '../../lib/auth'
 import { fetchTurnoAbierto } from '../../data/turnos'
 
 export const Route = createFileRoute('/jefe-zona')({
-  beforeLoad: ({ context }) => {
-    if (!context.auth) throw redirect({ to: '/login' })
-    const { rol, activo } = context.auth.perfil
-    if ((rol !== 'jefe_zona' && rol !== 'admin') || !activo) {
-      throw redirect({ to: '/login' })
-    }
-  },
+  beforeLoad: ({ context }) => exigirRol(context.auth, 'jefe_zona'),
   // Un solo turno compartido entre Caja y Asistencia (ver TurnoResponsableBanner) — se carga acá,
   // a nivel de layout, para que el Topbar pueda mostrar "quién está a cargo ahora" en cualquier
   // pantalla del área, no solo en las dos que ya lo usan directamente. `router.invalidate()` (ya
@@ -41,7 +35,9 @@ const NAV_ITEMS: NavItem[] = [
 function JefeZonaLayout() {
   const turno = Route.useLoaderData()
   const { auth } = Route.useRouteContext()
+  const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
+  const multiRol = (auth?.perfil.roles.length ?? 0) > 1
   return (
     <div className="fixed inset-0 z-10 flex bg-neutral-50 text-left">
       <Sidebar
@@ -55,6 +51,8 @@ function JefeZonaLayout() {
           title="Panel de control"
           avatarInitial="J"
           onLogout={signOut}
+          multiRol={multiRol}
+          onCambiarModulo={() => navigate({ to: '/seleccionar-modulo' })}
           onMenuClick={() => setMenuOpen(true)}
           responsable={turno?.responsableActual ?? auth?.perfil.nombre ?? undefined}
           roleLabel="Jefe de zona"

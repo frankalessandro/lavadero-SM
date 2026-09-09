@@ -43,13 +43,13 @@ Deno.serve(async (req) => {
   // porque un Edge Function no hereda RLS por sí solo.
   const { data: perfil, error: perfilError } = await adminClient
     .from('perfiles')
-    .select('rol, activo')
+    .select('rol_activo, activo')
     .eq('id', userData.user.id)
     .maybeSingle()
   if (perfilError) {
     return jsonResponse({ error: perfilError.message }, 500)
   }
-  if (!perfil || perfil.rol !== 'admin' || !perfil.activo) {
+  if (!perfil || perfil.rol_activo !== 'admin' || !perfil.activo) {
     return jsonResponse({ error: 'No autorizado — solo administradores activos pueden crear usuarios' }, 403)
   }
 

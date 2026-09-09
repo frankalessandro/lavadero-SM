@@ -1,6 +1,6 @@
 # Lavadero SM — Funcionalidades del software
 
-> Estado a la fecha de este documento. Referencia funcional de todo lo que el sistema hace hoy,
+> Actualizado: 2026-09-08. Referencia funcional de todo lo que el sistema hace hoy,
 > organizado por rol. Para el detalle técnico de cada decisión, ver `CLAUDE.md` en la raíz del
 > repo y las migraciones en `supabase/migrations/`.
 
@@ -24,9 +24,20 @@ paneles de control operativo y financiero.
 
 ## 2. Acceso y roles
 
-Se entra por `/login` con usuario y contraseña. Cada usuario tiene un rol y el sistema lo lleva a
-su panel. Hay **una cuenta de acceso por rol** (compartida); la **persona** que responde por cada
-turno se identifica aparte, con un registro propio de "personal de caja".
+Se entra por `/login` con usuario y contraseña. **Una cuenta por persona**, con **uno a tres
+roles** cada una. El usuario es `nombreapellido@carwashsm.com` (ese dominio no recibe correo, es
+solo el identificador). Además, la **persona** que responde por cada turno se registra aparte, en
+"personal de caja" (una cuenta puede quedar enlazada a su persona del roster).
+
+- **Contraseña temporal en el alta:** el administrador crea la cuenta y entrega una contraseña
+  desechable; la persona **debe cambiarla en su primer ingreso**.
+- **Recuperación sin correos:** en `/login` no hay autoservicio — un administrador restablece la
+  contraseña desde Personal › Usuarios del sistema y entrega una nueva temporal.
+- **Selección de módulo:** si la cuenta tiene **más de un rol**, después de iniciar sesión aparece
+  una pantalla para elegir a qué módulo entrar (Administración / Jefe de patio / Vigilante), más
+  "Cerrar sesión". Dentro de un panel, el botón de la esquina pasa a ser **"Cambiar de módulo"**
+  (vuelve a esa pantalla); el cierre de sesión real vive ahí. Con **un solo rol**, se entra directo.
+- **Gerencia** es funcionalmente un administrador más (mismos permisos); su cuenta no se inactiva.
 
 | Rol | A qué entra | Qué NO ve |
 |---|---|---|
@@ -239,6 +250,11 @@ Pantalla única, mobile-first (`/vigilante`).
 Menú de 7 secciones. Cada sección de "Operación", "Dinero", "Catálogo" y "Personal" agrupa varias
 pestañas.
 
+**Expedientes gerenciales:** en varias listas del panel, hacer **clic en una fila** abre un modal
+con todo el contexto de ese registro (no hay que cruzar pantallas). Hoy lo tienen: una orden, un
+cliente, un lavador, un turno de caja y un producto. Cada uno reúne lo que ya existe en la base —
+no hay datos nuevos, solo se juntan.
+
 ### 6.1 Dashboard (`/admin`) — el pulso de HOY
 
 - Encabezado con la fecha y el **estado de las dos cajas** (jefe de zona y vigilante).
@@ -271,14 +287,25 @@ Navegable por día / semana / mes.
 ### 6.3 Operación
 
 - **Órdenes:** histórico con filtro por rango (hoy / 7 días / 30 días). Nombres de combo y lavador
-  resueltos, total de ingresos del rango. Acción **Anular** (motivo obligatorio + quién anula) y
-  **corregir el reparto** de un pago. Tarjeta de **huecos en el consecutivo** y tarjeta de
-  **anulaciones** del rango (con motivo, quién y cuándo).
-- **Clientes:** vista derivada del historial de órdenes, agrupada por cliente.
+  resueltos, total de ingresos del rango. **KPIs del rango:** órdenes, ticket promedio, tiempo
+  promedio, % anuladas, mix de métodos de pago. Acción **Anular** (motivo obligatorio + quién
+  anula) y **corregir el reparto** de un pago. Tarjeta de **huecos en el consecutivo** y tarjeta de
+  **anulaciones** del rango (con motivo, quién y cuándo). Clic en una fila → **expediente de la
+  orden** (tiempos, combo, lavador, desglose del pago partido, productos cargados, datos de
+  anulación).
+- **Clientes:** vista derivada del historial de órdenes, agrupada por placa/cliente. **KPIs:**
+  recurrentes (más de un servicio), nuevos del mes, facturado histórico. Orden por Recientes / Más
+  gastan / Más frecuentes, con columnas de total gastado y ticket promedio. Clic en una fila →
+  **expediente del cliente** (contacto, vehículo, primera y última visita, total gastado, e
+  historial completo de servicios de esa placa).
 - **Turnos y arqueos:** histórico de todos los turnos (jefe de zona y vigilante), solo lectura.
-  Filtro por rol, contadores (turnos con diferencia, suma con signo de las diferencias), y por
-  turno: base, esperado, conteo, diferencia (verde/rojo/ámbar), justificación, quién cerró y quién
-  recibió. Sección de **correcciones de reparto de pago** de los últimos 30 días.
+  Filtro por rol, contadores (turnos con diferencia, suma con signo de las diferencias), gráfico de
+  la **diferencia de arqueo por turno** en el tiempo, y por turno: base, esperado, conteo,
+  diferencia (verde/rojo/ámbar), justificación, quién cerró y quién recibió. Sección de
+  **correcciones de reparto de pago** de los últimos 30 días. Clic en una fila → **expediente del
+  turno** (arqueo reconstruido línea por línea, pagos por método, conteos de inventario de apertura
+  y cierre con sus diferencias, traspasos de responsabilidad, y las órdenes, ventas y gastos de ese
+  turno).
 - **Auditoría:** la bitácora completa. Filtros por rango, acción, entidad y persona. Modal con el
   antes/después de cada cambio.
 
@@ -293,14 +320,18 @@ Navegable por día / semana / mes.
     (imprimible, 58 mm), **Marcar pagada** y **Anular** (solo si no está pagada — devuelve las
     órdenes a pendiente, con motivo).
 - **Gastos:** registrar un gasto (fecha, categoría, monto, descripción, responsable, origen
-  caja/otro). Tabla del mes con total. Gestión de categorías (crear / activar / inactivar).
+  caja/otro). Periodo navegable (Este mes / 30 días / 90 días) con total, comparación en % contra
+  el periodo anterior y promedio diario. **Gráfico de gasto por categoría** y filtro por categoría
+  al hacer clic. Gestión de categorías (crear / activar / inactivar).
 - **Inventario y ventas:**
   - Catálogo de productos (nombre, unidad, stock mínimo, precio de venta, costo). Se inactivan, no
     se borran.
   - Registrar movimiento (entrada con costo y proveedor / salida / ajuste con motivo obligatorio).
   - Stat cards: productos activos, cuántos bajo el mínimo, **valorización total** (costo promedio
     ponderado de las entradas × stock).
-  - Tabla de stock (fila en rojo si está bajo el mínimo), "Ganancia" por producto vendible.
+  - Tabla de stock (fila en rojo si está bajo el mínimo), "Ganancia" por producto vendible. Clic
+    en un producto vendible → **expediente del producto** (stock, valorización, margen unitario,
+    días de stock al ritmo actual, unidades vendidas por mes y movimientos).
   - Movimientos recientes.
   - **Faltantes de inventario por revisar:** los que dejó el conteo de cierre de turno, agrupados
     por la persona que responde, con el monto a costo.
@@ -309,7 +340,9 @@ Navegable por día / semana / mes.
 
 - **Combos y precios:** crear/editar un combo (nombre, descripción, categoría auto/moto) **y su
   precio por cada tipo de vehículo en el mismo formulario**. Al guardar, crea o actualiza el combo
-  y todos sus precios.
+  y todos sus precios. Toggle **"Precios | Rendimiento"**: la vista de rendimiento muestra, por
+  combo y para un rango de 7 / 30 / 90 días, cuántas veces se vendió, el ingreso, la participación
+  en %, el ticket y el tiempo promedio, con desglose por tipo de vehículo al hacer clic.
 - **Servicios:** el catálogo de servicios que componen los combos y que se pueden vender sueltos.
 - **Tipos de vehículo:** auto / camioneta / camioneta de platón / moto, con su categoría. Se
   inactivan, no se borran.
@@ -323,11 +356,15 @@ Navegable por día / semana / mes.
 ### 6.6 Personal
 
 - **Lavadores:** CRUD (nombre, teléfono, fecha de ingreso, cumpleaños). Badge activo/inactivo.
-  Nunca se eliminan.
+  Nunca se eliminan. Clic en una fila → **expediente del lavador** (posición en el ranking de
+  producción / comisión / rapidez frente a los demás, comisión generada / pagada / pendiente,
+  ticket y tiempo promedio, tiempo de lavado por combo, y asistencia del periodo).
 - **Personal de caja:** las **personas** que abren caja y responden por un turno (nombre, nivel:
   administrador / jefe de patio / vigilante, teléfono). No son cuentas de acceso — es la lista que
   alimenta el selector de "quién abre el turno" y el sujeto de la comisión de jefe de patio.
-- **Usuarios del sistema:** las cuentas de acceso (una por rol) y su rol/estado.
+- **Usuarios del sistema:** las cuentas de acceso — una por persona, con sus roles, su persona del
+  roster y su estado. Se crean acá (usuario + contraseña temporal), se les editan los roles, y se
+  les restablece la contraseña. Ver §9.
 
 ### 6.7 Configuración (`/admin/configuracion`)
 
@@ -385,3 +422,76 @@ Navegable por día / semana / mes.
 - Asistencia registra la llegada, no la salida ni las ausencias explícitas.
 - "Clientes" es una vista derivada de las órdenes, sin unificación de duplicados (misma persona
   con dos placas, o placa con typo).
+
+---
+
+## 9. Cuentas individuales y acceso multi-rol
+
+> Implementado (migración 0053). Reemplaza "una cuenta compartida por rol" por **una cuenta por
+> persona** con 1–3 roles. Resuelve saber en todo momento quién está logueado y en qué módulo.
+> Falta el paso **operativo** tras el despliegue: crear las cuentas reales de cada persona (con los
+> roles que cubra) e inactivar las tres cuentas compartidas. Se hace desde el panel, no por SQL.
+
+### 9.1 Modelo de cuentas
+
+- Cada persona del roster de "personal de caja" tiene **su propia cuenta de acceso**, enlazada a
+  su registro del roster (relación 1:1). El roster **no cambia** y sigue siendo la persona de
+  registro para turnos, liquidaciones y bitácora; la cuenta solo agrega el inicio de sesión y la
+  selección de rol.
+- Una cuenta tiene **de 1 a 3 roles**: `Administración`, `Jefe de patio`, `Vigilante`. Una misma
+  persona puede ser, por ejemplo, jefe de patio + admin, o los tres.
+- **Gerencia** es funcionalmente **un admin más** — mismos permisos que cualquier usuario con rol
+  de administrador. Su única particularidad: la cuenta de Gerencia **no se puede inactivar**. No
+  hay un nivel "super administrador" por encima.
+- Las cuentas se **inactivan, nunca se borran** (regla 5), igual que el resto de maestros.
+
+### 9.2 Alta de un usuario (desde `/admin` › Personal › Usuarios del sistema)
+
+- El **usuario** se arma solo: `nombreapellido@carwashsm.com` (primer nombre + primer apellido,
+  sin espacios ni tildes, en minúsculas — mismo formato que la cuenta de Gerencia). El dominio
+  `@carwashsm.com` es solo un identificador: **no recibe ni envía correo**.
+- Se genera una **contraseña desechable**, que se le muestra al administrador una sola vez para
+  entregársela a la persona.
+- En el **primer ingreso**, el sistema **obliga a cambiar la contraseña** antes de dejar entrar a
+  cualquier módulo.
+
+### 9.3 Recuperación de contraseña — sin correos
+
+- En `/login`, el enlace "¿Olvidaste tu contraseña?" indica que **un administrador debe
+  restablecerla** — no hay autoservicio y no se envía ningún correo.
+- Desde Personal › Usuarios del sistema, el administrador usa **"Restablecer contraseña"**:
+  genera una contraseña desechable nueva (se muestra una sola vez) y deja la cuenta marcada para
+  que la persona la cambie en su siguiente ingreso.
+- Nunca se muestran contraseñas existentes; el sistema solo **genera nuevas**.
+
+### 9.4 Selección de módulo después de iniciar sesión
+
+- **Con más de un rol:** tras el login aparece una pantalla con **un botón por cada rol que
+  tiene la cuenta** (Administración / Jefe de patio / Vigilante) y un botón **Cerrar sesión**. Al
+  elegir un rol entra al panel correspondiente.
+  - Dentro de cualquier panel, la acción que hoy es "Cerrar sesión" pasa a ser **"Cambiar de
+    módulo"**: vuelve a la pantalla de selección. El cierre de sesión real vive en esa pantalla.
+- **Con un solo rol:** no se muestra la pantalla de selección — entra directo a su panel, y
+  "Cerrar sesión" funciona como hoy.
+
+### 9.5 Restricción de datos con multi-rol (RLS)
+
+Cuando alguien con varios roles elige un módulo, la base de datos restringe los datos según
+**ese** rol elegido, no según el de mayor privilegio. Mecanismo decidido:
+
+- Una marca de **"rol activo"** en la cuenta, obligada a ser uno de los roles concedidos, que se
+  actualiza al elegir o cambiar de módulo. Las políticas de la base leen esa marca (la función
+  interna que hoy resuelve el rol único pasa a leer el rol activo; el resto de políticas no
+  cambian).
+- Es seguro que la base confíe en esa marca: cambiarla a "administrador" solo da acceso de admin
+  si la cuenta **realmente** tiene ese rol concedido.
+- Queda correcto desde el primer día y sin rehacer políticas el día que entre un jefe de patio o
+  un vigilante que **no** sean también administradores (escenario ya previsto en el roster).
+
+### 9.6 Lo que queda pendiente
+
+- **Enlace `persona ↔ cuenta` sin consumidores todavía:** la columna existe y se puede llenar
+  desde el alta, pero turnos, liquidaciones y bitácora siguen resolviendo la persona por el turno
+  abierto (como antes). Recablearlos por ese enlace es una tarea aparte.
+- **Migración operativa:** crear las cuentas individuales de Frank, Laura y Julián con sus roles e
+  inactivar las tres cuentas compartidas (Gerencia / Jefe de patio / Vigilante).

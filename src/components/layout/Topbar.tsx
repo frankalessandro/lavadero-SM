@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { LogOut, Menu } from 'lucide-react'
+import { LayoutGrid, LogOut, Menu } from 'lucide-react'
 import { ConfirmModal } from './ConfirmModal'
 
 interface TopbarProps {
@@ -11,13 +11,26 @@ interface TopbarProps {
    *  comparten uno solo), o el nombre del perfil autenticado si el rol no maneja turnos (admin). */
   responsable?: string
   roleLabel?: string
+  /** Cuenta con más de un rol: el avatar-botón pasa a "Cambiar de módulo" (vuelve al selector)
+   *  en vez de cerrar sesión — el logout real vive en el selector. */
+  multiRol?: boolean
+  onCambiarModulo?: () => void
 }
 
 // Sin buscador ni campana: no hay notificaciones reales en el sistema todavía, y "buscar por
 // placa" no aporta nada aquí (recepción/órdenes ya tienen su propio buscador donde sí aplica).
 // En su lugar, lo que sí es información real y útil en todo momento: quién es responsable ahora
 // y en qué rol — y cerrar sesión pide confirmación porque es una acción que corta el trabajo.
-export function Topbar({ title, avatarInitial, onLogout, onMenuClick, responsable, roleLabel }: TopbarProps) {
+export function Topbar({
+  title,
+  avatarInitial,
+  onLogout,
+  onMenuClick,
+  responsable,
+  roleLabel,
+  multiRol = false,
+  onCambiarModulo,
+}: TopbarProps) {
   const [confirmando, setConfirmando] = useState(false)
 
   return (
@@ -44,15 +57,27 @@ export function Topbar({ title, avatarInitial, onLogout, onMenuClick, responsabl
             {roleLabel ? <span className="text-xs text-neutral-400">{roleLabel}</span> : null}
           </div>
         ) : null}
-        <button
-          type="button"
-          onClick={() => setConfirmando(true)}
-          title="Cerrar sesión"
-          className="group relative flex size-9 items-center justify-center rounded-full bg-primary-600 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-danger-600"
-        >
-          <span className="group-hover:hidden">{avatarInitial}</span>
-          <LogOut size={15} className="hidden group-hover:block" />
-        </button>
+        {multiRol ? (
+          <button
+            type="button"
+            onClick={onCambiarModulo}
+            title="Cambiar de módulo"
+            className="group relative flex size-9 items-center justify-center rounded-full bg-primary-600 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700"
+          >
+            <span className="group-hover:hidden">{avatarInitial}</span>
+            <LayoutGrid size={15} className="hidden group-hover:block" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setConfirmando(true)}
+            title="Cerrar sesión"
+            className="group relative flex size-9 items-center justify-center rounded-full bg-primary-600 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-danger-600"
+          >
+            <span className="group-hover:hidden">{avatarInitial}</span>
+            <LogOut size={15} className="hidden group-hover:block" />
+          </button>
+        )}
       </div>
 
       {confirmando ? (

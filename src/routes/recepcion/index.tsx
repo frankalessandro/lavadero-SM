@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { createFileRoute, Link, redirect, useNavigate, useRouter } from '@tanstack/react-router'
+import { createFileRoute, Link, useNavigate, useRouter } from '@tanstack/react-router'
 import { Package, Car, Lock, Sparkles, AlertTriangle } from 'lucide-react'
 import { SimpleTopbar } from '../../components/layout/SimpleTopbar'
-import { signOut } from '../../lib/auth'
+import { exigirRol, signOut } from '../../lib/auth'
 import { fetchTiposVehiculo } from '../../data/tiposVehiculo'
 import { fetchCombos, precioComboCalculado } from '../../data/combos'
 import { fetchComboServicios, type ComboServicio } from '../../data/comboServicios'
@@ -104,13 +104,7 @@ export const Route = createFileRoute('/recepcion/')({
     corrige: typeof search.corrige === 'string' && search.corrige ? search.corrige : undefined,
   }),
   loaderDeps: ({ search }) => ({ corrige: search.corrige }),
-  beforeLoad: ({ context }) => {
-    if (!context.auth) throw redirect({ to: '/login' })
-    const { rol, activo } = context.auth.perfil
-    if ((rol !== 'jefe_zona' && rol !== 'admin') || !activo) {
-      throw redirect({ to: '/login' })
-    }
-  },
+  beforeLoad: ({ context }) => exigirRol(context.auth, 'jefe_zona'),
   loader: ({ deps }) => loadRecepcion(deps.corrige),
   component: RecepcionPage,
 })
@@ -133,7 +127,10 @@ const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP',
 
 function RecepcionPage() {
   const data = Route.useLoaderData()
+  const { auth } = Route.useRouteContext()
   const router = useRouter()
+  const navigate = useNavigate()
+  const multiRol = (auth?.perfil.roles.length ?? 0) > 1
   const [tipos] = useState<TipoVehiculo[]>(data.tipos)
   const [combos] = useState<Combo[]>(data.combos)
   const [servicios] = useState<Servicio[]>(data.servicios)
@@ -155,7 +152,12 @@ function RecepcionPage() {
 
   return (
     <>
-      <SimpleTopbar title="Recepción" onLogout={signOut} />
+      <SimpleTopbar
+        title="Recepción"
+        onLogout={signOut}
+        multiRol={multiRol}
+        onCambiarModulo={() => navigate({ to: '/seleccionar-modulo' })}
+      />
       <div className="mx-auto flex max-w-2xl flex-col gap-6 pb-6">
       {data.turno ? (
         <ReceptionForm

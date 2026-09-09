@@ -1,15 +1,15 @@
 import { useState, type FormEvent } from 'react'
 import { createFileRoute, redirect, useNavigate, useRouter } from '@tanstack/react-router'
 import { Card } from '../../components/layout/Card'
-import { signIn, ROL_HOME } from '../../lib/auth'
+import { signIn, rutaPostAuth } from '../../lib/auth'
 import { fetchPerfilActual } from '../../data/perfiles'
 import { db } from '../../lib/db'
 import logoMark from '../../assets/logo-mark.png'
 
 export const Route = createFileRoute('/login/')({
   beforeLoad: ({ context }) => {
-    if (context.auth?.perfil.rol && context.auth.perfil.activo) {
-      throw redirect({ to: ROL_HOME[context.auth.perfil.rol] })
+    if (context.auth?.perfil.activo && context.auth.perfil.roles.length > 0) {
+      throw redirect({ to: rutaPostAuth(context.auth.perfil) })
     }
   },
   component: LoginPage,
@@ -33,17 +33,17 @@ function LoginPage() {
       const { data } = await db.auth.getSession()
       const perfil = data.session ? await fetchPerfilActual(data.session.user.id) : null
 
-      if (!perfil || !perfil.rol || !perfil.activo) {
+      if (!perfil || perfil.roles.length === 0 || !perfil.activo) {
         await db.auth.signOut()
         throw new Error(
-          !perfil || !perfil.rol
+          !perfil || perfil.roles.length === 0
             ? 'Tu cuenta todavía no tiene un rol asignado. Pídele al administrador que te lo asigne en Personal › Usuarios del sistema.'
             : 'Tu cuenta está inactiva. Contacta al administrador.',
         )
       }
 
       await router.invalidate()
-      await navigate({ to: ROL_HOME[perfil.rol] })
+      await navigate({ to: rutaPostAuth(perfil) })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo iniciar sesión.')
     } finally {
@@ -93,6 +93,10 @@ function LoginPage() {
           >
             {loading ? 'Entrando…' : 'Entrar'}
           </button>
+
+          <p className="text-center text-xs text-neutral-400">
+            ¿Olvidaste tu contraseña? Pídele a un administrador que te la restablezca.
+          </p>
         </form>
       </Card>
     </div>

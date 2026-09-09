@@ -1,17 +1,12 @@
 import { useState } from 'react'
-import { createFileRoute, Outlet, redirect } from '@tanstack/react-router'
+import { createFileRoute, Outlet, useNavigate } from '@tanstack/react-router'
 import { LayoutDashboard, TrendingUp, ClipboardList, Coins, Package, Users, Settings } from 'lucide-react'
 import { Sidebar, type NavItem } from '../../components/layout/Sidebar'
 import { Topbar } from '../../components/layout/Topbar'
-import { signOut } from '../../lib/auth'
+import { exigirRol, signOut } from '../../lib/auth'
 
 export const Route = createFileRoute('/admin')({
-  beforeLoad: ({ context }) => {
-    if (!context.auth) throw redirect({ to: '/login' })
-    if (context.auth.perfil.rol !== 'admin' || !context.auth.perfil.activo) {
-      throw redirect({ to: '/login' })
-    }
-  },
+  beforeLoad: ({ context }) => exigirRol(context.auth, 'admin'),
   component: AdminLayout,
 })
 
@@ -39,7 +34,9 @@ const NAV_ITEMS: NavItem[] = [
 // MobileTabBar): con secciones que tienen pestañas propias, dos barras compitiendo confunden.
 function AdminLayout() {
   const { auth } = Route.useRouteContext()
+  const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
+  const multiRol = (auth?.perfil.roles.length ?? 0) > 1
   return (
     <div className="fixed inset-0 z-10 flex bg-neutral-50 text-left">
       <Sidebar
@@ -53,6 +50,8 @@ function AdminLayout() {
           title="Panel de administración"
           avatarInitial="A"
           onLogout={signOut}
+          multiRol={multiRol}
+          onCambiarModulo={() => navigate({ to: '/seleccionar-modulo' })}
           onMenuClick={() => setMenuOpen(true)}
           responsable={auth?.perfil.nombre ?? undefined}
           roleLabel="Administrador"

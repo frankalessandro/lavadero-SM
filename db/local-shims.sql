@@ -22,6 +22,12 @@ grant anon to web_anon;
 -- `interno` + helpers. En el sandbox no hay sesión real: se asume jefe_zona activo, que pasa
 -- todos los chequeos de rol de las RPCs (`in ('jefe_zona','admin')` y el `= 'jefe_zona'` del
 -- trigger de movimientos_inventario_operativo).
+--
+-- OJO: 0053_cuentas_multi_rol.sql reescribe interno.rol_actual()/es_admin() para leer
+-- `perfiles.rol_activo` por `auth.uid()`. En el sandbox `auth.uid()` es NULL, así que tras
+-- aplicar 0053 esos helpers devolverían NULL y las RPCs de ventas fallarían el chequeo de rol.
+-- Este archivo es idempotente (`create or replace`): re-ejecútalo después de 0053 para restaurar
+-- los stubs hardcodeados de abajo.
 create schema if not exists interno;
 grant usage on schema interno to web_anon, authenticated, anon;
 
@@ -54,4 +60,9 @@ create table if not exists public.perfiles (
   activo boolean not null default true,
   creado_en timestamptz not null default now()
 );
+-- Columnas de 0053 (multi-rol). `add column if not exists` para volúmenes viejos.
+alter table public.perfiles add column if not exists roles text[] not null default '{}';
+alter table public.perfiles add column if not exists rol_activo text;
+alter table public.perfiles add column if not exists debe_cambiar_password boolean not null default false;
+alter table public.perfiles add column if not exists persona_id uuid;
 grant select on public.perfiles to web_anon, authenticated, anon;

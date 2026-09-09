@@ -19,9 +19,11 @@ import { Route as AdminCatalogoRouteRouteImport } from './routes/admin/catalogo/
 import { Route as AdminDineroRouteRouteImport } from './routes/admin/dinero/route'
 import { Route as AdminOperacionRouteRouteImport } from './routes/admin/operacion/route'
 import { Route as AdminPersonalRouteRouteImport } from './routes/admin/personal/route'
+import { Route as CambiarPasswordIndexRouteImport } from './routes/cambiar-password/index'
 import { Route as JefeZonaIndexRouteImport } from './routes/jefe-zona/index'
 import { Route as LoginIndexRouteImport } from './routes/login/index'
 import { Route as RecepcionIndexRouteImport } from './routes/recepcion/index'
+import { Route as SeleccionarModuloIndexRouteImport } from './routes/seleccionar-modulo/index'
 import { Route as ServicesIndexRouteImport } from './routes/services/index'
 import { Route as ServicesServiceIdRouteImport } from './routes/services/$serviceId'
 import { Route as VigilanteIndexRouteImport } from './routes/vigilante/index'
@@ -101,6 +103,11 @@ const AdminPersonalRouteRoute = AdminPersonalRouteRouteImport.update({
   path: '/personal',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const CambiarPasswordIndexRoute = CambiarPasswordIndexRouteImport.update({
+  id: '/cambiar-password/',
+  path: '/cambiar-password/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const JefeZonaIndexRoute = JefeZonaIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -115,6 +122,11 @@ const RecepcionIndexRoute = RecepcionIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => RecepcionRouteRoute,
+} as any)
+const SeleccionarModuloIndexRoute = SeleccionarModuloIndexRouteImport.update({
+  id: '/seleccionar-modulo/',
+  path: '/seleccionar-modulo/',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ServicesIndexRoute = ServicesIndexRouteImport.update({
   id: '/services/',
@@ -282,9 +294,11 @@ export interface FileRoutesByFullPath {
   '/admin/personal': typeof AdminPersonalRouteRouteWithChildren
   '/services/$serviceId': typeof ServicesServiceIdRoute
   '/admin/': typeof AdminIndexRoute
+  '/cambiar-password/': typeof CambiarPasswordIndexRoute
   '/jefe-zona/': typeof JefeZonaIndexRoute
   '/login/': typeof LoginIndexRoute
   '/recepcion/': typeof RecepcionIndexRoute
+  '/seleccionar-modulo/': typeof SeleccionarModuloIndexRoute
   '/services/': typeof ServicesIndexRoute
   '/vigilante/': typeof VigilanteIndexRoute
   '/admin/catalogo/': typeof AdminCatalogoIndexRoute
@@ -317,9 +331,11 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/services/$serviceId': typeof ServicesServiceIdRoute
   '/admin': typeof AdminIndexRoute
+  '/cambiar-password': typeof CambiarPasswordIndexRoute
   '/jefe-zona': typeof JefeZonaIndexRoute
   '/login': typeof LoginIndexRoute
   '/recepcion': typeof RecepcionIndexRoute
+  '/seleccionar-modulo': typeof SeleccionarModuloIndexRoute
   '/services': typeof ServicesIndexRoute
   '/vigilante': typeof VigilanteIndexRoute
   '/admin/catalogo': typeof AdminCatalogoIndexRoute
@@ -361,9 +377,11 @@ export interface FileRoutesById {
   '/admin/personal': typeof AdminPersonalRouteRouteWithChildren
   '/services/$serviceId': typeof ServicesServiceIdRoute
   '/admin/': typeof AdminIndexRoute
+  '/cambiar-password/': typeof CambiarPasswordIndexRoute
   '/jefe-zona/': typeof JefeZonaIndexRoute
   '/login/': typeof LoginIndexRoute
   '/recepcion/': typeof RecepcionIndexRoute
+  '/seleccionar-modulo/': typeof SeleccionarModuloIndexRoute
   '/services/': typeof ServicesIndexRoute
   '/vigilante/': typeof VigilanteIndexRoute
   '/admin/catalogo/': typeof AdminCatalogoIndexRoute
@@ -406,9 +424,11 @@ export interface FileRouteTypes {
     | '/admin/personal'
     | '/services/$serviceId'
     | '/admin/'
+    | '/cambiar-password/'
     | '/jefe-zona/'
     | '/login/'
     | '/recepcion/'
+    | '/seleccionar-modulo/'
     | '/services/'
     | '/vigilante/'
     | '/admin/catalogo/'
@@ -441,9 +461,11 @@ export interface FileRouteTypes {
     | '/'
     | '/services/$serviceId'
     | '/admin'
+    | '/cambiar-password'
     | '/jefe-zona'
     | '/login'
     | '/recepcion'
+    | '/seleccionar-modulo'
     | '/services'
     | '/vigilante'
     | '/admin/catalogo'
@@ -484,9 +506,11 @@ export interface FileRouteTypes {
     | '/admin/personal'
     | '/services/$serviceId'
     | '/admin/'
+    | '/cambiar-password/'
     | '/jefe-zona/'
     | '/login/'
     | '/recepcion/'
+    | '/seleccionar-modulo/'
     | '/services/'
     | '/vigilante/'
     | '/admin/catalogo/'
@@ -523,7 +547,9 @@ export interface RootRouteChildren {
   RecepcionRouteRoute: typeof RecepcionRouteRouteWithChildren
   VigilanteRouteRoute: typeof VigilanteRouteRouteWithChildren
   ServicesServiceIdRoute: typeof ServicesServiceIdRoute
+  CambiarPasswordIndexRoute: typeof CambiarPasswordIndexRoute
   LoginIndexRoute: typeof LoginIndexRoute
+  SeleccionarModuloIndexRoute: typeof SeleccionarModuloIndexRoute
   ServicesIndexRoute: typeof ServicesIndexRoute
 }
 
@@ -599,6 +625,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminPersonalRouteRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/cambiar-password/': {
+      id: '/cambiar-password/'
+      path: '/cambiar-password'
+      fullPath: '/cambiar-password/'
+      preLoaderRoute: typeof CambiarPasswordIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/jefe-zona/': {
       id: '/jefe-zona/'
       path: '/'
@@ -619,6 +652,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/recepcion/'
       preLoaderRoute: typeof RecepcionIndexRouteImport
       parentRoute: typeof RecepcionRouteRoute
+    }
+    '/seleccionar-modulo/': {
+      id: '/seleccionar-modulo/'
+      path: '/seleccionar-modulo'
+      fullPath: '/seleccionar-modulo/'
+      preLoaderRoute: typeof SeleccionarModuloIndexRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/services/': {
       id: '/services/'
@@ -968,7 +1008,9 @@ const rootRouteChildren: RootRouteChildren = {
   RecepcionRouteRoute: RecepcionRouteRouteWithChildren,
   VigilanteRouteRoute: VigilanteRouteRouteWithChildren,
   ServicesServiceIdRoute: ServicesServiceIdRoute,
+  CambiarPasswordIndexRoute: CambiarPasswordIndexRoute,
   LoginIndexRoute: LoginIndexRoute,
+  SeleccionarModuloIndexRoute: SeleccionarModuloIndexRoute,
   ServicesIndexRoute: ServicesIndexRoute,
 }
 export const routeTree = rootRouteImport

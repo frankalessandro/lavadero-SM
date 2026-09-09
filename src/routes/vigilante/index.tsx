@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { SimpleTopbar } from '../../components/layout/SimpleTopbar'
-import { signOut } from '../../lib/auth'
+import { exigirRol, signOut } from '../../lib/auth'
 import { LogIn, LogOut, Car, Banknote, AlertTriangle, X, Clock, Lock, Unlock } from 'lucide-react'
 import {
   fetchEstanciasAdentro,
@@ -42,13 +42,7 @@ async function loadParqueadero() {
 const HORA_FORMAT = new Intl.DateTimeFormat('es-CO', { hour: 'numeric', minute: '2-digit', hour12: true })
 
 export const Route = createFileRoute('/vigilante/')({
-  beforeLoad: ({ context }) => {
-    if (!context.auth) throw redirect({ to: '/login' })
-    const { rol, activo } = context.auth.perfil
-    if ((rol !== 'vigilante' && rol !== 'admin') || !activo) {
-      throw redirect({ to: '/login' })
-    }
-  },
+  beforeLoad: ({ context }) => exigirRol(context.auth, 'vigilante'),
   loader: loadParqueadero,
   component: VigilanteHome,
 })
@@ -70,6 +64,9 @@ function tiempoTranscurrido(horaIngreso: string): string {
 
 function VigilanteHome() {
   const data = Route.useLoaderData()
+  const { auth } = Route.useRouteContext()
+  const navigate = useNavigate()
+  const multiRol = (auth?.perfil.roles.length ?? 0) > 1
   const [estancias, setEstancias] = useState<EstanciaParqueadero[]>(data.estancias)
   const [resumen, setResumen] = useState(data.resumen)
   const [turno, setTurno] = useState<TurnoCaja | undefined>(data.turno)
@@ -94,7 +91,12 @@ function VigilanteHome() {
 
   return (
     <>
-      <SimpleTopbar title="Parqueadero" onLogout={signOut} />
+      <SimpleTopbar
+        title="Parqueadero"
+        onLogout={signOut}
+        multiRol={multiRol}
+        onCambiarModulo={() => navigate({ to: '/seleccionar-modulo' })}
+      />
       <div className="mx-auto flex max-w-2xl flex-col gap-4 pb-6">
       {/* Turno de caja — arqueo ciego (regla 15), visible siempre arriba de todo lo demás */}
       {turno ? (

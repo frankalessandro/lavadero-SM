@@ -1,11 +1,12 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import { ROL_HOME } from '../lib/auth'
+import { rutaPostAuth } from '../lib/auth'
 
-// "/" no tiene contenido propio — entra directo al login, o al panel de su rol si ya hay sesión.
+// "/" no tiene contenido propio — entra directo al login, o a donde corresponda si ya hay sesión
+// (cambio de contraseña obligatorio, selector de módulo, o el panel del rol).
 export const Route = createFileRoute('/')({
   beforeLoad: ({ context }) => {
-    if (context.auth?.perfil.rol && context.auth.perfil.activo) {
-      throw redirect({ to: ROL_HOME[context.auth.perfil.rol] })
+    if (context.auth?.perfil.activo && context.auth.perfil.roles.length > 0) {
+      throw redirect({ to: rutaPostAuth(context.auth.perfil) })
     }
     throw redirect({ to: '/login' })
   },
