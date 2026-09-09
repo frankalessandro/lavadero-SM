@@ -100,7 +100,22 @@ export function subscribeAuthChanges(onChange: () => void): () => void {
 export async function signIn(email: string, password: string) {
   if (USE_LOCAL_DB) return
   const { error } = await db.auth.signInWithPassword({ email, password })
-  if (error) throw new Error(error.message)
+  if (!error) return
+
+  // Supabase devuelve el MISMO error ("Invalid login credentials") para contraseña incorrecta y
+  // para correo no registrado — es a propósito, para no filtrar qué cuentas existen. Por eso el
+  // mensaje es unificado; distinguir "no registrado" requeriría un lookup con service role.
+  const msg = error.message.toLowerCase()
+  if (msg.includes('invalid login credentials')) {
+    throw new Error('Correo o contraseña incorrectos.')
+  }
+  if (msg.includes('email not confirmed')) {
+    throw new Error('La cuenta aún no está confirmada. Contacta al administrador.')
+  }
+  if (error.status === 429 || msg.includes('rate limit') || msg.includes('too many requests')) {
+    throw new Error('Demasiados intentos. Esperá un momento y volvé a probar.')
+  }
+  throw new Error(error.message || 'No se pudo iniciar sesión.')
 }
 
 export async function signOut() {
