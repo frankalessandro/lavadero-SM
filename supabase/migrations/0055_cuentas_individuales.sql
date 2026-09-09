@@ -37,12 +37,18 @@ begin
     select id into v_id from auth.users where email = r.email;
 
     if v_id is null then
+      -- Los token columns (confirmation_token, etc.) DEBEN ir como '' y no NULL: a nivel BD son
+      -- nullable, pero GoTrue los lee como string no-nullable y un NULL revienta el login con
+      -- "Scan error ... converting NULL to string is unsupported" (500).
       insert into auth.users (instance_id, id, aud, role, email, encrypted_password,
-        email_confirmed_at, created_at, updated_at, raw_app_meta_data, raw_user_meta_data)
+        email_confirmed_at, created_at, updated_at, raw_app_meta_data, raw_user_meta_data,
+        confirmation_token, recovery_token, email_change_token_new, email_change,
+        email_change_token_current, phone_change, phone_change_token, reauthentication_token)
       values ('00000000-0000-0000-0000-000000000000', gen_random_uuid(), 'authenticated', 'authenticated',
         r.email, extensions.crypt(r.pass, extensions.gen_salt('bf')),
         now(), now(), now(), '{"provider":"email","providers":["email"]}'::jsonb,
-        jsonb_build_object('nombre', r.nombre))
+        jsonb_build_object('nombre', r.nombre),
+        '', '', '', '', '', '', '', '')
       returning id into v_id;
 
       insert into auth.identities (id, user_id, provider_id, identity_data, provider,
