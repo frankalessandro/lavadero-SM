@@ -10,9 +10,9 @@
 -- comisión) — esta migración no toca nada de eso, solo agrega las cuentas.
 --
 -- Contraseñas desechables (se cambian obligatoriamente al primer ingreso, debe_cambiar_password):
---   frank.roldan@carwashsm.com       Sm-Frank-2h9k
---   julian.salinas@carwashsm.com     Sm-Julian-4p7m
---   laura.montealegre@carwashsm.com  Sm-Laura-8t3n
+--   frank.roldan@carwashsm.com       sm-carwash-frank
+--   julian.salinas@carwashsm.com     sm-carwash-julian
+--   laura.montealegre@carwashsm.com  sm-carwash-laura
 --
 -- Se resuelve todo por email (nunca por id generado). Idempotente: si la cuenta ya existe, no la
 -- duplica (el `on conflict (email)` de auth.users la salta y el update de perfiles la re-asienta).
@@ -24,11 +24,11 @@ declare
   v_n int;
   cuentas jsonb := jsonb_build_array(
     jsonb_build_object('email','frank.roldan@carwashsm.com','nombre','Frank Roldán',
-      'pass','Sm-Frank-2h9k','persona','04cbdbcc-e6be-4256-923c-bd84927fc333'),
+      'pass','sm-carwash-frank','persona','04cbdbcc-e6be-4256-923c-bd84927fc333'),
     jsonb_build_object('email','julian.salinas@carwashsm.com','nombre','Julián Salinas',
-      'pass','Sm-Julian-4p7m','persona','5e8c1a2c-1ca4-418d-88ac-7adbb3b450b0'),
+      'pass','sm-carwash-julian','persona','5e8c1a2c-1ca4-418d-88ac-7adbb3b450b0'),
     jsonb_build_object('email','laura.montealegre@carwashsm.com','nombre','Laura Montealegre',
-      'pass','Sm-Laura-8t3n','persona','aa768438-c71a-48e2-81d3-dc91a5558744')
+      'pass','sm-carwash-laura','persona','aa768438-c71a-48e2-81d3-dc91a5558744')
   );
 begin
   for r in select * from jsonb_to_recordset(cuentas)
