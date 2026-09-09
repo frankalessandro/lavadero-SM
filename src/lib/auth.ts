@@ -78,6 +78,14 @@ export async function resolveAuthContext(): Promise<AuthContext | null> {
   const perfil = await fetchPerfilActual(data.session.user.id)
   if (!perfil) return null
 
+  // Self-heal: una cuenta de un solo rol necesita `rol_activo` puesto para que la RLS funcione
+  // (interno.rol_actual() lo lee), pero `exigirRol` no la manda al selector y `signOut` lo deja
+  // en null. Sin esto, tras un logout/login toda consulta RLS de esa cuenta devuelve 0 filas.
+  if (perfil.roles.length === 1 && perfil.rolActivo !== perfil.roles[0]) {
+    await setRolActivo(perfil.roles[0]).catch(() => {})
+    perfil.rolActivo = perfil.roles[0]
+  }
+
   return { session: data.session, perfil }
 }
 

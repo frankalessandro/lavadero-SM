@@ -29,6 +29,7 @@ No hay suite de tests configurada todavía (no existe `pnpm test`).
 
 ## Reglas de trabajo con Claude
 
+- **No hacer `git commit` ni `git merge`/`push` sin autorización explícita de Alessandro en ese momento.** Hacer los cambios, verificar (build/lint/tipos) y dejarlos en el working tree; commitear solo cuando lo pida. "Autorización en un paso no se extiende al siguiente" — cada commit/merge se pide aparte.
 - Los commits se firman con el nombre configurado en `git config user.name`/`user.email` del entorno, **nunca** como Claude ni con coautoría de Claude en el mensaje.
 - No abrir el navegador para probar cambios (`pnpm dev` seguido de abrir URL, `open`, `xdg-open`, etc.). Verificar con build, lint, tipos y, si aplica, tests. Si algo requiere verificación visual, pedírselo a Alessandro en vez de lanzar el navegador.
 - Cambios en reglas de negocio (comisiones, arqueo, rotación, tarifas) requieren confirmación explícita antes de tocar código — ver sección "Reglas de negocio" abajo, son la fuente de verdad y no deben inferirse ni "mejorarse" sin preguntar.
