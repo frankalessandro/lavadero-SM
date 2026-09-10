@@ -1,5 +1,6 @@
-import { db } from '../lib/db'
+import { db, USE_LOCAL_DB } from '../lib/db'
 import { generarPasswordDesechable, normalizaParaEmail } from '../lib/password'
+import { guardarRolActivoLocal } from '../lib/localAuth'
 import {
   perfilSchema,
   perfilInputSchema,
@@ -61,6 +62,14 @@ export async function updatePerfil(id: string, input: PerfilInput): Promise<Perf
 // Módulo activo — lo llama el selector de módulo (y `null` lo llama signOut para limpiar). La
 // validación real (rol concedido + cuenta activa) vive en la RPC.
 export async function setRolActivo(rol: Rol | null): Promise<void> {
+  // El sandbox local es PostgREST plano, sin la RPC `set_rol_activo` de 0053 (Supabase-only) — y
+  // no hace falta: ahí no hay RLS que dependa de `rol_activo` (los stubs de `db/local-shims.sql`
+  // devuelven un rol fijo). El "módulo activo" en local es pura simulación de navegación, ver
+  // lib/localAuth.ts.
+  if (USE_LOCAL_DB) {
+    guardarRolActivoLocal(rol)
+    return
+  }
   const { error } = await db.rpc('set_rol_activo', { p_rol: rol })
   if (error) throw new Error(error.message)
 }

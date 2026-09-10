@@ -4,7 +4,6 @@ import { LayoutDashboard, ClipboardList, Droplets, LogOut, ChevronRight } from '
 import { Card } from '../../components/layout/Card'
 import { ROL_HOME, signOut } from '../../lib/auth'
 import { setRolActivo } from '../../data/perfiles'
-import { USE_LOCAL_DB } from '../../lib/db'
 import { ROL_LABEL, type Rol } from '../../schemas/perfil'
 import logoMark from '../../assets/logo-mark.png'
 
@@ -39,8 +38,9 @@ function SeleccionarModuloPage() {
   async function elegir(rol: Rol) {
     setEntrando(rol)
     try {
-      if (!USE_LOCAL_DB) await setRolActivo(rol)
-      // Hard nav: App vuelve a resolver el contexto y la RLS ya ve el rol_activo nuevo.
+      // En local guarda en sessionStorage en vez de llamar la RPC (ver setRolActivo) — mismo
+      // efecto: el hard-nav de abajo hace que App vuelva a resolver el contexto y ya lo vea.
+      await setRolActivo(rol)
       window.location.assign(ROL_HOME[rol])
     } catch {
       setEntrando(null)

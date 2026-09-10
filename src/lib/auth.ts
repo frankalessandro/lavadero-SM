@@ -2,6 +2,7 @@ import { redirect } from '@tanstack/react-router'
 import type { Session } from '@supabase/supabase-js'
 import { db, USE_LOCAL_DB } from './db'
 import { fetchPerfilActual, setRolActivo } from '../data/perfiles'
+import { leerRolActivoLocal, guardarRolActivoLocal } from './localAuth'
 import type { Perfil } from '../schemas/perfil'
 import { ROL_HOME, type Rol } from './roles'
 
@@ -53,23 +54,30 @@ const LOCAL_ROLES_RAW = (import.meta.env.VITE_LOCAL_ROLES as string | undefined)
   .map((r) => r.trim())
   .filter(Boolean)
 const LOCAL_ROLES = (LOCAL_ROLES_RAW && LOCAL_ROLES_RAW.length > 0 ? LOCAL_ROLES_RAW : [LOCAL_ROL]) as Rol[]
-const LOCAL_AUTH_CONTEXT: AuthContext = {
-  session: null,
-  perfil: {
-    id: 'local-dev',
-    nombre: 'Modo local',
-    roles: LOCAL_ROLES,
-    rolActivo: LOCAL_ROLES.length === 1 ? LOCAL_ROLES[0] : null,
-    activo: true,
-    debeCambiarPassword: false,
-    creadoEn: new Date().toISOString(),
-  },
+
+// Con un solo rol no hace falta selector — ese rol siempre está activo. Con varios, el "módulo
+// activo" lo elige /seleccionar-modulo y queda en sessionStorage (ver lib/localAuth.ts); tiene que
+// resolverse en cada llamada, no una vez al cargar el módulo, o el hard-nav del selector nunca lo
+// vería (era exactamente el bug: sin esto, elegir un módulo mandaba siempre de vuelta al selector).
+function buildLocalAuthContext(): AuthContext {
+  return {
+    session: null,
+    perfil: {
+      id: 'local-dev',
+      nombre: 'Modo local',
+      roles: LOCAL_ROLES,
+      rolActivo: LOCAL_ROLES.length === 1 ? LOCAL_ROLES[0] : leerRolActivoLocal(),
+      activo: true,
+      debeCambiarPassword: false,
+      creadoEn: new Date().toISOString(),
+    },
+  }
 }
 
 // null = sesión resuelta, sin usuario logueado. undefined solo se usa mientras se resuelve
 // (ver App en main.tsx) — este módulo nunca devuelve undefined.
 export async function resolveAuthContext(): Promise<AuthContext | null> {
-  if (USE_LOCAL_DB) return LOCAL_AUTH_CONTEXT
+  if (USE_LOCAL_DB) return buildLocalAuthContext()
 
   const { data, error } = await db.auth.getSession()
   if (error || !data.session) return null
@@ -118,7 +126,10 @@ export async function signIn(email: string, password: string) {
 }
 
 export async function signOut() {
-  if (USE_LOCAL_DB) return
+  if (USE_LOCAL_DB) {
+    guardarRolActivoLocal(null)
+    return
+  }
   // Limpia el módulo activo para que el próximo login vuelva a pasar por el selector (una cuenta
   // multi-rol no debe saltárselo con un bookmark viejo). Best-effort: si falla, igual se cierra.
   await setRolActivo(null).catch(() => {})
