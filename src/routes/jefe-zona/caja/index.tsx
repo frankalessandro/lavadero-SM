@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { Lock, CheckCircle2, AlertTriangle, Circle, X, Boxes, Wallet } from 'lucide-react'
 import { fetchTurnoAbierto, fetchTurnos, abrirTurno } from '../../../data/turnos'
@@ -426,10 +426,12 @@ function AbrirCajaModal({ onClose, onAbierta }: { onClose: () => void; onAbierta
   const [baseInicial, setBaseInicial] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const enVueloRef = useRef(false)
   const { elegibles, cargando } = usePersonalElegible('jefe_zona')
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    if (enVueloRef.current) return
     setError(null)
     const base = Number(baseInicial)
     const persona = elegibles.find((p) => p.id === personaId)
@@ -441,6 +443,7 @@ function AbrirCajaModal({ onClose, onAbierta }: { onClose: () => void; onAbierta
       setError('La base inicial no puede ser negativa')
       return
     }
+    enVueloRef.current = true
     setSaving(true)
     try {
       await abrirTurno({
@@ -455,6 +458,7 @@ function AbrirCajaModal({ onClose, onAbierta }: { onClose: () => void; onAbierta
       setError(err instanceof Error ? err.message : 'No se pudo abrir el turno')
       toast.desdeError(err, 'No se pudo abrir el turno')
     } finally {
+      enVueloRef.current = false
       setSaving(false)
     }
   }

@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { Package, Droplet, AlertTriangle, PackageSearch, ShoppingBag, X } from 'lucide-react'
 import { fetchTurnoAbierto } from '../../../data/turnos'
@@ -373,6 +373,9 @@ function MovimientoForm({
   const [responsable, setResponsable] = useState(responsableSugerido)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  // `disabled={saving}` se aplica un render después; un doble clic rápido dispararía el insert
+  // dos veces. El ref corta síncrono.
+  const enVueloRef = useRef(false)
 
   function reset() {
     setProductoId('')
@@ -382,6 +385,7 @@ function MovimientoForm({
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    if (enVueloRef.current) return
     const magnitud = Math.abs(Number(cantidad))
     const cantidadConSigno =
       tipo === 'entrada' ? magnitud : tipo === 'salida' ? -magnitud : direccionAjuste === 'aumento' ? magnitud : -magnitud
@@ -398,6 +402,7 @@ function MovimientoForm({
       return
     }
     setError(null)
+    enVueloRef.current = true
     setSaving(true)
     try {
       await createMovimientoOperativo(parsed.data)
@@ -408,6 +413,7 @@ function MovimientoForm({
       setError(err instanceof Error ? err.message : 'No se pudo registrar el movimiento')
       toast.desdeError(err, 'No se pudo registrar el movimiento')
     } finally {
+      enVueloRef.current = false
       setSaving(false)
     }
   }

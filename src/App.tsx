@@ -31,9 +31,9 @@ export function App({ router }: { router: AppRouter }) {
       {/* `theme="light"` a propósito: el panel es intencionalmente light-only (ver CLAUDE.md,
           "Trampa de cascade layers") — dejar `theme="system"` repetiría el mismo bug de texto
           invisible en modo oscuro del SO que ya se corrigió una vez para el resto de la UI.
-          `top-right` porque admin/jefe-zona tienen `MobileTabBar` fija abajo en celular; un toast
-          abajo quedaría tapado o tapándolo. */}
-      <Toaster position="top-right" theme="light" />
+          `top-center` (arriba y centrado): admin/jefe-zona tienen `MobileTabBar` fija abajo en
+          celular, así que un toast abajo quedaría tapado o tapándolo. */}
+      <Toaster position="top-center" theme="light" />
       <RouterProvider router={router} context={{ auth }} />
     </>
   )

@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useMemo, useRef, useState, type FormEvent } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { ShoppingCart, Receipt, X, Plus, Minus, Trash2, Wallet, Users, UserPlus, PackagePlus, StickyNote } from 'lucide-react'
 import { fetchTurnoAbierto } from '../../../data/turnos'
@@ -527,6 +527,9 @@ function VentaCarrito({
   const [vendidoPor, setVendidoPor] = useState(responsableSugerido)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  // `disabled={saving}` se aplica un render después; el ref corta un doble submit síncrono antes
+  // de que se dupliquen las filas de venta.
+  const enVueloRef = useRef(false)
 
   function setCantidad(productoId: string, cantidad: number) {
     setCarrito((prev) => {
@@ -556,6 +559,7 @@ function VentaCarrito({
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    if (enVueloRef.current) return
     if (items.length === 0) return
     if (!vendidoPor.trim()) {
       setError('El responsable es obligatorio')
@@ -566,6 +570,7 @@ function VentaCarrito({
       return
     }
     setError(null)
+    enVueloRef.current = true
     setSaving(true)
     try {
       const pagos = borradorAPagos(pagoLineasEfectivas)
@@ -580,6 +585,7 @@ function VentaCarrito({
       setError(err instanceof Error ? err.message : 'No se pudo registrar la venta')
       toast.desdeError(err, 'No se pudo registrar la venta')
     } finally {
+      enVueloRef.current = false
       setSaving(false)
     }
   }
@@ -710,15 +716,18 @@ function AnularVentaModal({
   const [anuladaPor, setAnuladaPor] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const enVueloRef = useRef(false)
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    if (enVueloRef.current) return
     const parsed = anularVentaInputSchema.safeParse({ motivo, anuladaPor })
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Datos inválidos')
       return
     }
     setError(null)
+    enVueloRef.current = true
     setSaving(true)
     try {
       await anularVenta(venta.id, parsed.data)
@@ -728,6 +737,7 @@ function AnularVentaModal({
       setError(err instanceof Error ? err.message : 'No se pudo anular la venta')
       toast.desdeError(err, 'No se pudo anular la venta')
     } finally {
+      enVueloRef.current = false
       setSaving(false)
     }
   }
@@ -817,15 +827,18 @@ function AbrirCuentaModal({
   const [abiertaPor, setAbiertaPor] = useState(responsableSugerido)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const enVueloRef = useRef(false)
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    if (enVueloRef.current) return
     const parsed = abrirCuentaInputSchema.safeParse({ titular, nota: nota || undefined, abiertaPor })
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Datos inválidos')
       return
     }
     setError(null)
+    enVueloRef.current = true
     setSaving(true)
     try {
       await abrirCuenta(parsed.data)
@@ -834,6 +847,7 @@ function AbrirCuentaModal({
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo abrir la cuenta')
       toast.desdeError(err, 'No se pudo abrir la cuenta')
+      enVueloRef.current = false
       setSaving(false)
     }
   }
@@ -917,6 +931,7 @@ function CerrarCuentaModal({
   const [cerradaPor, setCerradaPor] = useState(responsableSugerido)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const enVueloRef = useRef(false)
 
   const pagoLineasEfectivas: PagoLineaBorrador[] =
     pagoLineas.length === 1 ? [{ ...pagoLineas[0], monto: total > 0 ? String(total) : '' }] : pagoLineas
@@ -924,6 +939,7 @@ function CerrarCuentaModal({
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    if (enVueloRef.current) return
     if (!cerradaPor.trim()) {
       setError('Indica quién cierra la cuenta')
       return
@@ -933,6 +949,7 @@ function CerrarCuentaModal({
       return
     }
     setError(null)
+    enVueloRef.current = true
     setSaving(true)
     try {
       const pagos = borradorAPagos(pagoLineasEfectivas)
@@ -941,6 +958,7 @@ function CerrarCuentaModal({
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cerrar la cuenta')
       toast.desdeError(err, 'No se pudo cerrar la cuenta')
+      enVueloRef.current = false
       setSaving(false)
     }
   }
@@ -1018,15 +1036,18 @@ function AnularCuentaModal({
   const [anuladaPor, setAnuladaPor] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const enVueloRef = useRef(false)
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    if (enVueloRef.current) return
     const parsed = anularCuentaInputSchema.safeParse({ motivo, anuladaPor })
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Datos inválidos')
       return
     }
     setError(null)
+    enVueloRef.current = true
     setSaving(true)
     try {
       await anularCuenta(cuenta.id, parsed.data)
@@ -1035,6 +1056,7 @@ function AnularCuentaModal({
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo anular la cuenta')
       toast.desdeError(err, 'No se pudo anular la cuenta')
+      enVueloRef.current = false
       setSaving(false)
     }
   }

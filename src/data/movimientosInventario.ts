@@ -34,21 +34,21 @@ export async function fetchMovimientosOperativo(productoId?: string): Promise<Mo
 // INSTEAD OF que ya usa fetchMovimientosOperativo para leer). Sin costo_unitario/proveedor porque
 // esas columnas no existen en la vista — jefe_zona no ve costos (CLAUDE.md §Roles); una entrada
 // registrada así queda sin costo, igual que hoy pasa con cualquier entrada sin costo capturado.
-export async function createMovimientoOperativo(input: MovimientoInventarioInput): Promise<MovimientoInventario> {
+//
+// No hace `.select()` de vuelta: en una vista con trigger `INSTEAD OF INSERT`, el `RETURNING`
+// entrega el `NEW` del trigger, que no trae `id` ni `creado_en` (se generan en la tabla base),
+// así que parsearlo reventaba con `invalid_type` en esos dos campos aunque la fila SÍ se
+// insertaba. El llamador descarta el resultado y refresca la lista, así que no se pierde nada.
+export async function createMovimientoOperativo(input: MovimientoInventarioInput): Promise<void> {
   const parsed = movimientoInventarioInputSchema.parse(input)
-  const { data, error } = await db
-    .from('movimientos_inventario_operativo')
-    .insert({
-      producto_id: parsed.productoId,
-      tipo: parsed.tipo,
-      cantidad: parsed.cantidad,
-      motivo: parsed.motivo,
-      responsable: parsed.responsable,
-    })
-    .select(MOVIMIENTO_OPERATIVO_SELECT)
-    .single()
+  const { error } = await db.from('movimientos_inventario_operativo').insert({
+    producto_id: parsed.productoId,
+    tipo: parsed.tipo,
+    cantidad: parsed.cantidad,
+    motivo: parsed.motivo,
+    responsable: parsed.responsable,
+  })
   if (error) throw new Error(error.message)
-  return movimientoInventarioSchema.parse(data)
 }
 
 export async function createMovimiento(input: MovimientoInventarioInput): Promise<MovimientoInventario> {

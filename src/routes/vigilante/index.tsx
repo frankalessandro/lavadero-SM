@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { SimpleTopbar } from '../../components/layout/SimpleTopbar'
 import { exigirRol, signOut } from '../../lib/auth'
@@ -278,6 +278,7 @@ function AbrirTurnoModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
   const [baseInicial, setBaseInicial] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const enVueloRef = useRef(false)
   const [personal, setPersonal] = useState<Perfil[]>([])
   const [cargando, setCargando] = useState(true)
 
@@ -302,6 +303,7 @@ function AbrirTurnoModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
   }, [])
 
   async function handleSubmit() {
+    if (enVueloRef.current) return
     setError(null)
     const base = Number(baseInicial)
     const persona = personal.find((p) => p.id === personaId)
@@ -313,6 +315,7 @@ function AbrirTurnoModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
       setError('La base inicial no puede ser negativa')
       return
     }
+    enVueloRef.current = true
     setSaving(true)
     try {
       await abrirTurno({
@@ -327,6 +330,7 @@ function AbrirTurnoModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
       setError(err instanceof Error ? err.message : 'No se pudo abrir el turno')
       toast.desdeError(err, 'No se pudo abrir el turno')
     } finally {
+      enVueloRef.current = false
       setSaving(false)
     }
   }
@@ -381,6 +385,7 @@ function CerrarTurnoModal({ turno, onClose, onSaved }: { turno: TurnoCaja; onClo
   const [recibidoPor, setRecibidoPor] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const enVueloRef = useRef(false)
 
   const conteo = Number(conteoFisico)
   const diferencia = valorEsperado !== null && Number.isFinite(conteo) ? conteo - valorEsperado : 0
@@ -405,6 +410,7 @@ function CerrarTurnoModal({ turno, onClose, onSaved }: { turno: TurnoCaja; onClo
   }
 
   async function handleCerrar() {
+    if (enVueloRef.current) return
     setError(null)
     if (!cerradoPor.trim()) {
       setError('Indica quién cierra el turno')
@@ -414,6 +420,7 @@ function CerrarTurnoModal({ turno, onClose, onSaved }: { turno: TurnoCaja; onClo
       setError('Hay una diferencia en el arqueo — la justificación es obligatoria para cerrar el turno')
       return
     }
+    enVueloRef.current = true
     setSaving(true)
     try {
       await cerrarTurno(
@@ -428,6 +435,7 @@ function CerrarTurnoModal({ turno, onClose, onSaved }: { turno: TurnoCaja; onClo
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cerrar el turno')
       toast.desdeError(err, 'No se pudo cerrar el turno')
+      enVueloRef.current = false
     } finally {
       setSaving(false)
     }
@@ -580,6 +588,7 @@ function EntradaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
   const [modalidad, setModalidad] = useState<ModalidadParqueadero>('noche')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const enVueloRef = useRef(false)
   const [tarifaNoche, setTarifaNoche] = useState(0)
   const [lavadoHoy, setLavadoHoy] = useState<LavadoHoy | undefined>(undefined)
   const [suscripcion, setSuscripcion] = useState<SuscripcionParqueadero | undefined>(undefined)
@@ -613,12 +622,14 @@ function EntradaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
   }, [placa])
 
   async function handleSubmit() {
+    if (enVueloRef.current) return
     const parsed = entradaInputSchema.safeParse({ placa, modalidad })
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Datos inválidos')
       return
     }
     setError(null)
+    enVueloRef.current = true
     setSaving(true)
     try {
       await registrarEntrada(parsed.data)
@@ -628,6 +639,7 @@ function EntradaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
       setError(err instanceof Error ? err.message : 'No se pudo registrar la entrada')
       toast.desdeError(err, 'No se pudo registrar la entrada')
     } finally {
+      enVueloRef.current = false
       setSaving(false)
     }
   }
@@ -701,6 +713,7 @@ function SalidaModal({
   const [estanciaId, setEstanciaId] = useState(seleccionada?.id ?? '')
   const [metodoPago, setMetodoPago] = useState<MetodoPagoParqueadero>('efectivo')
   const [saving, setSaving] = useState(false)
+  const enVueloRef = useRef(false)
   const [cobro, setCobro] = useState(0)
 
   const estancia = useMemo(() => estancias.find((e) => e.id === estanciaId), [estancias, estanciaId])
@@ -739,6 +752,8 @@ function SalidaModal({
 
   async function handleSubmit() {
     if (!estancia) return
+    if (enVueloRef.current) return
+    enVueloRef.current = true
     setSaving(true)
     try {
       await registrarSalida(estancia.id, cobro > 0 ? metodoPago : undefined)
@@ -748,6 +763,7 @@ function SalidaModal({
       // Este modal no tenía estado de error propio — un rechazo de la RPC (validación de método
       // de pago, etc.) fallaba en silencio, sin nada en pantalla. El toast es ahora esa señal.
       toast.desdeError(err, 'No se pudo registrar la salida')
+      enVueloRef.current = false
     } finally {
       setSaving(false)
     }

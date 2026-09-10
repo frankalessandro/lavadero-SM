@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { CheckCircle2, RotateCcw, Eye } from 'lucide-react'
 import { cerrarTurno, desgloseEsperado, type DesgloseEsperado } from '../../data/turnos'
 import type { TurnoCaja } from '../../schemas/turnoCaja'
@@ -30,6 +30,9 @@ export function ArqueoCaja({
   const [recibidoPor, setRecibidoPor] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  // Cerrar turno es irreversible (regla 14). `disabled={loading}` se aplica un render después, así
+  // que un doble Enter/clic podría dispararlo dos veces; el ref corta síncrono.
+  const enVueloRef = useRef(false)
 
   const conteoNum = Math.round(Number(conteoFisico) || 0)
   const diferencia = valorEsperado != null ? conteoNum - valorEsperado : 0
@@ -58,6 +61,7 @@ export function ArqueoCaja({
 
   async function handleCerrar(event: FormEvent) {
     event.preventDefault()
+    if (enVueloRef.current) return
     setError(null)
     if (valorEsperado == null) return
     if (hayDiferencia && !justificacion.trim()) {
@@ -68,6 +72,7 @@ export function ArqueoCaja({
       setError('Indica quién cierra el turno')
       return
     }
+    enVueloRef.current = true
     setLoading(true)
     try {
       await cerrarTurno(turno, conteoNum, cerradoPor.trim(), justificacion.trim() || undefined, recibidoPor.trim() || undefined)
@@ -76,6 +81,7 @@ export function ArqueoCaja({
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cerrar el turno')
       toast.desdeError(err, 'No se pudo cerrar el turno')
+      enVueloRef.current = false
     } finally {
       setLoading(false)
     }

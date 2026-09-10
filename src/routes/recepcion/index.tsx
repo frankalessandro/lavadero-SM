@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { createFileRoute, Link, useNavigate, useRouter } from '@tanstack/react-router'
 import { Package, Car, Lock, Sparkles, AlertTriangle } from 'lucide-react'
 import { SimpleTopbar } from '../../components/layout/SimpleTopbar'
@@ -315,6 +315,9 @@ function ReceptionForm({
   const [openStep, setOpenStep] = useState(1)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  // `disabled={saving}` se aplica un render después: un doble clic rápido (o Enter + clic) crearía
+  // dos órdenes con dos consecutivos de tiquete. El ref corta síncrono.
+  const enVueloRef = useRef(false)
   const [recibo, setRecibo] = useState<ReciboData | null>(null)
   // Alerta de doble registro (M2) — solo para motos: si la placa ya tiene una orden en_proceso,
   // avisa antes de registrar otra vez el mismo vehículo por error. No bloquea el envío, solo
@@ -531,6 +534,7 @@ function ReceptionForm({
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    if (enVueloRef.current) return
     const parsed = ordenInputSchema.safeParse({
       ...form,
       comboId: form.comboId || undefined,
@@ -550,6 +554,7 @@ function ReceptionForm({
       return
     }
     setError(null)
+    enVueloRef.current = true
     setSaving(true)
     try {
       const orden = await createOrden(parsed.data)
@@ -594,6 +599,7 @@ function ReceptionForm({
       setError(err instanceof Error ? err.message : 'No se pudo registrar la orden')
       toast.desdeError(err, 'No se pudo registrar la orden')
     } finally {
+      enVueloRef.current = false
       setSaving(false)
     }
   }

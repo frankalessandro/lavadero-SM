@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { X, Minus, Plus } from 'lucide-react'
 import type { Producto } from '../../schemas/producto'
 import { agruparPorSeccion } from '../../lib/seccionProductos'
@@ -28,6 +28,7 @@ export function AgregarProductoModal({
   const [carrito, setCarrito] = useState<Map<string, number>>(new Map())
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const enVueloRef = useRef(false)
 
   function setCantidad(productoId: string, cantidad: number) {
     setCarrito((prev) => {
@@ -46,8 +47,10 @@ export function AgregarProductoModal({
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    if (enVueloRef.current) return
     if (lineas.length === 0) return
     setError(null)
+    enVueloRef.current = true
     setSaving(true)
     try {
       for (const [productoId, cantidad] of lineas) {
@@ -59,6 +62,7 @@ export function AgregarProductoModal({
       setError(err instanceof Error ? err.message : 'No se pudo agregar el producto')
       toast.desdeError(err, 'No se pudo agregar el producto')
     } finally {
+      enVueloRef.current = false
       setSaving(false)
     }
   }

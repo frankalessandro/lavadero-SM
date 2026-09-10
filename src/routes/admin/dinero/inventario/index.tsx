@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useMemo, useRef, useState, type FormEvent } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { Plus, X, Pencil, AlertTriangle, Boxes, PackageSearch, Coins, ShoppingCart, Droplet, ShoppingBag } from 'lucide-react'
 import {
@@ -610,6 +610,9 @@ function MovimientoForm({
   const [responsable, setResponsable] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  // `disabled={saving}` no basta: el estado se aplica en el siguiente render, así que un doble
+  // clic rápido (o Enter + clic) puede disparar `handleSubmit` dos veces y duplicar el movimiento.
+  const enVueloRef = useRef(false)
 
   function reset() {
     setProductoId('')
@@ -625,6 +628,7 @@ function MovimientoForm({
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    if (enVueloRef.current) return
     const magnitud = Math.abs(Number(cantidad))
     const cantidadConSigno =
       tipo === 'entrada' ? magnitud : tipo === 'salida' ? -magnitud : direccionAjuste === 'aumento' ? magnitud : -magnitud
@@ -643,6 +647,7 @@ function MovimientoForm({
       return
     }
     setError(null)
+    enVueloRef.current = true
     setSaving(true)
     try {
       await createMovimiento(parsed.data)
@@ -653,6 +658,7 @@ function MovimientoForm({
       setError(err instanceof Error ? err.message : 'No se pudo registrar el movimiento')
       toast.desdeError(err, 'No se pudo registrar el movimiento')
     } finally {
+      enVueloRef.current = false
       setSaving(false)
     }
   }
@@ -823,9 +829,11 @@ function ProductoForm({
   const [costo, setCosto] = useState(producto?.costo != null ? String(producto.costo) : '')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const enVueloRef = useRef(false)
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    if (enVueloRef.current) return
     const parsed = productoInputSchema.safeParse({
       nombre,
       unidadMedida,
@@ -839,6 +847,7 @@ function ProductoForm({
       return
     }
     setError(null)
+    enVueloRef.current = true
     setSaving(true)
     try {
       if (producto) {
@@ -852,6 +861,7 @@ function ProductoForm({
       setError(err instanceof Error ? err.message : 'No se pudo guardar')
       toast.desdeError(err, 'No se pudo guardar')
     } finally {
+      enVueloRef.current = false
       setSaving(false)
     }
   }
