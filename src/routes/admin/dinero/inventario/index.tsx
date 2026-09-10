@@ -19,7 +19,7 @@ import { ProductoExpedienteModal } from '../../../../components/layout/ProductoE
 import { NivelStockModal } from '../../../../components/layout/NivelStockModal'
 import { FilaFiltros, FiltroTexto, FiltroSelect, FiltroVacio } from '../../../../components/layout/TableHeadFilter'
 import { coincide } from '../../../../lib/tableFilters'
-import { productoInputSchema, type Producto } from '../../../../schemas/producto'
+import { productoInputSchema, SECCION_PRODUCTO_LABEL, type Producto } from '../../../../schemas/producto'
 import {
   movimientoInventarioInputSchema,
   type TipoMovimientoInventario,
@@ -818,6 +818,7 @@ function ProductoForm({
   const [nombre, setNombre] = useState(producto?.nombre ?? '')
   const [unidadMedida, setUnidadMedida] = useState(producto?.unidadMedida ?? '')
   const [stockMinimo, setStockMinimo] = useState(String(producto?.stockMinimo ?? 0))
+  const [seccion, setSeccion] = useState<string>(producto?.seccion ?? '')
   const [precioVenta, setPrecioVenta] = useState(producto?.precioVenta != null ? String(producto.precioVenta) : '')
   const [costo, setCosto] = useState(producto?.costo != null ? String(producto.costo) : '')
   const [error, setError] = useState<string | null>(null)
@@ -829,6 +830,7 @@ function ProductoForm({
       nombre,
       unidadMedida,
       stockMinimo: Number(stockMinimo) || 0,
+      seccion: seccion || undefined,
       precioVenta: precioVenta ? Number(precioVenta) : undefined,
       costo: costo ? Number(costo) : undefined,
     })
@@ -882,7 +884,7 @@ function ProductoForm({
             />
           </label>
 
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
             <label className="flex flex-col gap-1.5 text-left text-sm">
               <span className="font-medium text-neutral-700">Unidad de medida</span>
               <input
@@ -900,6 +902,20 @@ function ProductoForm({
                 value={stockMinimo}
                 onChange={(event) => setStockMinimo(event.target.value)}
                 className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 text-left text-sm">
+              <span className="font-medium text-neutral-700">Sección</span>
+              <CustomSelect
+                size="sm"
+                placeholder="Sección"
+                value={seccion}
+                onChange={setSeccion}
+                options={[
+                  { value: '', label: 'Insumo (no se vende)' },
+                  { value: 'bebida', label: SECCION_PRODUCTO_LABEL.bebida },
+                  { value: 'snack', label: SECCION_PRODUCTO_LABEL.snack },
+                ]}
               />
             </label>
           </div>

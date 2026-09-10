@@ -1,48 +1,12 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { useState, type FormEvent, type ReactNode } from 'react'
 import { LockOpen, Lock, ArrowLeftRight, History, X } from 'lucide-react'
 import { abrirTurno, fetchTraspasos, transferirResponsable } from '../../data/turnos'
-import { fetchPerfilesElegibles } from '../../data/perfiles'
-import type { Perfil } from '../../schemas/perfil'
 import type { RolCaja, TurnoCaja, TraspasoTurno } from '../../schemas/turnoCaja'
+import { usePersonalElegible, nombreDe } from '../../lib/personalElegible'
 import { Card } from './Card'
 import { CustomSelect } from './CustomSelect'
 import { CurrencyInput } from './CurrencyInput'
 import { toast } from '../../lib/toast'
-
-// Cuentas que pueden quedar a cargo de esta caja: las activas que tengan ese rol (ver 0056 —
-// desde que el roster desapareció, la cuenta ES la persona y el rol de la cuenta es el permiso).
-// Se carga desde el componente (y no desde el loader de cada ruta) porque el banner se monta en
-// tres pantallas distintas — jefe-zona/caja, jefe-zona/asistencia y vigilante — y no vale la pena
-// repetir el fetch en cada loader.
-function usePersonalElegible(rol: RolCaja) {
-  const [elegibles, setElegibles] = useState<Perfil[]>([])
-  const [cargando, setCargando] = useState(true)
-
-  useEffect(() => {
-    let vivo = true
-    fetchPerfilesElegibles(rol)
-      .then((lista) => {
-        if (vivo) setElegibles(lista)
-      })
-      .catch(() => {
-        if (vivo) setElegibles([])
-      })
-      .finally(() => {
-        if (vivo) setCargando(false)
-      })
-    return () => {
-      vivo = false
-    }
-  }, [rol])
-
-  return { elegibles, cargando }
-}
-
-// `perfiles.nombre` es nullable en el esquema (la fila la crea un trigger de Auth antes de que un
-// admin le ponga nombre). En un selector eso no puede quedar en blanco.
-function nombreDe(perfil: Perfil) {
-  return perfil.nombre?.trim() || 'Sin nombre'
-}
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 

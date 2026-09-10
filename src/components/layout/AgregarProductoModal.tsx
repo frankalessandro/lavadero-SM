@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { X, Minus, Plus } from 'lucide-react'
 import type { Producto } from '../../schemas/producto'
+import { agruparPorSeccion } from '../../lib/seccionProductos'
 import { toast } from '../../lib/toast'
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
@@ -80,53 +81,60 @@ export function AgregarProductoModal({
         </div>
 
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-col gap-4">
-          <div className="custom-scroll grid min-h-0 grid-cols-2 gap-2 overflow-y-auto">
-            {productos.map((p) => {
-              const stock = stockPorProducto.get(p.id) ?? 0
-              const cant = carrito.get(p.id) ?? 0
-              const agotado = stock <= 0
-              return (
-                <div
-                  key={p.id}
-                  className={`flex flex-col gap-1.5 rounded-lg border p-2.5 text-left transition-colors ${
-                    cant > 0 ? 'border-primary-500 bg-primary-50' : 'border-neutral-200'
-                  } ${agotado ? 'opacity-50' : ''}`}
-                >
-                  <button
-                    type="button"
-                    disabled={agotado}
-                    onClick={() => setCantidad(p.id, cant + 1)}
-                    className="text-left disabled:cursor-not-allowed"
-                  >
-                    <span className="block text-sm font-medium text-neutral-800">{p.nombre}</span>
-                    <span className="block text-xs text-neutral-500">
-                      {COP.format(p.precioVenta ?? 0)} · stock {stock}
-                    </span>
-                  </button>
-                  {cant > 0 ? (
-                    <div className="flex items-center justify-between rounded-md bg-white px-1 py-0.5">
-                      <button
-                        type="button"
-                        onClick={() => setCantidad(p.id, cant - 1)}
-                        className="flex size-6 items-center justify-center rounded text-neutral-600 hover:bg-neutral-100"
+          <div className="custom-scroll flex min-h-0 flex-col gap-3 overflow-y-auto">
+            {agruparPorSeccion(productos).map((g) => (
+              <div key={g.key} className="flex flex-col gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-neutral-400">{g.label}</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {g.productos.map((p) => {
+                    const stock = stockPorProducto.get(p.id) ?? 0
+                    const cant = carrito.get(p.id) ?? 0
+                    const agotado = stock <= 0
+                    return (
+                      <div
+                        key={p.id}
+                        className={`flex flex-col gap-1.5 rounded-lg border p-2.5 text-left transition-colors ${
+                          cant > 0 ? 'border-primary-500 bg-primary-50' : 'border-neutral-200'
+                        } ${agotado ? 'opacity-50' : ''}`}
                       >
-                        <Minus size={13} />
-                      </button>
-                      <span className="text-sm font-semibold text-neutral-900">{cant}</span>
-                      <button
-                        type="button"
-                        onClick={() => setCantidad(p.id, cant + 1)}
-                        className="flex size-6 items-center justify-center rounded text-neutral-600 hover:bg-neutral-100"
-                      >
-                        <Plus size={13} />
-                      </button>
-                    </div>
-                  ) : null}
+                        <button
+                          type="button"
+                          disabled={agotado}
+                          onClick={() => setCantidad(p.id, cant + 1)}
+                          className="text-left disabled:cursor-not-allowed"
+                        >
+                          <span className="block text-sm font-medium text-neutral-800">{p.nombre}</span>
+                          <span className="block text-xs text-neutral-500">
+                            {COP.format(p.precioVenta ?? 0)} · stock {stock}
+                          </span>
+                        </button>
+                        {cant > 0 ? (
+                          <div className="flex items-center justify-between rounded-md bg-white px-1 py-0.5">
+                            <button
+                              type="button"
+                              onClick={() => setCantidad(p.id, cant - 1)}
+                              className="flex size-6 items-center justify-center rounded text-neutral-600 hover:bg-neutral-100"
+                            >
+                              <Minus size={13} />
+                            </button>
+                            <span className="text-sm font-semibold text-neutral-900">{cant}</span>
+                            <button
+                              type="button"
+                              onClick={() => setCantidad(p.id, cant + 1)}
+                              className="flex size-6 items-center justify-center rounded text-neutral-600 hover:bg-neutral-100"
+                            >
+                              <Plus size={13} />
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    )
+                  })}
                 </div>
-              )
-            })}
+              </div>
+            ))}
             {productos.length === 0 ? (
-              <p className="col-span-2 py-6 text-center text-xs text-neutral-400">
+              <p className="py-6 text-center text-xs text-neutral-400">
                 No hay productos con precio de venta configurado.
               </p>
             ) : null}

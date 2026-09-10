@@ -7,6 +7,16 @@ const nullableNonNegativeInt = z
   .nullish()
   .transform((value) => value ?? undefined)
 
+// Sección del catálogo vendible (0058). null = insumo de uso interno (no vendible), mismo
+// criterio que `precioVenta` sin valor. El conteo de apertura/cierre (0048) agrupa por esto.
+export const seccionProductoSchema = z.enum(['bebida', 'snack'])
+export type SeccionProducto = z.infer<typeof seccionProductoSchema>
+
+export const SECCION_PRODUCTO_LABEL: Record<SeccionProducto, string> = {
+  bebida: 'Bebidas',
+  snack: 'Snacks',
+}
+
 export const productoSchema = z.object({
   id: z.string(),
   nombre: z.string(),
@@ -22,6 +32,7 @@ export const productoSchema = z.object({
   // mercancía vendida cuando el producto todavía no tiene entradas con costo capturado —
   // interno.costo_promedio_producto cae a este valor (0033_costo_producto.sql).
   costo: nullableNonNegativeInt,
+  seccion: seccionProductoSchema.nullish().transform((value) => value ?? undefined),
 })
 
 export const productoInputSchema = productoSchema.omit({ id: true, activo: true }).extend({
@@ -29,6 +40,7 @@ export const productoInputSchema = productoSchema.omit({ id: true, activo: true 
   unidadMedida: z.string().trim().min(1, 'La unidad de medida es obligatoria'),
   precioVenta: z.number().int().nonnegative().optional(),
   costo: z.number().int().nonnegative().optional(),
+  seccion: seccionProductoSchema.optional(),
 })
 
 export type Producto = z.infer<typeof productoSchema>

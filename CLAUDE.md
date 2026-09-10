@@ -611,6 +611,16 @@ Migración `0048_conteo_inventario.sql`. El cierre de turno solo cuadraba la CAJ
 - UI: `src/components/layout/ConteoInventario.tsx` (ciego → revela, reusado en apertura y cierre), montado en `/jefe-zona/caja`. El botón "Cerrar turno" muestra primero el conteo de cierre si falta, luego el arqueo de caja.
 - **Verificado contra el sandbox** (15 aserciones en transacción revertida + RPCs por PostgREST): esperado resta las cuentas abiertas, faltante a costo + estado pendiente + responsable del turno, apertura sin diferencia no genera ajustes, cierre bloqueado sin conteo, apertura duplicada rechazada, justificación obligatoria con diferencia.
 
+### Sección de inventario: bebidas vs. snacks — `0058_seccion_inventario.sql`
+
+`productos.seccion` (`text`, `check seccion is null or in ('bebida','snack')`). `null` = insumo de uso interno (no vendible), mismo criterio que `precio_venta is null`. Enum + labels en `src/schemas/producto.ts` (`seccionProductoSchema`, `SECCION_PRODUCTO_LABEL`).
+
+- **La vista `productos_operativo` (0034) se reexpone con `seccion`** vía `create or replace view` (agregar una columna al final no toca grants ni el flag `security_invoker=true` — `costo` sigue fuera). `PRODUCTO_SELECT` y `PRODUCTO_OPERATIVO_SELECT` en `src/data/productos.ts` la incluyen; `createProducto`/`updateProducto` la mandan en el payload.
+- **`src/lib/seccionProductos.ts:agruparPorSeccion(productos)`** — helper compartido que reparte productos vendibles en grupos ordenados Bebidas → Snacks → "Sin sección" (esta última solo si un vendible quedó sin clasificar). En `lib/` por `react-refresh/only-export-components`. Lo usan el conteo y las dos pantallas de venta de tiles.
+- **Agrupan por sección con encabezado por grupo**: el conteo de apertura/cierre (`ConteoInventario.tsx`, en la fase de contar y en los descuadres), `VentaCarrito` (`/jefe-zona/ventas`) y `AgregarProductoModal` (producto cargado a orden/cuenta). En el conteo, el progreso ("Contados N de M") y el gate de "faltan por contar" siguen siendo **globales**: se cuenta todo en cada turno, solo cambia el agrupamiento visual.
+- Alta/edición de producto en `/admin/dinero/inventario` gana un `CustomSelect` de sección (`Insumo (no se vende)` / `Bebidas` / `Snacks`). Las **tablas de stock** de admin/jefe-zona todavía no agrupan — pendiente si se pide.
+- **Datos sembrados en 0058** (compra real 2026-09-09): 6 bolsazas de mecato — Doritos, De Todito BBQ, De Todito Mix, Margarita Limón, Margarita Pollo, Choclitos — todas `precio_venta` $4.000, `costo` $3.449 ($165.534 / 48 und), `stock_minimo` 2, con carga inicial de 8 unidades por `entrada` de inventario a nombre de Frank Roldán. Los 10 productos previos quedaron todos en `bebida`. Aplicada solo a producción por MCP; si se reactiva el sandbox hay que correrla ahí también.
+
 ## Cierre de brechas contra el Plan (sin migración salvo donde se indica)
 
 Tanda de items que quedaban de la auditoría inicial, para alinear el software al Plan de Alcance.

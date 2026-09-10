@@ -19,6 +19,7 @@ import { PagoLineas } from '../../../components/layout/PagoLineas'
 import { AgregarProductoModal } from '../../../components/layout/AgregarProductoModal'
 import { QuitarProductoModal } from '../../../components/layout/QuitarProductoModal'
 import { borradorAPagos, nuevaLineaBorrador, pagoLineasCuadra, type PagoLineaBorrador } from '../../../lib/pagoLineas'
+import { agruparPorSeccion } from '../../../lib/seccionProductos'
 import { METODO_PAGO_LABEL } from '../../../lib/metodoPago'
 import { toast } from '../../../lib/toast'
 
@@ -590,53 +591,60 @@ function VentaCarrito({
         Registrar venta
       </h3>
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-        <div className="grid grid-cols-2 gap-2">
-          {productosVendibles.map((p) => {
-            const stock = stockPorProducto.get(p.id) ?? 0
-            const cant = carrito.get(p.id) ?? 0
-            const agotado = stock <= 0
-            return (
-              <div
-                key={p.id}
-                className={`flex flex-col gap-1.5 rounded-lg border p-2.5 transition-colors ${
-                  cant > 0 ? 'border-primary-500 bg-primary-50' : 'border-neutral-200'
-                } ${agotado ? 'opacity-50' : ''}`}
-              >
-                <button
-                  type="button"
-                  disabled={agotado}
-                  onClick={() => setCantidad(p.id, cant + 1)}
-                  className="text-left disabled:cursor-not-allowed"
-                >
-                  <span className="block text-sm font-medium text-neutral-800">{p.nombre}</span>
-                  <span className="block text-xs text-neutral-500">
-                    {COP.format(p.precioVenta ?? 0)} · stock {stock}
-                  </span>
-                </button>
-                {cant > 0 ? (
-                  <div className="flex items-center justify-between rounded-md bg-white px-1 py-0.5">
-                    <button
-                      type="button"
-                      onClick={() => setCantidad(p.id, cant - 1)}
-                      className="flex size-7 items-center justify-center rounded text-neutral-600 hover:bg-neutral-100"
+        <div className="flex flex-col gap-3">
+          {agruparPorSeccion(productosVendibles).map((g) => (
+            <div key={g.key} className="flex flex-col gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-neutral-400">{g.label}</p>
+              <div className="grid grid-cols-2 gap-2">
+                {g.productos.map((p) => {
+                  const stock = stockPorProducto.get(p.id) ?? 0
+                  const cant = carrito.get(p.id) ?? 0
+                  const agotado = stock <= 0
+                  return (
+                    <div
+                      key={p.id}
+                      className={`flex flex-col gap-1.5 rounded-lg border p-2.5 transition-colors ${
+                        cant > 0 ? 'border-primary-500 bg-primary-50' : 'border-neutral-200'
+                      } ${agotado ? 'opacity-50' : ''}`}
                     >
-                      <Minus size={14} />
-                    </button>
-                    <span className="text-sm font-semibold text-neutral-900">{cant}</span>
-                    <button
-                      type="button"
-                      onClick={() => setCantidad(p.id, cant + 1)}
-                      className="flex size-7 items-center justify-center rounded text-neutral-600 hover:bg-neutral-100"
-                    >
-                      <Plus size={14} />
-                    </button>
-                  </div>
-                ) : null}
+                      <button
+                        type="button"
+                        disabled={agotado}
+                        onClick={() => setCantidad(p.id, cant + 1)}
+                        className="text-left disabled:cursor-not-allowed"
+                      >
+                        <span className="block text-sm font-medium text-neutral-800">{p.nombre}</span>
+                        <span className="block text-xs text-neutral-500">
+                          {COP.format(p.precioVenta ?? 0)} · stock {stock}
+                        </span>
+                      </button>
+                      {cant > 0 ? (
+                        <div className="flex items-center justify-between rounded-md bg-white px-1 py-0.5">
+                          <button
+                            type="button"
+                            onClick={() => setCantidad(p.id, cant - 1)}
+                            className="flex size-7 items-center justify-center rounded text-neutral-600 hover:bg-neutral-100"
+                          >
+                            <Minus size={14} />
+                          </button>
+                          <span className="text-sm font-semibold text-neutral-900">{cant}</span>
+                          <button
+                            type="button"
+                            onClick={() => setCantidad(p.id, cant + 1)}
+                            className="flex size-7 items-center justify-center rounded text-neutral-600 hover:bg-neutral-100"
+                          >
+                            <Plus size={14} />
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  )
+                })}
               </div>
-            )
-          })}
+            </div>
+          ))}
           {productosVendibles.length === 0 ? (
-            <p className="col-span-2 py-6 text-center text-xs text-neutral-400">
+            <p className="py-6 text-center text-xs text-neutral-400">
               No hay productos con precio de venta definido.
             </p>
           ) : null}
