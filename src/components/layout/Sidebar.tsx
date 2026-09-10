@@ -40,7 +40,7 @@ function SidebarContent({
         <span className="text-base font-semibold tracking-tight text-neutral-900">Carwash SM</span>
       </div>
 
-      <nav className="flex flex-1 flex-col gap-1 px-3">
+      <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3">
         {navItems.map(({ to, label, icon: Icon, exact = true }) => (
           <Link
             key={to}

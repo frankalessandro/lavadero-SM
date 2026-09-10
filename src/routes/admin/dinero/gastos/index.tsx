@@ -129,15 +129,15 @@ function GastosPage() {
 
   return (
     <div className="flex flex-col gap-6 text-left">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <h2 className="text-base font-semibold text-neutral-900">Gastos</h2>
           <p className="text-sm text-neutral-500">Registro de gastos operativos y su categorización.</p>
         </div>
         <button
           type="button"
           onClick={() => setCategoriasModalOpen(true)}
-          className="flex items-center gap-2 rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
+          className="flex shrink-0 items-center gap-2 self-start rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50 sm:self-auto"
         >
           <Settings2 size={16} />
           Gestionar categorías
@@ -217,7 +217,8 @@ function GastosPage() {
       ) : null}
 
       <Card className="p-0">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[40rem] text-sm">
           <thead>
             <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
               <th className="px-5 py-3">Fecha</th>
@@ -241,6 +242,7 @@ function GastosPage() {
             ) : null}
           </tbody>
         </table>
+        </div>
       </Card>
 
       {categoriasModalOpen ? (
@@ -470,7 +472,7 @@ function CategoriasModal({
 
   return (
     <div className="fixed inset-0 z-20 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-[2px]">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-card-hover sm:p-7">
+      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-card-hover sm:p-7">
         <div className="mb-5 flex items-center justify-between">
           <h3 className="text-base font-semibold text-neutral-900">Categorías de gasto</h3>
           <button

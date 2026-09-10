@@ -32,8 +32,8 @@ const NAV_ITEMS: NavItem[] = [
 
 // `fixed inset-0` saca el panel del contenedor angosto (#root) del sitio público —
 // cada área por rol es su propia superficie, no hereda el layout de marketing.
-// La navegación por debajo de `md` vive en el drawer del hamburguesa del Topbar (no un
-// MobileTabBar): con secciones que tienen pestañas propias, dos barras compitiendo confunden.
+// La navegación por debajo de `md` vive en el drawer del hamburguesa del Topbar — no hay
+// barra inferior; el drawer del `Sidebar` (mobileOpen/onMobileClose) es la única nav móvil.
 function AdminLayout() {
   const { auth } = Route.useRouteContext()
   const navigate = useNavigate()

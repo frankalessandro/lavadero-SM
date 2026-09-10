@@ -52,7 +52,7 @@ const FECHA_HORA = new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium', timeS
 export function VentaReciboModal({ venta, onClose }: { venta: VentaReciboData; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-neutral-900/50 p-0 backdrop-blur-sm sm:items-center sm:p-6">
-      <div className="custom-scroll flex max-h-full w-full max-w-sm flex-col overflow-y-auto rounded-t-2xl bg-white shadow-card-hover sm:rounded-2xl">
+      <div className="custom-scroll flex max-h-full w-[calc(100vw-2rem)] max-w-sm flex-col overflow-y-auto rounded-t-2xl bg-white shadow-card-hover sm:w-full sm:rounded-2xl">
         <div className="h-2 bg-success-600" />
         <div className="flex items-center justify-between px-6 pt-6">
           <p className="text-sm font-semibold text-neutral-900">Carwash SM</p>
@@ -143,7 +143,7 @@ export function VentaReciboModal({ venta, onClose }: { venta: VentaReciboData; o
 function VentaReciboRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <span className="shrink-0 text-neutral-500">{label}</span>
+      <span className="min-w-0 break-words text-neutral-500">{label}</span>
       <span className="min-w-0 truncate text-right font-medium text-neutral-900">{value}</span>
     </div>
   )

@@ -549,7 +549,7 @@ function LiquidacionesPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:max-w-lg">
+      <div className="grid grid-cols-1 gap-2 sm:max-w-lg sm:grid-cols-2">
         {(
           [
             { value: 'lavadores' as const, label: 'Lavadores', total: totalPendienteLavadores, icon: Wallet },
@@ -619,7 +619,8 @@ function LiquidacionesPage() {
         </div>
 
         <Card className="p-0">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[36rem] text-sm">
             <thead>
               <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
                 <th className="px-5 py-3">{sujeto === 'lavadores' ? 'Lavador' : 'Responsable'}</th>
@@ -684,6 +685,7 @@ function LiquidacionesPage() {
               ) : null}
             </tbody>
           </table>
+          </div>
         </Card>
       </section>
 
@@ -777,7 +779,8 @@ function LiquidacionesPage() {
             </div>
           ) : null}
           <Card className="p-0">
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[40rem] text-sm">
               <thead>
                 <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
                   <th className="px-5 py-3">Lavador</th>
@@ -827,6 +830,7 @@ function LiquidacionesPage() {
                 ) : null}
               </tbody>
             </table>
+            </div>
           </Card>
         </section>
         </>
@@ -903,7 +907,8 @@ function LiquidacionesPage() {
         <section className="flex flex-col gap-3">
           <h3 className="text-sm font-semibold text-neutral-900">Histórico de liquidaciones</h3>
           <Card className="p-0">
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[38rem] text-sm">
               <thead>
                 <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
                   <th className="px-5 py-3">Responsable</th>
@@ -954,6 +959,7 @@ function LiquidacionesPage() {
                 ) : null}
               </tbody>
             </table>
+            </div>
           </Card>
         </section>
         </>
@@ -1087,7 +1093,7 @@ function AnularLiquidacionModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/40 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-card-hover">
+      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-card-hover">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold text-neutral-900">Anular liquidación</h2>

@@ -290,7 +290,8 @@ function StockTable({
           <p className="text-xs text-neutral-500">{subtitulo}</p>
         </div>
       </div>
-      <table className="w-full text-sm">
+      <div className="overflow-x-auto">
+      <table className="w-full min-w-[480px] text-sm">
         <thead>
           <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
             <th className="px-5 py-3">Producto</th>
@@ -352,6 +353,7 @@ function StockTable({
           ) : null}
         </tbody>
       </table>
+      </div>
     </Card>
   )
 }

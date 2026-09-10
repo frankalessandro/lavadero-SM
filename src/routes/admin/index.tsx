@@ -380,7 +380,7 @@ function AdminDashboard() {
                 </p>
               )}
             </div>
-            <div className="grid grid-cols-3 gap-px border-t border-neutral-100 bg-neutral-100 lg:grid-cols-1 lg:border-l lg:border-t-0">
+            <div className="grid grid-cols-2 gap-px border-t border-neutral-100 bg-neutral-100 sm:grid-cols-3 lg:grid-cols-1 lg:border-l lg:border-t-0">
               <MiniDato icon={Users} label="Lavadores activos" valor={String(lavadoresActivos)} />
               <MiniDato icon={CircleParking} label="En parqueadero" valor={String(resumenParqueadero.vehiculosAdentro)} />
               <MiniDato

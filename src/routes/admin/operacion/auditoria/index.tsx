@@ -273,7 +273,7 @@ function DetalleModal({ entrada, onClose }: { entrada: BitacoraEntrada; onClose:
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/40 p-4" onClick={onClose}>
       <div
-        className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-2xl bg-white shadow-card-hover"
+        className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-card-hover"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-neutral-100 p-6">
@@ -299,7 +299,7 @@ function DetalleModal({ entrada, onClose }: { entrada: BitacoraEntrada; onClose:
           </button>
         </div>
 
-        <div className="custom-scroll min-h-0 overflow-y-auto p-6">
+        <div className="custom-scroll min-h-0 overflow-auto p-6">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs font-medium text-neutral-500">
@@ -311,13 +311,15 @@ function DetalleModal({ entrada, onClose }: { entrada: BitacoraEntrada; onClose:
             <tbody>
               {campos.map((campo) => (
                 <tr key={campo} className="border-t border-neutral-50">
-                  <td className="py-2 pr-3 font-mono text-xs text-neutral-500">{campo}</td>
+                  <td className="py-2 pr-3 align-top font-mono text-xs text-neutral-500">{campo}</td>
                   {entrada.antes ? (
-                    <td className="py-2 pr-3 text-neutral-500 line-through">
+                    <td className="py-2 pr-3 align-top break-words text-neutral-500 line-through">
                       {valorLegible(entrada.antes[campo])}
                     </td>
                   ) : null}
-                  <td className="py-2 font-medium text-neutral-800">{valorLegible(entrada.despues?.[campo])}</td>
+                  <td className="py-2 align-top break-words font-medium text-neutral-800">
+                    {valorLegible(entrada.despues?.[campo])}
+                  </td>
                 </tr>
               ))}
             </tbody>

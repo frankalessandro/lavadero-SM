@@ -539,6 +539,7 @@ function RentabilidadPage() {
           </Card>
         ) : null}
         <Card className="p-0">
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
@@ -568,6 +569,7 @@ function RentabilidadPage() {
               ) : null}
             </tbody>
           </table>
+          </div>
         </Card>
       </section>
 
@@ -585,6 +587,7 @@ function RentabilidadPage() {
           </Card>
         ) : null}
         <Card className="p-0">
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
@@ -614,6 +617,7 @@ function RentabilidadPage() {
               ) : null}
             </tbody>
           </table>
+          </div>
         </Card>
       </section>
 
@@ -647,6 +651,7 @@ function RentabilidadPage() {
               </Card>
             ) : null}
             <Card className="p-0">
+              <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
@@ -665,6 +670,7 @@ function RentabilidadPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             </Card>
           </>
         )}
@@ -906,7 +912,7 @@ function UtilidadPanel({
         </div>
         <div className="text-right">
           <p
-            className={`text-3xl font-semibold tracking-tight tabular-nums ${
+            className={`break-words text-2xl font-semibold tracking-tight tabular-nums md:text-3xl ${
               positiva ? 'text-success-700' : 'text-danger-600'
             }`}
           >

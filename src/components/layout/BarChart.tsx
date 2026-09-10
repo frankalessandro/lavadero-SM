@@ -30,7 +30,7 @@ export function BarChart({
 }: BarChartProps) {
   if (labels.length === 0) {
     return (
-      <div className="flex items-center justify-center text-sm text-neutral-400" style={{ height }}>
+      <div className="flex w-full max-w-full items-center justify-center text-sm text-neutral-400" style={{ height }}>
         {emptyLabel}
       </div>
     )
@@ -63,7 +63,7 @@ export function BarChart({
   }
 
   return (
-    <div style={{ height }}>
+    <div className="w-full max-w-full" style={{ height }}>
       <Bar
         data={{
           labels,

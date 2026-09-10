@@ -15,12 +15,12 @@ export interface SectionTab {
  * real (cada pestaña es su propia ruta con su loader), no estado local: así el enlace profundo
  * sigue funcionando y cada pestaña solo carga sus datos cuando se abre.
  *
- * Scroll horizontal en móvil por la misma razón que MobileTabBar: 4 pestañas no caben en una
- * columna angosta sin encogerlas hasta lo ilegible.
+ * En móvil las pestañas envuelven a varias filas (`flex-wrap`) en vez de hacer scroll lateral:
+ * la app entera evita el scroll horizontal salvo en tablas.
  */
 export function SectionTabs({ tabs }: { tabs: SectionTab[] }) {
   return (
-    <nav className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+    <nav className="-mx-1 flex flex-wrap gap-1.5 px-1 pb-1">
       {tabs.map(({ to, label, icon: Icon }) => (
         <Link
           key={to}

@@ -78,14 +78,14 @@ function ClientesPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Clientes registrados" value={String(clientes.length)} hint={`${conTelefono} con teléfono`} icon={Search} />
         <StatCard label="Recurrentes" value={String(recurrentes)} hint={`de ${clientes.length} · ${clientes.length ? Math.round((recurrentes / clientes.length) * 100) : 0}%`} icon={Repeat} />
         <StatCard label="Nuevos este mes" value={String(nuevosDelMes)} icon={UserPlus} />
         <StatCard label="Facturado histórico" value={COP.format(gastoTotalBase)} hint="órdenes entregadas" icon={Coins} />
       </div>
 
-      <div className="flex w-fit rounded-lg border border-neutral-300 p-1">
+      <div className="flex w-fit max-w-full flex-wrap rounded-lg border border-neutral-300 p-1">
         {([['recientes', 'Recientes'], ['gastado', 'Más gastan'], ['frecuencia', 'Más frecuentes']] as const).map(
           ([k, label]) => (
             <button
@@ -104,7 +104,7 @@ function ClientesPage() {
 
       <Card className="p-0">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[48rem] text-sm">
             <thead>
               <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
                 <th className="px-5 py-3">Cliente</th>

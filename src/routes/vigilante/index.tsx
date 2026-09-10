@@ -199,7 +199,7 @@ function VigilanteHome() {
                 className="flex items-center justify-between gap-3 rounded-2xl border border-neutral-200 bg-white p-4 text-left shadow-card transition-shadow hover:shadow-card-hover active:shadow-none"
               >
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="font-mono text-sm font-semibold text-neutral-900">{estancia.placa}</span>
                     <span className="inline-flex rounded-full bg-primary-50 px-2 py-0.5 text-xs font-medium text-primary-700">
                       {MODALIDAD_LABEL[estancia.modalidad]}

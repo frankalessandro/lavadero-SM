@@ -176,7 +176,7 @@ function TurnosPage() {
         </Card>
       ) : null}
 
-      <div className="flex rounded-lg border border-neutral-300 p-1 w-fit">
+      <div className="flex w-fit max-w-full flex-wrap rounded-lg border border-neutral-300 p-1">
         {FILTROS.map((f) => (
           <button
             key={f.key}
@@ -193,7 +193,7 @@ function TurnosPage() {
 
       <Card className="p-0">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[60rem] text-sm">
             <thead>
               <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
                 <th className="px-5 py-3">Rol</th>
@@ -317,7 +317,7 @@ function TurnosPage() {
         </p>
         <Card className="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[44rem] text-sm">
               <thead>
                 <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
                   <th className="px-5 py-3">Fecha</th>

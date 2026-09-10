@@ -74,9 +74,9 @@ export function LavadorExpedienteModal({ lavador, resumen, comboNombre, producto
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-neutral-900/40 p-4">
-      <div className="my-6 w-full max-w-2xl rounded-2xl bg-white shadow-card-hover">
+      <div className="my-6 w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-card-hover">
         <div className="flex items-start justify-between gap-3 border-b border-neutral-100 p-6">
-          <div>
+          <div className="min-w-0">
             <h2 className="text-lg font-semibold text-neutral-900">{lavador.nombre}</h2>
             <p className="text-sm text-neutral-500">
               Ingresó el {FECHA.format(new Date(`${lavador.fechaIngreso}T00:00:00`))}
@@ -99,7 +99,7 @@ export function LavadorExpedienteModal({ lavador, resumen, comboNombre, producto
         ) : (
           <div className="flex flex-col gap-4 p-6">
             {/* KPIs */}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <Card className="flex flex-col gap-1 p-4">
                 <p className="text-xs font-medium text-neutral-500">Servicios</p>
                 <p className="text-xl font-semibold text-neutral-900">{data.serviciosReales}</p>

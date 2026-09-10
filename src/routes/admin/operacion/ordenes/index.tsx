@@ -164,7 +164,7 @@ function OrdenesPage() {
       {mixPago ? <p className="-mt-3 text-xs text-neutral-500">Mix de pago (entregadas): {mixPago}</p> : null}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex rounded-lg border border-neutral-300 p-1">
+        <div className="flex flex-wrap rounded-lg border border-neutral-300 p-1">
           {RANGOS.map((r) => (
             <button
               key={r.key}
@@ -186,7 +186,7 @@ function OrdenesPage() {
 
       <Card className="p-0">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[52rem] text-sm">
             <thead>
               <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
                 <th className="px-5 py-3">Consec.</th>

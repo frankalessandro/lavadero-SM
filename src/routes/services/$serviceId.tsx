@@ -17,7 +17,7 @@ function ServiceDetail() {
   const service = Route.useLoaderData()
 
   return (
-    <section>
+    <section className="px-4">
       <Link to="/services">← Volver a servicios</Link>
       <h1>{service.vehicle}</h1>
       <dl>

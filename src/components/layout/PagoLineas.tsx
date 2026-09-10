@@ -116,7 +116,7 @@ export function PagoLineas({
       ) : null}
 
       <div className="flex flex-col gap-2 rounded-xl bg-neutral-50 px-4 py-3">
-        <div className="flex items-center justify-between text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-sm">
           <span className="text-neutral-500">
             {totalLabel} <span className="font-medium text-neutral-700">{COP.format(total)}</span>
           </span>

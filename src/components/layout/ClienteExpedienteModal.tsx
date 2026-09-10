@@ -64,9 +64,9 @@ export function ClienteExpedienteModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-neutral-900/40 p-4">
-      <div className="my-6 w-full max-w-2xl rounded-2xl bg-white shadow-card-hover">
+      <div className="my-6 w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-card-hover">
         <div className="flex items-start justify-between gap-3 border-b border-neutral-100 p-6">
-          <div>
+          <div className="min-w-0">
             <h2 className="text-lg font-semibold text-neutral-900">
               {resumen?.rep?.clienteNombre || nombreFallback}
             </h2>
@@ -88,7 +88,7 @@ export function ClienteExpedienteModal({
         ) : (
           <div className="flex flex-col gap-4 p-6">
             {/* Cabecera de contacto + números */}
-            <div className="grid grid-cols-2 gap-4 rounded-xl bg-neutral-50 p-4 sm:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 rounded-xl bg-neutral-50 p-4 sm:grid-cols-4">
               <Dato label="Teléfono">
                 {telefono ? (
                   <span className="flex items-center gap-1.5">
@@ -112,8 +112,8 @@ export function ClienteExpedienteModal({
               </Dato>
               <Dato label="Correo">
                 {correo ? (
-                  <a href={`mailto:${correo}`} className="flex items-center gap-1.5 text-primary-700">
-                    <Mail size={14} /> {correo}
+                  <a href={`mailto:${correo}`} className="flex items-center gap-1.5 break-all text-primary-700">
+                    <Mail size={14} className="shrink-0" /> {correo}
                   </a>
                 ) : (
                   '—'

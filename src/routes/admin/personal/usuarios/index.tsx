@@ -68,7 +68,7 @@ function UsuariosPage() {
 
   return (
     <div className="flex flex-col gap-6 text-left">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold text-neutral-900">Usuarios del sistema</h2>
           <p className="text-sm text-neutral-500">
@@ -89,8 +89,8 @@ function UsuariosPage() {
         )}
       </div>
 
-      <Card className="p-0">
-        <table className="w-full text-sm">
+      <Card className="overflow-x-auto p-0 md:overflow-visible">
+        <table className="w-full min-w-[40rem] text-sm">
           <thead>
             <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
               <th className="px-5 py-3">Nombre</th>
@@ -314,7 +314,7 @@ function UsuarioDetalleModal({ perfil, onClose }: { perfil: Perfil; onClose: () 
 // un rol es un cambio de código + migración). "Gerencia" se guarda como el rol `admin`.
 function RolesReferencia() {
   return (
-    <Card className="p-0">
+    <Card className="overflow-x-auto p-0">
       <div className="border-b border-neutral-200 px-5 py-4">
         <h3 className="text-base font-semibold text-neutral-900">Roles del sistema</h3>
         <p className="text-sm text-neutral-500">

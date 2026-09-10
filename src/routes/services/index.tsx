@@ -24,12 +24,13 @@ function ServicesList() {
   const navigate = Route.useNavigate()
 
   return (
-    <section>
+    <section className="px-4">
       <h1>Servicios</h1>
 
-      <div className="filters">
+      <div className="filters flex-wrap">
         <input
           type="search"
+          className="min-w-0"
           placeholder="Buscar por vehículo o patente…"
           defaultValue={q ?? ''}
           onChange={(event) => {
@@ -41,6 +42,7 @@ function ServicesList() {
           }}
         />
         <select
+          className="min-w-0"
           value={status ?? ''}
           onChange={(event) => {
             const value = event.target.value as ServiceStatus | ''

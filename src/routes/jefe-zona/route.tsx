@@ -3,7 +3,6 @@ import { createFileRoute, Outlet, useNavigate } from '@tanstack/react-router'
 import { LayoutDashboard, Wallet, ShoppingCart, Boxes, Coins, CalendarCheck } from 'lucide-react'
 import { Sidebar, type NavItem } from '../../components/layout/Sidebar'
 import { Topbar } from '../../components/layout/Topbar'
-import { MobileTabBar } from '../../components/layout/MobileTabBar'
 import { NotificacionesCentro } from '../../components/layout/NotificacionesCentro'
 import { exigirRol, signOut } from '../../lib/auth'
 import { fetchTurnoAbierto } from '../../data/turnos'
@@ -60,11 +59,10 @@ function JefeZonaLayout() {
           roleLabel="Jefe de patio"
           notificaciones={<NotificacionesCentro cargarAlertas={fetchAlertasJefeZona} />}
         />
-        <main className="flex-1 overflow-y-auto p-4 pb-24 sm:p-6 md:pb-6">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6">
           <Outlet />
         </main>
       </div>
-      <MobileTabBar navItems={NAV_ITEMS} />
     </div>
   )
 }

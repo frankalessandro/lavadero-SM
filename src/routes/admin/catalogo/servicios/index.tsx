@@ -83,7 +83,7 @@ function ServiciosPage() {
 
   return (
     <div className="flex flex-col gap-6 text-left">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold text-neutral-900">Servicios</h2>
           <p className="text-sm text-neutral-500">
@@ -96,15 +96,15 @@ function ServiciosPage() {
         <button
           type="button"
           onClick={openCreate}
-          className="flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700"
+          className="flex shrink-0 items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700"
         >
           <Plus size={16} />
           Nuevo servicio
         </button>
       </div>
 
-      <Card className="p-0">
-        <table className="w-full text-sm">
+      <Card className="overflow-x-auto p-0">
+        <table className="w-full min-w-[52rem] text-sm">
           <thead>
             <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
               <th className="px-5 py-3">Servicio</th>

@@ -12,7 +12,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
   errorComponent: ({ error }) => (
     <div className="route-status route-status--error">
       <p>Algo salió mal.</p>
-      <pre>{error.message}</pre>
+      <pre className="whitespace-pre-wrap break-words">{error.message}</pre>
     </div>
   ),
   notFoundComponent: () => (
@@ -26,7 +26,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 function RootLayout() {
   return (
     <>
-      <nav className="nav">
+      <nav className="nav flex-wrap">
         <Link to="/" activeOptions={{ exact: true }} activeProps={{ className: 'active' }}>
           Inicio
         </Link>

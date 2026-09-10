@@ -46,9 +46,9 @@ export function TurnoExpedienteModal({ turno, comboNombre, lavadorNombre, produc
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-neutral-900/40 p-4">
-      <div className="my-6 w-full max-w-2xl rounded-2xl bg-white shadow-card-hover">
+      <div className="my-6 w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-card-hover">
         <div className="flex items-start justify-between gap-3 border-b border-neutral-100 p-6">
-          <div>
+          <div className="min-w-0">
             <h2 className="text-lg font-semibold text-neutral-900">
               Turno {turno.rol === 'jefe_zona' ? 'jefe de zona' : 'vigilante'} · {turno.responsable}
             </h2>
@@ -117,7 +117,7 @@ export function TurnoExpedienteModal({ turno, comboNombre, lavadorNombre, produc
             </Card>
 
             {/* Pagos por método */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               {(['efectivo', 'transferencia', 'datafono'] as const).map((m) => (
                 <Card key={m} className="flex flex-col gap-0.5 p-4">
                   <p className="text-xs font-medium text-neutral-500">{METODO_PAGO_LABEL[m]}</p>

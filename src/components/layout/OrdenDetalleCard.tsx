@@ -53,7 +53,7 @@ export function OrdenDetalleCard({
         </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2 sm:grid-cols-3">
         <Dato label="Ingreso">{FECHA_HORA.format(new Date(o.creadoEn))}</Dato>
         <Dato label="Listo">{o.listaEn ? HORA.format(new Date(o.listaEn)) : '—'}</Dato>
         <Dato label="Entrega">{o.entregadaEn ? FECHA_HORA.format(new Date(o.entregadaEn)) : '—'}</Dato>

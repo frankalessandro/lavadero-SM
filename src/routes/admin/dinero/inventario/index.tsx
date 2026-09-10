@@ -143,12 +143,12 @@ function InventarioPage() {
 
   return (
     <div className="flex flex-col gap-6 text-left">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <h2 className="text-base font-semibold text-neutral-900">Inventario</h2>
           <p className="text-sm text-neutral-500">Insumos de lavado y productos de nevera, movimientos manuales y valorización.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
             onClick={() => setMovimientoFormOpen(true)}
@@ -179,7 +179,7 @@ function InventarioPage() {
       <FaltantesPendientes faltantes={data.faltantes} />
 
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {(
           [
             { nivel: 'bajo' as const, hint: `≤ ${STOCK_BAJO_MAX} unidades` },
@@ -265,7 +265,8 @@ function InventarioPage() {
         <div className="border-b border-neutral-100 px-5 py-4">
           <h3 className="text-sm font-semibold text-neutral-900">Movimientos recientes</h3>
         </div>
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[44rem] text-sm">
           <thead>
             <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
               <th className="px-5 py-3">Fecha</th>
@@ -302,10 +303,11 @@ function InventarioPage() {
             ) : null}
           </tbody>
         </table>
+        </div>
       </Card>
 
       <Card className="p-0">
-        <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-100 px-5 py-4">
           <h3 className="flex items-center gap-1.5 text-sm font-semibold text-neutral-900">
             <ShoppingCart size={15} className="text-primary-500" />
             Ventas recientes (últimos 30 días)
@@ -314,7 +316,8 @@ function InventarioPage() {
             Total: <span className="font-semibold text-neutral-900">{COP.format(ventas.filter((v) => v.estado === 'activa').reduce((t, v) => t + v.total, 0))}</span>
           </p>
         </div>
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[48rem] text-sm">
           <thead>
             <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
               <th className="px-5 py-3">Fecha</th>
@@ -356,6 +359,7 @@ function InventarioPage() {
             ) : null}
           </tbody>
         </table>
+        </div>
       </Card>
 
       {movimientoFormOpen ? (
@@ -462,7 +466,8 @@ function StockTable({
           <p className="text-xs text-neutral-500">{subtitulo}</p>
         </div>
       </div>
-      <table className="w-full text-sm">
+      <div className="overflow-x-auto">
+      <table className="w-full min-w-[44rem] text-sm">
         <thead>
           <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
             <th className="px-5 py-3">Producto</th>
@@ -584,6 +589,7 @@ function StockTable({
           ) : null}
         </tbody>
       </table>
+      </div>
     </Card>
   )
 }
@@ -665,7 +671,7 @@ function MovimientoForm({
 
   return (
     <div className="fixed inset-0 z-20 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-[2px]">
-      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-card-hover sm:p-7">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-card-hover sm:p-7">
         <div className="mb-5 flex items-center justify-between">
           <h3 className="flex items-center gap-2 text-base font-semibold text-neutral-900">
             <PackageSearch size={16} className="text-primary-500" />
@@ -868,7 +874,7 @@ function ProductoForm({
 
   return (
     <div className="fixed inset-0 z-20 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-[2px]">
-      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-card-hover sm:p-7">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-card-hover sm:p-7">
         <div className="mb-5 flex items-center justify-between">
           <h3 className="text-base font-semibold text-neutral-900">
             {producto ? 'Editar producto' : 'Nuevo producto'}
