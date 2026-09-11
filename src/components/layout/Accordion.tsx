@@ -48,7 +48,12 @@ export function AccordionSection({ step, title, summary, isOpen, isComplete, onT
 
       <div
         className={`grid transition-[grid-template-rows] duration-300 ease-out ${isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
-        onTransitionEnd={() => setSettledOpen(isOpen)}
+        // `transitionend` burbujea: sin este filtro, la transición de cualquier hijo (el chevron
+        // de un CustomSelect, el `transition-colors` de un input al enfocarlo) marcaba la sección
+        // como asentada antes de tiempo y liberaba el overflow a mitad de la animación.
+        onTransitionEnd={(e) => {
+          if (e.target === e.currentTarget) setSettledOpen(isOpen)
+        }}
       >
         <div className={showOverflow ? 'overflow-visible' : 'overflow-hidden'}>
           <div className="flex flex-col gap-4 border-t border-neutral-100 px-4 py-4">{children}</div>

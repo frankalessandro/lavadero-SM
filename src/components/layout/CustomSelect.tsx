@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ChevronDown, Check } from 'lucide-react'
 
 export interface SelectOption {
@@ -37,17 +37,25 @@ export function CustomSelect({
   size = 'md',
 }: CustomSelectProps) {
   const [open, setOpen] = useState(false)
+  const panelRef = useRef<HTMLDivElement>(null)
   const selected = options.find((o) => o.value === value)
 
   // En touch, arrastrar/scrollear la página sobre el backdrop cancela el `click`
   // sintético (el navegador lo suprime tras un gesto de arrastre), así que el backdrop
   // invisible se queda cubriendo la pantalla y absorbe el siguiente toque. Cerrar también
   // al hacer scroll evita que quede "atascado" en tablet/celular.
+  // Va en fase de CAPTURA: los paneles scrollean dentro de su propio contenedor
+  // (`fixed inset-0 overflow-y-auto` en cada route.tsx), no en `window`, y el evento
+  // `scroll` de un elemento no burbujea — sin `capture` este listener nunca se disparaba.
+  // Se ignora el scroll de la propia lista de opciones (`max-h-64 overflow-y-auto`).
   useEffect(() => {
     if (!open) return
-    const close = () => setOpen(false)
-    window.addEventListener('scroll', close, { passive: true })
-    return () => window.removeEventListener('scroll', close)
+    const close = (e: Event) => {
+      if (panelRef.current?.contains(e.target as Node)) return
+      setOpen(false)
+    }
+    window.addEventListener('scroll', close, { capture: true, passive: true })
+    return () => window.removeEventListener('scroll', close, { capture: true })
   }, [open])
 
   return (
@@ -70,9 +78,12 @@ export function CustomSelect({
             type="button"
             aria-label="Cerrar"
             onClick={() => setOpen(false)}
+            // Arrastrar el dedo sobre el backdrop no genera `click` (y si no hay nada que
+            // scrollear tampoco hay evento `scroll`): cerrar en cuanto el dedo se mueve.
+            onTouchMove={() => setOpen(false)}
             className="fixed inset-0 z-20 cursor-default"
           />
-          <div className="absolute z-30 mt-1.5 max-h-64 w-full overflow-y-auto rounded-lg border border-neutral-200 bg-white p-1 shadow-card-hover">
+          <div ref={panelRef} className="absolute z-30 mt-1.5 max-h-64 w-full overflow-y-auto rounded-lg border border-neutral-200 bg-white p-1 shadow-card-hover">
             {options.length === 0 ? (
               <p className="px-3 py-2.5 text-sm text-neutral-400">{emptyLabel ?? 'Sin opciones'}</p>
             ) : (
