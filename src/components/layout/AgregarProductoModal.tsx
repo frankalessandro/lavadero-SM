@@ -30,6 +30,14 @@ export function AgregarProductoModal({
   const [saving, setSaving] = useState(false)
   const enVueloRef = useRef(false)
 
+  // Solo lo que hay en nevera. Un agotado no se puede vender igual (la RPC lo rechaza), así que
+  // ocupar media grilla con tiles grises solo estorba en una pantalla que se opera con el pulgar.
+  // Se filtra ANTES de agrupar para que una sección sin existencias no deje su encabezado huérfano.
+  // Ojo: esto NO toca `productos.activo` — "agotado" es transitorio y el producto sigue en el
+  // catálogo, en el formulario de entrada y en el conteo ciego de turno. Inactivarlo al llegar a 0
+  // lo sacaría de esos tres, y el jefe de patio no puede reactivarlo (solo tiene SELECT por RLS).
+  const disponibles = productos.filter((p) => (stockPorProducto.get(p.id) ?? 0) > 0)
+
   function setCantidad(productoId: string, cantidad: number) {
     setCarrito((prev) => {
       const siguiente = new Map(prev)
@@ -86,7 +94,12 @@ export function AgregarProductoModal({
 
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-col gap-4">
           <div className="custom-scroll flex min-h-0 flex-col gap-3 overflow-y-auto">
-            {agruparPorSeccion(productos).map((g) => (
+            {disponibles.length === 0 ? (
+              <p className="rounded-lg bg-neutral-50 px-4 py-6 text-center text-sm text-neutral-500">
+                No hay productos con existencias. Registra una entrada en Inventario para poder venderlos.
+              </p>
+            ) : null}
+            {agruparPorSeccion(disponibles).map((g) => (
               <div key={g.key} className="flex flex-col gap-2">
                 <p className="text-xs font-semibold uppercase tracking-wide text-neutral-400">{g.label}</p>
                 <div className="grid grid-cols-2 gap-2">

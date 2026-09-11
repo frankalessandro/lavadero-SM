@@ -28,7 +28,12 @@ import { fetchComisionesPendientesJefeZona } from '../../data/liquidacionesJefeZ
 import { fetchVentasHoy, fetchCostoMercanciaVendida } from '../../data/ventas'
 import { fetchPagosHoy } from '../../data/pagos'
 import { fetchTurnoAbierto } from '../../data/turnos'
-import { fetchRentabilidadEnRango } from '../../data/rentabilidad'
+import {
+  fetchRentabilidadEnRango,
+  resultadoPorLinea,
+  totalesVacio,
+  bucketGasto,
+} from '../../data/rentabilidad'
 import type { MetodoPagoBase } from '../../schemas/orden'
 import type { TurnoCaja } from '../../schemas/turnoCaja'
 import { StatCard } from '../../components/layout/StatCard'
@@ -274,16 +279,31 @@ function AdminDashboard() {
     .map(([id, cantidad]) => ({ nombre: nombrePorLavador.get(id) ?? '—', cantidad }))
     .sort((a, b) => b.cantidad - a.cantidad)
 
-  const egresosHoy = comisionesHoy + comisionesJefeZonaHoy + costoMercancia.costo + totalGastosHoy
-  const cascada = [
-    { label: 'Lavadero', valor: ingresosLavadero, tipo: 'ingreso' as const },
-    { label: 'Parqueadero', valor: ingresosParqueadero, tipo: 'ingreso' as const },
-    { label: 'Venta de productos', valor: ingresosVentas, tipo: 'ingreso' as const },
-    { label: 'Comisión de lavadores', valor: comisionesHoy, tipo: 'egreso' as const },
-    { label: 'Comisión de jefe de patio', valor: comisionesJefeZonaHoy, tipo: 'egreso' as const },
-    { label: 'Costo de productos vendidos', valor: costoMercancia.costo, tipo: 'egreso' as const },
-    { label: 'Gastos', valor: totalGastosHoy, tipo: 'egreso' as const },
-  ]
+  // P&L por línea de negocio (0059) con las cifras vivas de hoy. Se construye un `RentabilidadTotales`
+  // y se pasa por el MISMO `resultadoPorLinea` que usa /admin/rentabilidad, para que las dos
+  // pantallas no puedan divergir en cómo descomponen el resultado. El desglose bebidas/snacks no se
+  // arma acá a propósito: el dashboard es el pulso de hoy (glanceable), el desglose profundo vive en
+  // rentabilidad — misma división de roles que ya documenta CLAUDE.md.
+  const gastosPorLinea = gastosHoy.reduce(
+    (acc, g) => {
+      acc[bucketGasto(g)] += g.monto
+      return acc
+    },
+    { gastosLavadero: 0, gastosProductos: 0, gastosParqueadero: 0, gastosGenerales: 0 },
+  )
+  const lineaHoy = resultadoPorLinea({
+    ...totalesVacio(),
+    ingresosLavadero,
+    ingresosParqueadero,
+    ingresosVentas,
+    descuentos: descuentosHoy,
+    comisionLavadores: comisionesHoy,
+    comisionJefeZona: comisionesJefeZonaHoy,
+    costoMercancia: costoMercancia.costo,
+    gastos: totalGastosHoy,
+    ventasSinCosto: costoMercancia.ventasSinCosto,
+    ...gastosPorLinea,
+  })
 
 
   return (
@@ -474,26 +494,85 @@ function AdminDashboard() {
           </Card>
 
           <Card className="p-0">
-            <h4 className="px-5 pt-5 text-sm font-semibold text-neutral-900">Resultado del día</h4>
-            <div className="mt-2">
-              {cascada.map((c) => (
-                <FilaResultado
-                  key={c.label}
-                  label={c.label}
-                  valor={c.valor}
-                  pct={ingresosTotales > 0 ? (c.valor / ingresosTotales) * 100 : 0}
-                  tipo={c.tipo}
-                />
-              ))}
+            <div className="flex flex-wrap items-baseline justify-between gap-2 px-5 pt-5">
+              <h4 className="text-sm font-semibold text-neutral-900">Resultado del día</h4>
+              <span className="text-xs text-neutral-400">por línea de negocio</span>
             </div>
+
+            {/* Cada línea con SU propio denominador: la comisión del lavador se mide contra el
+                ingreso del lavado, no contra el total del negocio, así el 40 % se lee 40 sin
+                importar cuánto se venda en la nevera (ver migración 0059). */}
+            <div className="mt-2">
+              <EtiquetaLinea texto="Lavadero" margen={lineaHoy.lavadero.ingresos > 0 ? lineaHoy.lavadero.margen : undefined} />
+              <FilaResultado label="Ingresos de lavado" valor={ingresosLavadero} pct={100} tipo="ingreso" />
+              <FilaResultado
+                label="Comisión de lavadores"
+                valor={comisionesHoy}
+                pct={pctDe(comisionesHoy, lineaHoy.lavadero.ingresos)}
+                tipo="egreso"
+              />
+              <FilaResultado
+                label="Comisión de jefe de patio"
+                valor={comisionesJefeZonaHoy}
+                pct={pctDe(comisionesJefeZonaHoy, lineaHoy.lavadero.ingresos)}
+                tipo="egreso"
+              />
+              {lineaHoy.lavadero.gastos > 0 ? (
+                <FilaResultado
+                  label="Gastos del lavadero"
+                  valor={lineaHoy.lavadero.gastos}
+                  pct={pctDe(lineaHoy.lavadero.gastos, lineaHoy.lavadero.ingresos)}
+                  tipo="egreso"
+                />
+              ) : null}
+              <SubtotalLinea label="Margen del lavadero" valor={lineaHoy.lavadero.utilidad} margen={lineaHoy.lavadero.margen} vacio={lineaHoy.lavadero.ingresos === 0} />
+
+              <EtiquetaLinea texto="Productos" margen={lineaHoy.productos.ingresos > 0 ? lineaHoy.productos.margen : undefined} />
+              <FilaResultado label="Venta de productos" valor={ingresosVentas} pct={100} tipo="ingreso" />
+              <FilaResultado
+                label="Costo de la mercancía"
+                valor={costoMercancia.costo}
+                pct={pctDe(costoMercancia.costo, lineaHoy.productos.ingresos)}
+                tipo="egreso"
+              />
+              {lineaHoy.productos.gastos > 0 ? (
+                <FilaResultado
+                  label="Gastos de productos"
+                  valor={lineaHoy.productos.gastos}
+                  pct={pctDe(lineaHoy.productos.gastos, lineaHoy.productos.ingresos)}
+                  tipo="egreso"
+                />
+              ) : null}
+              <SubtotalLinea label="Margen de productos" valor={lineaHoy.productos.utilidad} margen={lineaHoy.productos.margen} vacio={lineaHoy.productos.ingresos === 0} />
+
+              <EtiquetaLinea texto="Parqueadero" margen={lineaHoy.parqueadero.ingresos > 0 ? lineaHoy.parqueadero.margen : undefined} />
+              <FilaResultado label="Cobros de salida" valor={ingresosParqueadero} pct={100} tipo="ingreso" />
+              {lineaHoy.parqueadero.gastos > 0 ? (
+                <FilaResultado
+                  label="Gastos del parqueadero"
+                  valor={lineaHoy.parqueadero.gastos}
+                  pct={pctDe(lineaHoy.parqueadero.gastos, lineaHoy.parqueadero.ingresos)}
+                  tipo="egreso"
+                />
+              ) : null}
+              <SubtotalLinea label="Margen del parqueadero" valor={lineaHoy.parqueadero.utilidad} margen={lineaHoy.parqueadero.margen} vacio={lineaHoy.parqueadero.ingresos === 0} />
+            </div>
+
             <div className="mt-2 flex flex-col gap-1.5 border-t border-neutral-100 px-5 py-3 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-neutral-500">Ingresos</span>
-                <span className="font-medium tabular-nums text-neutral-900">{COP.format(ingresosTotales)}</span>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-neutral-500">Margen bruto de las 3 líneas</span>
+                <span className="font-medium tabular-nums text-neutral-900">
+                  {COP.format(lineaHoy.margenBrutoTotal)}
+                </span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-neutral-500">Egresos</span>
-                <span className="font-medium tabular-nums text-danger-600">− {COP.format(egresosHoy)}</span>
+              <div className="flex items-center justify-between gap-3">
+                <span className="min-w-0 text-neutral-500">
+                  Gastos generales
+                  <span className="block text-xs text-neutral-400">no atribuidos a una línea</span>
+                </span>
+                <span className="font-medium tabular-nums text-danger-600">
+                  − {COP.format(lineaHoy.gastosGenerales)}
+                </span>
               </div>
             </div>
             <div className="p-3">
@@ -764,9 +843,71 @@ function MiniDato({
   return <div className={clases}>{contenido}</div>
 }
 
+/** Peso de una cifra sobre el denominador de SU línea (0–100). */
+function pctDe(parte: number, total: number): number {
+  return total > 0 ? (parte / total) * 100 : 0
+}
+
+/** Encabezado de una línea de negocio dentro del "Resultado del día", con su margen al lado. */
+function EtiquetaLinea({ texto, margen }: { texto: string; margen?: number }) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 pb-1 pt-4">
+      <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-neutral-400">{texto}</span>
+      <span className="h-px min-w-4 flex-1 bg-neutral-100" />
+      {margen !== undefined ? (
+        <span
+          className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${
+            margen >= 0 ? 'bg-success-600/10 text-success-700' : 'bg-danger-600/10 text-danger-700'
+          }`}
+        >
+          {PCT(margen)}
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
+/** Lo que queda de una línea de negocio, antes de los gastos generales. */
+function SubtotalLinea({
+  label,
+  valor,
+  margen,
+  vacio,
+}: {
+  label: string
+  valor: number
+  margen: number
+  vacio: boolean
+}) {
+  const negativo = valor < 0
+  return (
+    <div
+      className={`mt-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-y px-5 py-2 ${
+        vacio
+          ? 'border-neutral-100 bg-neutral-50'
+          : negativo
+            ? 'border-danger-600/25 bg-danger-50/60'
+            : 'border-success-600/25 bg-success-600/10'
+      }`}
+    >
+      <span className="text-sm font-medium text-neutral-700">{label}</span>
+      <div className="flex items-baseline gap-2">
+        {!vacio ? <span className="text-[11px] tabular-nums text-neutral-400">{PCT(margen)}</span> : null}
+        <span
+          className={`text-sm font-semibold tabular-nums ${
+            vacio ? 'text-neutral-400' : negativo ? 'text-danger-700' : 'text-success-700'
+          }`}
+        >
+          {COP.format(valor)}
+        </span>
+      </div>
+    </div>
+  )
+}
+
 // Fila de la cascada compacta del "Resultado del día" — mismo recurso visual que la cascada de
-// /admin/rentabilidad (barra cuyo ancho es el peso de la línea sobre los ingresos), pero sin
-// modales: el detalle fila a fila vive allá, acá solo se muestra la forma del día.
+// /admin/rentabilidad (barra cuyo ancho es el peso de la línea sobre los ingresos de SU línea),
+// pero sin modales: el detalle fila a fila vive allá, acá solo se muestra la forma del día.
 function FilaResultado({
   label,
   valor,

@@ -7,9 +7,15 @@ import {
   fetchCategoriasGasto,
   fetchGastos,
   setCategoriaGastoActivo,
+  updateCategoriaGasto,
   type GastoConCategoria,
 } from '../../../../data/gastos'
-import { categoriaGastoInputSchema, gastoInputSchema, type CategoriaGasto } from '../../../../schemas/gasto'
+import {
+  categoriaGastoInputSchema,
+  gastoInputSchema,
+  LINEA_NEGOCIO_OPCIONES,
+  type CategoriaGasto,
+} from '../../../../schemas/gasto'
 import { Card } from '../../../../components/layout/Card'
 import { BarChart } from '../../../../components/layout/BarChart'
 import { StatCard } from '../../../../components/layout/StatCard'
@@ -435,15 +441,17 @@ function CategoriasModal({
   onChanged: () => Promise<void>
 }) {
   const [nombre, setNombre] = useState('')
+  const [linea, setLinea] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [confirmando, setConfirmando] = useState<CategoriaGasto | null>(null)
+  const [reasignando, setReasignando] = useState<string | null>(null)
   const enVuelo = useRef(false)
 
   async function handleCrear(event: FormEvent) {
     event.preventDefault()
     if (enVuelo.current) return
-    const parsed = categoriaGastoInputSchema.safeParse({ nombre })
+    const parsed = categoriaGastoInputSchema.safeParse({ nombre, linea: linea === '' ? undefined : linea })
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Datos inválidos')
       return
@@ -454,6 +462,7 @@ function CategoriasModal({
     try {
       await createCategoriaGasto(parsed.data)
       setNombre('')
+      setLinea('')
       await onChanged()
       toast.exito('Categoría creada')
     } catch (err) {
@@ -462,6 +471,25 @@ function CategoriasModal({
     } finally {
       enVuelo.current = false
       setSaving(false)
+    }
+  }
+
+  // Cambiar la línea re-imputa TODOS los gastos de esa categoría, históricos incluidos — la
+  // rentabilidad agrupa por la línea vigente, no por una copia congelada en cada gasto. Es
+  // deliberado: si estaba mal clasificada, el reporte del mes pasado también lo estaba.
+  async function handleLinea(categoria: CategoriaGasto, valor: string) {
+    setReasignando(categoria.id)
+    try {
+      await updateCategoriaGasto(categoria.id, {
+        nombre: categoria.nombre,
+        linea: valor === '' ? undefined : (valor as CategoriaGasto['linea']),
+      })
+      await onChanged()
+      toast.exito('Línea actualizada')
+    } catch (err) {
+      toast.desdeError(err, 'No se pudo cambiar la línea')
+    } finally {
+      setReasignando(null)
     }
   }
 
@@ -484,29 +512,42 @@ function CategoriasModal({
           </button>
         </div>
 
-        <ul className="mb-4 flex max-h-64 flex-col gap-1 overflow-y-auto">
+        <p className="mb-3 text-xs leading-relaxed text-neutral-500">
+          La <span className="font-medium text-neutral-700">línea</span> decide en qué P&amp;L de rentabilidad se
+          descuenta el gasto. Deja <span className="font-medium text-neutral-700">General</span> lo que sirve a todo el
+          negocio (arriendo, servicios, nómina admin): eso se resta una sola vez del consolidado, no de una línea.
+        </p>
+
+        <ul className="mb-4 flex max-h-72 flex-col gap-1 overflow-y-auto">
           {categorias.map((categoria) => (
-            <li
-              key={categoria.id}
-              className="flex items-center justify-between gap-2 rounded-lg px-2 py-2 text-sm hover:bg-neutral-50"
-            >
-              <div className="flex items-center gap-2">
-                <span className="font-medium text-neutral-900">{categoria.nombre}</span>
-                <span
-                  className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                    categoria.activo ? 'bg-success-50 text-success-700' : 'bg-neutral-100 text-neutral-500'
-                  }`}
+            <li key={categoria.id} className="flex flex-col gap-2 rounded-lg px-2 py-2 text-sm hover:bg-neutral-50">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span className="font-medium text-neutral-900">{categoria.nombre}</span>
+                  <span
+                    className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                      categoria.activo ? 'bg-success-50 text-success-700' : 'bg-neutral-100 text-neutral-500'
+                    }`}
+                  >
+                    {categoria.activo ? 'Activo' : 'Inactivo'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setConfirmando(categoria)}
+                  className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-primary-100 hover:text-primary-700"
                 >
-                  {categoria.activo ? 'Activo' : 'Inactivo'}
-                </span>
+                  {categoria.activo ? 'Inactivar' : 'Activar'}
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setConfirmando(categoria)}
-                className="rounded-lg px-3 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-primary-100 hover:text-primary-700"
-              >
-                {categoria.activo ? 'Inactivar' : 'Activar'}
-              </button>
+              <CustomSelect
+                size="sm"
+                placeholder="General (no se atribuye a una línea)"
+                value={categoria.linea ?? ''}
+                onChange={(valor) => handleLinea(categoria, valor)}
+                disabled={reasignando === categoria.id}
+                options={LINEA_NEGOCIO_OPCIONES.map((o) => ({ value: o.valor, label: o.label }))}
+              />
             </li>
           ))}
         </ul>
@@ -519,6 +560,16 @@ function CategoriasModal({
               onChange={(event) => setNombre(event.target.value)}
               placeholder="p. ej. Publicidad"
               className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5 text-left text-sm">
+            <span className="font-medium text-neutral-700">Línea de negocio</span>
+            <CustomSelect
+              size="sm"
+              placeholder="General (no se atribuye a una línea)"
+              value={linea}
+              onChange={setLinea}
+              options={LINEA_NEGOCIO_OPCIONES.map((o) => ({ value: o.valor, label: o.label }))}
             />
           </label>
           {error ? <p className="text-xs text-danger-600">{error}</p> : null}

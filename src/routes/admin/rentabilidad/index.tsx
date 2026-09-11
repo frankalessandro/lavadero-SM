@@ -16,12 +16,18 @@ import {
   Receipt,
   CalendarDays,
   Sparkles,
+  Layers,
 } from 'lucide-react'
 import {
   fetchRentabilidad,
+  resultadoPorLinea,
+  acumularTotales,
+  totalesVacio,
   type RentabilidadReporte,
   type RentabilidadDia,
   type RentabilidadTotales,
+  type SeccionResultado,
+  type LineaResultado,
 } from '../../../data/rentabilidad'
 import { PeriodoSelector } from '../../../components/layout/PeriodoSelector'
 import { calcularRango, lunesDeLaSemana, fechaLocalISO, type ModoPeriodo } from '../../../lib/periodo'
@@ -115,6 +121,11 @@ function RentabilidadPage() {
   const egresosPrev =
     comparativa.comisionLavadores + comparativa.comisionJefeZona + comparativa.costoMercancia + comparativa.gastos
 
+  // P&L por línea de negocio. Cada línea se mide contra SUS propios ingresos, así que el 40 % del
+  // lavador se lee sobre el lavado y no se diluye cuando se venden más gaseosas (ver 0059).
+  const linea = resultadoPorLinea(totales)
+  const lineaPrev = resultadoPorLinea(comparativa)
+
   // Agrupado por semana ISO — solo tiene sentido cuando el rango abarca más de una semana.
   const porSemana = useMemo(() => {
     const map = new Map<string, RentabilidadTotales & { semana: string; label: string }>()
@@ -128,27 +139,13 @@ function RentabilidadPage() {
         v = {
           semana: key,
           label: `${FECHA_CORTA.format(lunes)} – ${FECHA_CORTA.format(domingo)}`,
-          ingresosLavadero: 0,
-          ingresosParqueadero: 0,
-          ingresosVentas: 0,
-          descuentos: 0,
-          comisionLavadores: 0,
-          comisionJefeZona: 0,
-          costoMercancia: 0,
-          gastos: 0,
-          utilidadNeta: 0,
-          margen: 0,
-          ventasSinCosto: 0,
+          ...totalesVacio(),
         }
         map.set(key, v)
       }
-      v.ingresosLavadero += d.ingresosLavadero
-      v.ingresosParqueadero += d.ingresosParqueadero
-      v.ingresosVentas += d.ingresosVentas
-      v.comisionLavadores += d.comisionLavadores
-      v.comisionJefeZona += d.comisionJefeZona
-      v.costoMercancia += d.costoMercancia
-      v.gastos += d.gastos
+      // `acumularTotales` recorre la lista de campos acumulables del data layer, así que agregar
+      // un renglón nuevo a la cascada no obliga a acordarse de sumarlo también acá.
+      acumularTotales(v, d)
       v.utilidadNeta += d.utilidadNeta
     }
     return Array.from(map.values())
@@ -167,9 +164,12 @@ function RentabilidadPage() {
           <div>
             <h2 className="text-xl font-semibold text-neutral-900">Rentabilidad del negocio</h2>
             <p className="mt-1 max-w-2xl text-sm text-neutral-500">
-              Cuánto entra, cuánto sale y cuánto queda — por día, por semana y por lavador. Ingresos de lavadero (ya con
-              descuentos absorbidos), parqueadero y venta de productos, menos comisiones, costo de la mercancía vendida y
-              gastos. Aún no descuenta el consumo de insumos de lavado.
+              Cada línea de negocio con su propio resultado: el <strong className="font-medium">lavadero</strong> menos
+              sus comisiones (40 % lavador + 3 % jefe de patio), los <strong className="font-medium">productos</strong>{' '}
+              menos el costo de la mercancía, y el <strong className="font-medium">parqueadero</strong>, que no paga
+              ninguno de los dos. Los tres márgenes se suman y de ahí salen los gastos generales. Así el 40 % del lavador
+              se mide sobre el lavado y no se diluye con lo que se venda en la nevera. Aún no descuenta el consumo de
+              insumos de lavado.
             </p>
           </div>
           <PeriodoSelector
@@ -216,6 +216,47 @@ function RentabilidadPage() {
         />
       </div>
 
+      {/* Margen por línea de negocio — cada uno sobre SUS propios ingresos. El del lavadero es el
+          que tiene que reflejar el 60/40 (57 % después de la comisión del jefe de patio); si se
+          mezclara con productos y parqueadero, subiría o bajaría según cuánto se venda en la
+          nevera, que es exactamente lo que esta separación evita. */}
+      <section className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h3 className="text-sm font-semibold text-neutral-900">Margen por línea de negocio</h3>
+          <span className="text-xs text-neutral-400">cada línea sobre sus propios ingresos</span>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <MargenLinea
+            label="Lavadero"
+            icon={Droplets}
+            resultado={linea.lavadero}
+            previo={lineaPrev.lavadero}
+            nota={`comisiones 40% + 3% · ${reporte.cantidadLavados} lavado${reporte.cantidadLavados === 1 ? '' : 's'}`}
+          />
+          <MargenLinea
+            label="Productos"
+            icon={ShoppingBasket}
+            resultado={linea.productos}
+            previo={lineaPrev.productos}
+            nota={`bebidas y snacks · ${reporte.cantidadProductos} unidad${reporte.cantidadProductos === 1 ? '' : 'es'}`}
+          />
+          <MargenLinea
+            label="Parqueadero"
+            icon={CircleParking}
+            resultado={linea.parqueadero}
+            previo={lineaPrev.parqueadero}
+            nota="sin comisión ni costo de mercancía"
+          />
+        </div>
+        {linea.gastosGenerales > 0 ? (
+          <p className="text-xs leading-relaxed text-neutral-400">
+            Estos márgenes ya descuentan los gastos imputados a cada línea. Los{' '}
+            <span className="font-medium text-neutral-500">{COP.format(linea.gastosGenerales)}</span> de gastos
+            generales (compartidos entre las tres) se restan una sola vez en el consolidado, no acá.
+          </p>
+        ) : null}
+      </section>
+
       {/* Cascada */}
       <section className="flex flex-col gap-3">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -224,46 +265,25 @@ function RentabilidadPage() {
         </div>
 
         <Card className="p-0">
-          {/* --- Entra --- */}
-          <BloqueEtiqueta texto="Entra" />
+          {/* --- Línea 1: Lavadero --- */}
+          <BloqueEtiqueta
+            texto="Lavadero"
+            margen={linea.lavadero.ingresos > 0 ? linea.lavadero.margen : undefined}
+          />
           <CascadaFila
-            label="Lavadero"
+            label="Ingresos de lavado"
             icon={Droplets}
             sub={
               totales.descuentos > 0
                 ? `${reporte.cantidadLavados} lavados · ${COP.format(totales.descuentos)} en descuentos absorbidos`
                 : `${reporte.cantidadLavados} lavado${reporte.cantidadLavados === 1 ? '' : 's'} entregado${reporte.cantidadLavados === 1 ? '' : 's'}`
             }
-            valor={totales.ingresosLavadero}
-            pct={porcentaje(totales.ingresosLavadero, ingresosTotales)}
+            valor={linea.lavadero.ingresos}
+            pct={100}
+            pctSufijo="del lavado"
             tipo="ingreso"
             onClick={reporte.ordenes.length > 0 ? () => setModal({ tipo: 'lavadero' }) : undefined}
           />
-          <CascadaFila
-            label="Parqueadero"
-            icon={CircleParking}
-            sub={totales.ingresosParqueadero === 0 ? 'sin registros en el periodo' : 'cobros de salida'}
-            valor={totales.ingresosParqueadero}
-            pct={porcentaje(totales.ingresosParqueadero, ingresosTotales)}
-            tipo="ingreso"
-          />
-          <CascadaFila
-            label="Venta de productos"
-            icon={ShoppingBasket}
-            sub={
-              reporte.cantidadProductos > 0
-                ? `${reporte.cantidadProductos} unidad${reporte.cantidadProductos === 1 ? '' : 'es'} vendida${reporte.cantidadProductos === 1 ? '' : 's'}`
-                : 'sin ventas en el periodo'
-            }
-            valor={totales.ingresosVentas}
-            pct={porcentaje(totales.ingresosVentas, ingresosTotales)}
-            tipo="ingreso"
-            onClick={reporte.productos.length > 0 ? () => setModal({ tipo: 'productos' }) : undefined}
-          />
-          <CascadaSubtotal label="Ingresos totales" valor={ingresosTotales} pctTexto="100%" tipo="ingreso" />
-
-          {/* --- Sale --- */}
-          <BloqueEtiqueta texto="Sale" />
           <CascadaFila
             label="Comisión de lavadores"
             icon={Users}
@@ -274,7 +294,8 @@ function RentabilidadPage() {
                 : 'sin lavados en el periodo'
             }
             valor={-totales.comisionLavadores}
-            pct={porcentaje(totales.comisionLavadores, ingresosTotales)}
+            pct={porcentaje(totales.comisionLavadores, linea.lavadero.ingresos)}
+            pctSufijo="del lavado"
             tipo="egreso"
             onClick={reporte.porLavador.length > 0 ? () => setModal({ tipo: 'comLavadores' }) : undefined}
           />
@@ -284,12 +305,51 @@ function RentabilidadPage() {
             badge="3%"
             sub="para quien estaba a cargo del turno de recepción"
             valor={-totales.comisionJefeZona}
-            pct={porcentaje(totales.comisionJefeZona, ingresosTotales)}
+            pct={porcentaje(totales.comisionJefeZona, linea.lavadero.ingresos)}
+            pctSufijo="del lavado"
             tipo="egreso"
             onClick={totales.comisionJefeZona > 0 ? () => setModal({ tipo: 'comJefe' }) : undefined}
           />
+          {linea.lavadero.gastos > 0 ? (
+            <CascadaFila
+              label="Gastos del lavadero"
+              icon={Receipt}
+              sub="categorías de gasto imputadas a esta línea"
+              valor={-linea.lavadero.gastos}
+              pct={porcentaje(linea.lavadero.gastos, linea.lavadero.ingresos)}
+              pctSufijo="del lavado"
+              tipo="egreso"
+              onClick={() => setModal({ tipo: 'gastos' })}
+            />
+          ) : null}
+          <CascadaSubtotal
+            label="Margen del lavadero"
+            valor={linea.lavadero.utilidad}
+            pctTexto={linea.lavadero.ingresos > 0 ? PCT(linea.lavadero.margen) : '—'}
+            tipo="margen"
+          />
+
+          {/* --- Línea 2: Productos --- */}
+          <BloqueEtiqueta
+            texto="Productos (bebidas y snacks)"
+            margen={linea.productos.ingresos > 0 ? linea.productos.margen : undefined}
+          />
           <CascadaFila
-            label="Costo de los productos vendidos"
+            label="Venta de productos"
+            icon={ShoppingBasket}
+            sub={
+              reporte.cantidadProductos > 0
+                ? `${reporte.cantidadProductos} unidad${reporte.cantidadProductos === 1 ? '' : 'es'} vendida${reporte.cantidadProductos === 1 ? '' : 's'}`
+                : 'sin ventas en el periodo'
+            }
+            valor={linea.productos.ingresos}
+            pct={100}
+            pctSufijo="de la venta"
+            tipo="ingreso"
+            onClick={reporte.productos.length > 0 ? () => setModal({ tipo: 'productos' }) : undefined}
+          />
+          <CascadaFila
+            label="Costo de la mercancía vendida"
             icon={Package}
             sub={
               reporte.productos.length > 0
@@ -297,30 +357,92 @@ function RentabilidadPage() {
                 : 'sin ventas en el periodo'
             }
             valor={-totales.costoMercancia}
-            pct={porcentaje(totales.costoMercancia, ingresosTotales)}
+            pct={porcentaje(totales.costoMercancia, linea.productos.ingresos)}
+            pctSufijo="de la venta"
             tipo="egreso"
             alerta={totales.ventasSinCosto > 0 ? `${totales.ventasSinCosto} venta(s) sin costo registrado` : undefined}
             onClick={reporte.productos.length > 0 ? () => setModal({ tipo: 'costo' }) : undefined}
           />
-          <CascadaFila
-            label="Gastos"
-            icon={Receipt}
-            sub={
-              reporte.gastos.length > 0
-                ? `${reporte.gastos.length} movimiento${reporte.gastos.length === 1 ? '' : 's'} en ${reporte.gastosPorCategoria.length} categoría${reporte.gastosPorCategoria.length === 1 ? '' : 's'}`
-                : 'sin gastos cargados en el periodo'
-            }
-            valor={-totales.gastos}
-            pct={porcentaje(totales.gastos, ingresosTotales)}
-            tipo="egreso"
-            alerta={reporte.gastos.length === 0 ? 'la utilidad no descuenta costos fijos' : undefined}
-            onClick={reporte.gastos.length > 0 ? () => setModal({ tipo: 'gastos' }) : undefined}
-          />
+          {linea.productos.gastos > 0 ? (
+            <CascadaFila
+              label="Gastos de productos"
+              icon={Receipt}
+              sub="categorías de gasto imputadas a esta línea"
+              valor={-linea.productos.gastos}
+              pct={porcentaje(linea.productos.gastos, linea.productos.ingresos)}
+              pctSufijo="de la venta"
+              tipo="egreso"
+              onClick={() => setModal({ tipo: 'gastos' })}
+            />
+          ) : null}
+          {linea.productos.porSeccion.length > 1 ? (
+            <SeccionDesglose secciones={linea.productos.porSeccion} />
+          ) : null}
           <CascadaSubtotal
-            label="Total de egresos"
-            valor={-egresosTotales}
-            pctTexto={PCT(porcentaje(egresosTotales, ingresosTotales))}
+            label="Margen de productos"
+            valor={linea.productos.utilidad}
+            pctTexto={linea.productos.ingresos > 0 ? PCT(linea.productos.margen) : '—'}
+            tipo="margen"
+          />
+
+          {/* --- Línea 3: Parqueadero --- */}
+          <BloqueEtiqueta
+            texto="Parqueadero"
+            margen={linea.parqueadero.ingresos > 0 ? linea.parqueadero.margen : undefined}
+          />
+          <CascadaFila
+            label="Cobros de salida"
+            icon={CircleParking}
+            sub={
+              totales.ingresosParqueadero === 0
+                ? 'sin registros en el periodo'
+                : 'no paga comisión ni tiene costo de mercancía'
+            }
+            valor={linea.parqueadero.ingresos}
+            pct={100}
+            pctSufijo="del parqueadero"
+            tipo="ingreso"
+          />
+          {linea.parqueadero.gastos > 0 ? (
+            <CascadaFila
+              label="Gastos del parqueadero"
+              icon={Receipt}
+              sub="categorías de gasto imputadas a esta línea"
+              valor={-linea.parqueadero.gastos}
+              pct={porcentaje(linea.parqueadero.gastos, linea.parqueadero.ingresos)}
+              pctSufijo="del parqueadero"
+              tipo="egreso"
+              onClick={() => setModal({ tipo: 'gastos' })}
+            />
+          ) : null}
+          <CascadaSubtotal
+            label="Margen del parqueadero"
+            valor={linea.parqueadero.utilidad}
+            pctTexto={linea.parqueadero.ingresos > 0 ? PCT(linea.parqueadero.margen) : '—'}
+            tipo="margen"
+          />
+
+          {/* --- Consolidado --- */}
+          <BloqueEtiqueta texto="Consolidado" />
+          <CascadaFila
+            label="Margen bruto de las tres líneas"
+            icon={Layers}
+            sub="lavadero + productos + parqueadero, ya con sus costos y gastos propios"
+            valor={linea.margenBrutoTotal}
+            pct={porcentaje(linea.margenBrutoTotal, ingresosTotales)}
+            tipo="ingreso"
+          />
+          <CascadaFila
+            label="Gastos generales"
+            icon={Receipt}
+            sub="arriendo, servicios, nómina admin — no se atribuyen a una sola línea"
+            valor={-linea.gastosGenerales}
+            pct={porcentaje(linea.gastosGenerales, ingresosTotales)}
             tipo="egreso"
+            alerta={
+              reporte.gastos.length === 0 ? 'sin gastos cargados: la utilidad no descuenta costos fijos' : undefined
+            }
+            onClick={reporte.gastos.length > 0 ? () => setModal({ tipo: 'gastos' }) : undefined}
           />
 
           {/* --- Queda --- */}
@@ -733,11 +855,120 @@ function porcentaje(parte: number, total: number): number {
   return total > 0 ? (parte / total) * 100 : 0
 }
 
-function BloqueEtiqueta({ texto }: { texto: string }) {
+/** Tarjeta de margen de una línea de negocio, con su ▲▼ contra el periodo anterior. */
+function MargenLinea({
+  label,
+  icon: Icon,
+  resultado,
+  previo,
+  nota,
+}: {
+  label: string
+  icon: ComponentType<{ size?: number; strokeWidth?: number }>
+  resultado: LineaResultado
+  previo: LineaResultado
+  nota: string
+}) {
+  const sinDatos = resultado.ingresos === 0
+  const positivo = resultado.utilidad >= 0
   return (
-    <div className="flex items-center gap-3 px-5 pb-1 pt-5">
+    <Card className="flex flex-col gap-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
+            <Icon size={16} strokeWidth={2} />
+          </span>
+          <span className="truncate text-sm font-semibold text-neutral-900">{label}</span>
+        </div>
+        {!sinDatos ? (
+          <span
+            className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold tabular-nums ${
+              positivo ? 'bg-success-600/10 text-success-700' : 'bg-danger-600/10 text-danger-700'
+            }`}
+          >
+            {PCT(resultado.margen)}
+          </span>
+        ) : null}
+      </div>
+
+      <div>
+        <p
+          className={`text-2xl font-bold tabular-nums break-words md:text-3xl ${
+            sinDatos ? 'text-neutral-300' : positivo ? 'text-success-700' : 'text-danger-700'
+          }`}
+        >
+          {COP.format(resultado.utilidad)}
+        </p>
+        <p className="mt-1 text-xs text-neutral-400">
+          {sinDatos ? 'sin movimiento en el periodo' : `sobre ${COP.format(resultado.ingresos)} de ingresos`}
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-neutral-100 pt-2.5">
+        {(() => {
+          const delta = calcularDelta(resultado.utilidad, previo.utilidad, 'mayor-mejor', COP.format)
+          return delta ? (
+            <span
+              className={`text-[11px] font-semibold tabular-nums ${
+                delta.tono === 'verde'
+                  ? 'text-success-700'
+                  : delta.tono === 'rojo'
+                    ? 'text-danger-700'
+                    : 'text-neutral-400'
+              }`}
+            >
+              {delta.texto}
+            </span>
+          ) : null
+        })()}
+        <span className="text-[11px] text-neutral-400">{nota}</span>
+      </div>
+    </Card>
+  )
+}
+
+function BloqueEtiqueta({ texto, margen }: { texto: string; margen?: number }) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 pb-1 pt-5">
       <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-neutral-400">{texto}</span>
-      <span className="h-px flex-1 bg-neutral-100" />
+      <span className="h-px min-w-4 flex-1 bg-neutral-100" />
+      {margen !== undefined ? (
+        <span
+          className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${
+            margen >= 0 ? 'bg-success-600/10 text-success-700' : 'bg-danger-600/10 text-danger-700'
+          }`}
+        >
+          margen {PCT(margen)}
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
+/**
+ * Sub-desglose de la línea de productos por sección (bebidas / snacks, migración 0058).
+ *
+ * Va a margen BRUTO (ingresos − costo), sin gastos: una categoría de gasto se taguea a "productos",
+ * no a "bebidas", así que repartirla entre secciones sería otra vez un supuesto inventado. Lo que
+ * el dueño quiere comparar acá es cuál de las dos deja mejor margen sobre lo que se vende.
+ */
+function SeccionDesglose({ secciones }: { secciones: SeccionResultado[] }) {
+  return (
+    <div className="mx-5 mb-3 grid gap-2 rounded-xl bg-neutral-50 p-3 sm:grid-cols-2">
+      {secciones.map((s) => (
+        <div key={s.seccion} className="flex min-w-0 items-center justify-between gap-2">
+          <div className="min-w-0">
+            <p className="truncate text-xs font-medium text-neutral-700">{s.label}</p>
+            <p className="text-[11px] tabular-nums text-neutral-400">
+              {COP.format(s.ingresos)} − {COP.format(s.costosDirectos)}
+            </p>
+          </div>
+          <div className="shrink-0 text-right">
+            <p className="text-sm font-semibold tabular-nums text-neutral-900">{COP.format(s.utilidad)}</p>
+            <p className="text-[11px] tabular-nums text-neutral-400">{PCT(s.margen)}</p>
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
@@ -750,6 +981,7 @@ function CascadaFila({
   alerta,
   valor,
   pct,
+  pctSufijo = 'de ingresos',
   tipo,
   onClick,
 }: {
@@ -762,8 +994,14 @@ function CascadaFila({
   alerta?: string
   /** Negativo para egresos — se pinta con "−" y en rojo. */
   valor: number
-  /** Peso de esta línea sobre los ingresos totales (0–100). */
+  /**
+   * Peso de esta línea sobre el denominador de SU bloque (0–100). Dentro de un bloque de línea de
+   * negocio el denominador son los ingresos de esa línea, no los del negocio entero: es lo que
+   * hace que el 40 % del lavador se lea 40 y no se diluya con las ventas de nevera.
+   */
   pct: number
+  /** Cola de la etiqueta del porcentaje — nombra el denominador ("del lavado", "de la venta"). */
+  pctSufijo?: string
   tipo: 'ingreso' | 'egreso'
   onClick?: () => void
 }) {
@@ -805,7 +1043,9 @@ function CascadaFila({
             <p className={`text-sm font-semibold tabular-nums ${colorValor}`}>
               {esEgreso && !vacio ? `− ${COP.format(Math.abs(valor))}` : COP.format(Math.abs(valor))}
             </p>
-            <p className="text-[11px] tabular-nums text-neutral-400">{pct.toFixed(1)}% de ingresos</p>
+            <p className="text-[11px] tabular-nums text-neutral-400">
+              {pct.toFixed(1)}% {pctSufijo}
+            </p>
           </div>
           <ChevronRight
             size={16}
@@ -852,20 +1092,32 @@ function CascadaSubtotal({
   label: string
   valor: number
   pctTexto: string
-  tipo: 'ingreso' | 'egreso'
+  /** `margen` = lo que queda de una línea de negocio: verde si es positivo, rojo si la línea pierde. */
+  tipo: 'ingreso' | 'egreso' | 'margen'
 }) {
   const esEgreso = tipo === 'egreso'
+  const esMargen = tipo === 'margen'
+  const negativo = esMargen && valor < 0
+  const fondo = esEgreso
+    ? 'border-danger-600/15 bg-danger-50/50'
+    : esMargen
+      ? negativo
+        ? 'border-danger-600/25 bg-danger-50/60'
+        : 'border-success-600/25 bg-success-600/10'
+      : 'border-primary-600/15 bg-primary-50/50'
+  const colorValor = esEgreso
+    ? 'text-danger-700'
+    : esMargen
+      ? negativo
+        ? 'text-danger-700'
+        : 'text-success-700'
+      : 'text-primary-700'
   return (
-    <div
-      className={`mt-1 flex items-center justify-between gap-3 border-y px-5 py-3 ${
-        esEgreso ? 'border-danger-600/15 bg-danger-50/50' : 'border-primary-600/15 bg-primary-50/50'
-      }`}
-    >
+    <div className={`mt-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-y px-5 py-3 ${fondo}`}>
       <span className="text-sm font-semibold text-neutral-800">{label}</span>
       <div className="flex items-baseline gap-2.5">
         <span className="text-[11px] tabular-nums text-neutral-400">{pctTexto}</span>
-        <span
-          className={`text-base font-semibold tabular-nums ${esEgreso ? 'text-danger-700' : 'text-primary-700'}`}
+        <span className={`text-base font-semibold tabular-nums ${colorValor}`}
         >
           {esEgreso ? `− ${COP.format(Math.abs(valor))}` : COP.format(valor)}
         </span>
