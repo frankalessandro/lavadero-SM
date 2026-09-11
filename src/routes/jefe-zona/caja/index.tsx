@@ -116,6 +116,11 @@ function CajaJefeZona() {
 
   const aperturaCuadro = conteoCuadro(conteoApertura)
   const cierreCuadro = conteoCuadro(conteoCierre)
+  // Espeja el trigger `turnos_caja_cierre_requiere_conteo` (0048): el conteo de cierre solo es
+  // obligatorio si el turno ya tiene uno de apertura — turnos abiertos antes del feature (o sin
+  // apertura contada) cierran sin ese paso, porque `cerrar_conteo_inventario` exige la apertura.
+  const requiereConteoCierre = Boolean(conteoApertura)
+  const puedeArquear = !requiereConteoCierre || Boolean(conteoCierre)
 
   // ── Tareas de pantalla completa ──────────────────────────────────────────────────────────────
   if (tarea === 'conteo-apertura' && turnoAbierto) {
@@ -203,30 +208,32 @@ function CajaJefeZona() {
               <ItemChecklist
                 numero={1}
                 icono={Boxes}
-                estado={conteoCierre ? (cierreCuadro ? 'ok' : 'alerta') : 'pendiente'}
+                estado={
+                  !requiereConteoCierre ? 'ok' : conteoCierre ? (cierreCuadro ? 'ok' : 'alerta') : 'pendiente'
+                }
                 titulo="Contar inventario"
                 detalle={
-                  conteoCierre
-                    ? cierreCuadro
-                      ? 'Cuadrado'
-                      : 'Con diferencia registrada'
-                    : 'Nevera y vitrina, antes de la plata'
+                  !requiereConteoCierre
+                    ? 'No aplica — este turno no tiene conteo de apertura'
+                    : conteoCierre
+                      ? cierreCuadro
+                        ? 'Cuadrado'
+                        : 'Con diferencia registrada'
+                      : 'Nevera y vitrina, antes de la plata'
                 }
                 accion={
-                  conteoCierre ? null : (
+                  requiereConteoCierre && !conteoCierre ? (
                     <BotonItem onClick={() => setTarea('conteo-cierre')}>Contar</BotonItem>
-                  )
+                  ) : null
                 }
               />
               <ItemChecklist
                 numero={2}
                 icono={Wallet}
-                estado={conteoCierre ? 'pendiente' : 'bloqueado'}
+                estado={puedeArquear ? 'pendiente' : 'bloqueado'}
                 titulo="Arqueo de caja"
-                detalle={conteoCierre ? 'Cuenta el efectivo y cierra' : 'Primero cuenta el inventario'}
-                accion={
-                  conteoCierre ? <BotonItem onClick={() => setTarea('arqueo')}>Hacer arqueo</BotonItem> : null
-                }
+                detalle={puedeArquear ? 'Cuenta el efectivo y cierra' : 'Primero cuenta el inventario'}
+                accion={puedeArquear ? <BotonItem onClick={() => setTarea('arqueo')}>Hacer arqueo</BotonItem> : null}
               />
               <button
                 type="button"
