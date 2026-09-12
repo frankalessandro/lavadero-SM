@@ -153,6 +153,60 @@
     margin-top: 3mm;
   }
 
+  /* Texto largo (concepto de un egreso) en bloque propio: como fila label/valor a 58mm
+   * se parte en renglones alineados a la derecha que no se leen. */
+  .tiquete-58__texto {
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.4;
+    word-break: break-word;
+    margin-bottom: 1mm;
+  }
+
+  /* Bloque de firma: "Emite: Nombre", "C.C. ____", "Firma" y una raya de ancho completo
+   * con aire encima para firmar a mano. */
+  .tiquete-58__firma {
+    margin-top: 4mm;
+  }
+
+  .tiquete-58__firma-campo {
+    display: flex;
+    align-items: flex-end;
+    gap: 1.5mm;
+    font-size: 12px;
+    font-weight: 700;
+    margin-top: 2.5mm;
+  }
+
+  .tiquete-58__firma-campo-label {
+    white-space: nowrap;
+  }
+
+  .tiquete-58__firma-campo-valor {
+    flex: 1;
+    min-width: 0;
+    font-weight: 800;
+    word-break: break-word;
+  }
+
+  .tiquete-58__raya {
+    flex: 1;
+    min-width: 0;
+    border-bottom: 1px solid #000;
+    height: 4mm;
+  }
+
+  .tiquete-58__firma-label {
+    font-size: 12px;
+    font-weight: 700;
+    margin-top: 2.5mm;
+  }
+
+  .tiquete-58__firma-espacio {
+    height: 12mm;
+    border-bottom: 1px solid #000;
+  }
+
   .tiquete-58__pie-legal {
     text-align: center;
     font-size: 8px;

@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type FormEvent } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { Plus, Receipt, Settings2, TrendingUp, X } from 'lucide-react'
+import { Plus, Printer, Receipt, Settings2, TrendingUp, X } from 'lucide-react'
 import {
   createCategoriaGasto,
   createGasto,
@@ -22,6 +22,7 @@ import { StatCard } from '../../../../components/layout/StatCard'
 import { CustomSelect } from '../../../../components/layout/CustomSelect'
 import { ConfirmModal } from '../../../../components/layout/ConfirmModal'
 import { CurrencyInput } from '../../../../components/layout/CurrencyInput'
+import { ComprobanteEgresoModal } from '../../../../components/layout/ComprobanteEgresoModal'
 import { toast } from '../../../../lib/toast'
 
 function inicioDelMesISO(): string {
@@ -93,6 +94,7 @@ function GastosPage() {
   const [rango, setRango] = useState<RangoGastoKey>('mes')
   const [totalPrevio, setTotalPrevio] = useState<number | null>(null)
   const [categoriaFiltro, setCategoriaFiltro] = useState<string | null>(null)
+  const [comprobante, setComprobante] = useState<GastoConCategoria | null>(null)
 
   async function refresh() {
     const r = rangoGasto(rango)
@@ -210,7 +212,13 @@ function GastosPage() {
         </Card>
       ) : null}
 
-      <GastoForm categorias={categoriasActivas} onSaved={refresh} />
+      <GastoForm
+        categorias={categoriasActivas}
+        onSaved={async (gasto) => {
+          await refresh()
+          setComprobante(gasto)
+        }}
+      />
 
       {categoriaFiltro ? (
         <button
@@ -233,15 +241,16 @@ function GastosPage() {
               <th className="px-5 py-3">Monto</th>
               <th className="px-5 py-3">Responsable</th>
               <th className="px-5 py-3">Origen</th>
+              <th className="px-5 py-3" />
             </tr>
           </thead>
           <tbody>
             {gastosVisibles.map((gasto) => (
-              <GastoRow key={gasto.id} gasto={gasto} />
+              <GastoRow key={gasto.id} gasto={gasto} onImprimir={() => setComprobante(gasto)} />
             ))}
             {gastosVisibles.length === 0 ? (
               <tr>
-                <td className="px-5 py-6 text-center text-neutral-400" colSpan={6}>
+                <td className="px-5 py-6 text-center text-neutral-400" colSpan={7}>
                   {categoriaFiltro ? `Sin gastos de "${categoriaFiltro}" en el rango.` : 'No hay gastos en el rango.'}
                 </td>
               </tr>
@@ -258,11 +267,13 @@ function GastosPage() {
           onChanged={refresh}
         />
       ) : null}
+
+      {comprobante ? <ComprobanteEgresoModal gasto={comprobante} onClose={() => setComprobante(null)} /> : null}
     </div>
   )
 }
 
-function GastoRow({ gasto }: { gasto: GastoConCategoria }) {
+function GastoRow({ gasto, onImprimir }: { gasto: GastoConCategoria; onImprimir: () => void }) {
   return (
     <tr className="border-b border-neutral-100 transition-colors last:border-0 hover:bg-primary-50/40">
       <td className="px-5 py-3 text-neutral-700">{gasto.fecha}</td>
@@ -279,11 +290,28 @@ function GastoRow({ gasto }: { gasto: GastoConCategoria }) {
           {gasto.origen === 'caja' ? 'Caja' : 'Otro'}
         </span>
       </td>
+      <td className="px-5 py-3 text-right">
+        <button
+          type="button"
+          onClick={onImprimir}
+          title="Comprobante de egreso"
+          className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-neutral-500 transition-colors hover:bg-primary-50 hover:text-primary-700"
+        >
+          <Printer size={14} />
+          Comprobante
+        </button>
+      </td>
     </tr>
   )
 }
 
-function GastoForm({ categorias, onSaved }: { categorias: CategoriaGasto[]; onSaved: () => Promise<void> }) {
+function GastoForm({
+  categorias,
+  onSaved,
+}: {
+  categorias: CategoriaGasto[]
+  onSaved: (gasto: GastoConCategoria) => Promise<void>
+}) {
   const [fecha, setFecha] = useState(hoyISO())
   const [categoriaId, setCategoriaId] = useState('')
   const [descripcion, setDescripcion] = useState('')
@@ -325,9 +353,9 @@ function GastoForm({ categorias, onSaved }: { categorias: CategoriaGasto[]; onSa
     enVuelo.current = true
     setSaving(true)
     try {
-      await createGasto(parsed.data)
+      const creado = await createGasto(parsed.data)
       reset()
-      await onSaved()
+      await onSaved(creado)
       toast.exito('Gasto registrado')
     } catch (err) {
       // Sin catch acá un rechazo (ej. turno cerrado) fallaba en silencio, sin nada en pantalla.
