@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState, type FormEvent } from 'react'
-import { createFileRoute, useRouter } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ShoppingCart, Receipt, X, Plus, Minus, Trash2, Wallet, Users, UserPlus, PackagePlus, StickyNote } from 'lucide-react'
 import { fetchTurnoAbierto } from '../../../data/turnos'
 import { fetchProductosOperativo } from '../../../data/productos'
@@ -21,6 +22,7 @@ import { QuitarProductoModal } from '../../../components/layout/QuitarProductoMo
 import { borradorAPagos, nuevaLineaBorrador, pagoLineasCuadra, type PagoLineaBorrador } from '../../../lib/pagoLineas'
 import { agruparPorSeccion } from '../../../lib/seccionProductos'
 import { METODO_PAGO_LABEL } from '../../../lib/metodoPago'
+import { queryKeys } from '../../../lib/queryKeys'
 import { toast } from '../../../lib/toast'
 
 async function loadVentas() {
@@ -41,6 +43,11 @@ export const Route = createFileRoute('/jefe-zona/ventas/')({
   component: VenderPage,
 })
 
+// Cuánto se tarda en notar, sin F5, que otro dispositivo (otra tablet, otro puesto) cargó un
+// producto o cerró una cuenta — reemplaza el "datos congelados hasta recargar" que tenía esta
+// pantalla (no había ningún refresco automático, a diferencia del dashboard de seguimiento).
+const REFETCH_MS = 20_000
+
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 
 // Solo se recalcula al renderizar (esta pantalla no tiene un timer en vivo como el dashboard de
@@ -56,14 +63,56 @@ function hace(desdeISO: string): string {
 
 function VenderPage() {
   const data = Route.useLoaderData()
-  const router = useRouter()
-  const [turno, setTurno] = useState(data.turno)
-  const [productos] = useState<Producto[]>(data.productos)
-  const [stock, setStock] = useState(data.stock)
-  const [ventasHoy, setVentasHoy] = useState<Venta[]>(data.ventasHoy)
-  const [cuentasAbiertas, setCuentasAbiertas] = useState<Cuenta[]>(data.cuentasAbiertas)
-  const [cuentasHoy, setCuentasHoy] = useState<Cuenta[]>(data.cuentasHoy)
-  const [pendientes, setPendientes] = useState<Venta[]>(data.pendientes)
+  const queryClient = useQueryClient()
+
+  // Fase 4 (2026-09-14): reemplaza el patrón anterior (loader → useState congelado → refresh()
+  // manual que hacía Promise.all + setState Y ADEMÁS router.invalidate(), bajando todo dos veces
+  // por cada acción). Cada pieza de datos vive en la caché de TanStack Query, con `initialData`
+  // del loader para no mostrar un spinner en la primera carga. `productos` en particular ya no
+  // queda congelado para siempre (antes era un useState sin setter): con staleTime + refetch
+  // periódico se refresca solo si cambia un precio desde otra pantalla.
+  const { data: turno } = useQuery({
+    queryKey: queryKeys.turnoAbierto('jefe_zona'),
+    queryFn: () => fetchTurnoAbierto('jefe_zona'),
+    initialData: data.turno,
+    refetchInterval: REFETCH_MS,
+  })
+  const { data: productos = [] } = useQuery({
+    queryKey: queryKeys.productosOperativo,
+    queryFn: fetchProductosOperativo,
+    initialData: data.productos,
+  })
+  const { data: stock = [] } = useQuery({
+    queryKey: queryKeys.stockOperativo,
+    queryFn: fetchStockProductosOperativo,
+    initialData: data.stock,
+    refetchInterval: REFETCH_MS,
+  })
+  const { data: ventasHoy = [] } = useQuery({
+    queryKey: queryKeys.ventasHoy,
+    queryFn: fetchVentasHoy,
+    initialData: data.ventasHoy,
+    refetchInterval: REFETCH_MS,
+  })
+  const { data: cuentasAbiertas = [] } = useQuery({
+    queryKey: queryKeys.cuentasAbiertas,
+    queryFn: fetchCuentasAbiertas,
+    initialData: data.cuentasAbiertas,
+    refetchInterval: REFETCH_MS,
+  })
+  const { data: cuentasHoy = [] } = useQuery({
+    queryKey: queryKeys.cuentasHoy,
+    queryFn: fetchCuentasHoy,
+    initialData: data.cuentasHoy,
+    refetchInterval: REFETCH_MS,
+  })
+  const { data: pendientes = [] } = useQuery({
+    queryKey: queryKeys.ventasPendientes,
+    queryFn: fetchVentasPendientes,
+    initialData: data.pendientes,
+    refetchInterval: REFETCH_MS,
+  })
+
   const [tab, setTab] = useState<'mostrador' | 'cuentas'>('mostrador')
   const [recibo, setRecibo] = useState<VentaReciboData | null>(null)
   const [anulando, setAnulando] = useState<Venta | null>(null)
@@ -75,15 +124,22 @@ function VenderPage() {
   const [cerrandoCuenta, setCerrandoCuenta] = useState<Cuenta | null>(null)
   const [anulandoCuenta, setAnulandoCuenta] = useState<Cuenta | null>(null)
 
+  // Invalida todo lo que esta pantalla lee — mismo alcance que el refresh() manual de antes, pero
+  // como UNA sola ronda de refetch deduplicada por TanStack Query (no dos descargas por acción).
+  // No es la invalidación más quirúrgica posible (podría, por ejemplo, no tocar `productos` en un
+  // cobro), pero es la que replica exactamente el comportamiento ya probado del código anterior —
+  // afinar cuál query invalida cada mutación puntual queda para una siguiente pasada.
   async function refresh() {
-    const nuevo = await loadVentas()
-    setTurno(nuevo.turno)
-    setStock(nuevo.stock)
-    setVentasHoy(nuevo.ventasHoy)
-    setCuentasAbiertas(nuevo.cuentasAbiertas)
-    setCuentasHoy(nuevo.cuentasHoy)
-    setPendientes(nuevo.pendientes)
-    router.invalidate()
+    await Promise.all(
+      [
+        queryKeys.turnoAbierto('jefe_zona'),
+        queryKeys.stockOperativo,
+        queryKeys.ventasHoy,
+        queryKeys.cuentasAbiertas,
+        queryKeys.cuentasHoy,
+        queryKeys.ventasPendientes,
+      ].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+    )
   }
 
   // Disponible, no stock bruto: lo cargado a órdenes/cuentas sin cobrar ya salió de la nevera

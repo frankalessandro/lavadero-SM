@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createRouter } from '@tanstack/react-router'
+import { QueryClientProvider } from '@tanstack/react-query'
 import '@fontsource/plus-jakarta-sans/400.css'
 import '@fontsource/plus-jakarta-sans/500.css'
 import '@fontsource/plus-jakarta-sans/600.css'
@@ -9,6 +10,7 @@ import './index.css'
 import './styles/tiquete-print.css'
 import { routeTree } from './routeTree.gen'
 import { App } from './App'
+import { queryClient } from './lib/queryClient'
 
 const router = createRouter({
   routeTree,
@@ -31,6 +33,8 @@ if (!rootElement) {
 
 createRoot(rootElement).render(
   <StrictMode>
-    <App router={router} />
+    <QueryClientProvider client={queryClient}>
+      <App router={router} />
+    </QueryClientProvider>
   </StrictMode>,
 )
