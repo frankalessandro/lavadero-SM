@@ -50,6 +50,11 @@ export const ventaSchema = z.object({
   anuladaPor: nullableTrimmedString,
   anuladaEn: nullableTimestamp,
   creadoEn: z.string(),
+  // Momento en que el dinero realmente entró — distinto de `creadoEn` cuando el producto se cargó
+  // a una orden/cuenta y se cobró después (posiblemente al día siguiente). NULL mientras sigue
+  // `pendiente`. Ver 0062_ventas_cobrada_en.sql — es la fecha que usan los reportes de ingresos,
+  // no `creadoEn`.
+  cobradaEn: nullableTimestamp,
 })
 
 // Carga de UN producto a una orden de lavado O a una cuenta abierta (estado `pendiente`, sin

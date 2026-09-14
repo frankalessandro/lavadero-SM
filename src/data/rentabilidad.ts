@@ -114,7 +114,7 @@ export interface OrdenRentabilidadLinea {
 }
 
 export interface VentaRentabilidadLinea {
-  fecha: string // ISO de creado_en
+  fecha: string // ISO de cobrada_en (cuándo entró la plata, no cuándo se cargó el carrito)
   productoNombre: string
   cantidad: number
   total: number
@@ -384,7 +384,10 @@ function agregarPorDia(datos: DatosRango): RentabilidadPeriodo {
   }
   const seccionDe = new Map(datos.productos.map((p) => [p.id, p.seccion] as const))
   for (const venta of datos.ventasActivas) {
-    const d = dia(fechaLocalISO(new Date(venta.creadoEn)))
+    // `cobradaEn` (0062) — cuándo entró la plata, no cuándo se cargó el carrito/orden/cuenta.
+    // Siempre viene poblada para una venta `activa` (la RPC la fija al cobrar); `creadoEn` es
+    // solo el resguardo para filas de antes de la migración que no se pudieron backfillear.
+    const d = dia(fechaLocalISO(new Date(venta.cobradaEn ?? venta.creadoEn)))
     d.ingresosVentas += venta.total
     const costo = datos.costoPorVenta.get(venta.id)
     const costoVenta = costo?.tieneCosto ? costo.costo : 0
@@ -588,7 +591,7 @@ export async function fetchRentabilidad(
 
   const ventasLinea: VentaRentabilidadLinea[] = datos.ventasActivas
     .map((v) => ({
-      fecha: v.creadoEn,
+      fecha: v.cobradaEn ?? v.creadoEn,
       productoNombre: productoInfo.get(v.productoId)?.nombre ?? 'Producto eliminado',
       cantidad: v.cantidad,
       total: v.total,

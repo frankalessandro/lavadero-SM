@@ -12,18 +12,23 @@ import {
 import type { PagoLineaInput } from '../schemas/pago'
 
 const VENTA_SELECT =
-  'id, consecutivo, productoId:producto_id, cantidad, precioUnitario:precio_unitario, total, metodoPago:metodo_pago, referenciaPago:referencia_pago, turnoId:turno_id, ordenId:orden_id, cuentaId:cuenta_id, ventaGrupoId:venta_grupo_id, vendidoPor:vendido_por, estado, motivoAnulacion:motivo_anulacion, anuladaPor:anulada_por, anuladaEn:anulada_en, creadoEn:creado_en'
+  'id, consecutivo, productoId:producto_id, cantidad, precioUnitario:precio_unitario, total, metodoPago:metodo_pago, referenciaPago:referencia_pago, turnoId:turno_id, ordenId:orden_id, cuentaId:cuenta_id, ventaGrupoId:venta_grupo_id, vendidoPor:vendido_por, estado, motivoAnulacion:motivo_anulacion, anuladaPor:anulada_por, anuladaEn:anulada_en, creadoEn:creado_en, cobradaEn:cobrada_en'
 
 function inicioDeHoyISO(): string {
   const ahora = new Date()
   return new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate()).toISOString()
 }
 
+// Filtra por `cobrada_en`, no `creado_en`: un producto cargado a una orden/cuenta ayer y cobrado
+// hoy (el vehículo se quedó toda la noche) cuenta como venta de HOY — es cuando entró la plata,
+// no cuando se metió al carrito. Ver 0062_ventas_cobrada_en.sql. Una venta `pendiente` tiene
+// `cobrada_en` NULL, así que un `gte` sobre esa columna la excluye sola (no hace falta filtrar
+// `estado` aparte para eso).
 export async function fetchVentasHoy(): Promise<Venta[]> {
   const { data, error } = await db
     .from('ventas')
     .select(VENTA_SELECT)
-    .gte('creado_en', inicioDeHoyISO())
+    .gte('cobrada_en', inicioDeHoyISO())
     .order('consecutivo', { ascending: false })
   if (error) throw new Error(error.message)
   return ventaSchema.array().parse(data)
@@ -110,13 +115,15 @@ export async function fetchVentasDeCuenta(cuentaId: string): Promise<Venta[]> {
   return ventaSchema.array().parse(data)
 }
 
-// Para reportes de admin (mismo patrón que fetchOrdenesEnRango).
+// Para reportes de admin (mismo patrón que fetchOrdenesEnRango). Por `cobrada_en`, no `creado_en`
+// — mismo motivo que fetchVentasHoy: rentabilidad fecha el ingreso por cuándo entró la plata, no
+// por cuándo se cargó el producto al carrito/orden/cuenta.
 export async function fetchVentasEnRango(desdeISO: string, hastaISO: string): Promise<Venta[]> {
   const { data, error } = await db
     .from('ventas')
     .select(VENTA_SELECT)
-    .gte('creado_en', desdeISO)
-    .lt('creado_en', hastaISO)
+    .gte('cobrada_en', desdeISO)
+    .lt('cobrada_en', hastaISO)
     .order('consecutivo', { ascending: false })
   if (error) throw new Error(error.message)
   return ventaSchema.array().parse(data)
