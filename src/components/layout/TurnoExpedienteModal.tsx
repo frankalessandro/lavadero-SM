@@ -81,6 +81,9 @@ export function TurnoExpedienteModal({ turno, comboNombre, lavadorNombre, produc
                   <Linea label="+ Lavados en efectivo" valor={data.desglose.ingresosLavados} />
                   <Linea label="+ Ventas de productos en efectivo" valor={data.desglose.ingresosVentas} />
                   <Linea label="− Gastos de caja" valor={-data.desglose.gastos} />
+                  {data.desglose.compras > 0 ? (
+                    <Linea label="− Compras pagadas en caja" valor={-data.desglose.compras} />
+                  ) : null}
                   <div className="mt-1 flex items-center justify-between border-t border-neutral-200 pt-1 font-semibold">
                     <span>Esperado</span>
                     <span>{COP.format(turno.cerrado ? (turno.valorEsperado ?? 0) : data.desglose.total)}</span>
@@ -184,6 +187,26 @@ export function TurnoExpedienteModal({ turno, comboNombre, lavadorNombre, produc
                       <span className="text-xs text-neutral-400"> · {g.responsable}</span>
                     </span>
                     <span className="font-medium">−{COP.format(g.monto)}</span>
+                  </div>
+                ))}
+              </Card>
+            ) : null}
+
+            {/* Compras de inventario pagadas con esta caja */}
+            {data.compras.length > 0 ? (
+              <Card className="flex flex-col gap-1 p-4">
+                <h3 className="mb-1 text-sm font-semibold text-neutral-900">Compras pagadas en caja ({data.compras.length})</h3>
+                {data.compras.map((c) => (
+                  <div
+                    key={c.id}
+                    className={`flex items-center justify-between gap-3 text-sm text-neutral-700 ${c.estado === 'anulada' ? 'opacity-60' : ''}`}
+                  >
+                    <span>
+                      #{c.consecutivo} · {c.proveedor}
+                      {c.estado === 'anulada' ? <span className="text-danger-600"> · anulada, no resta del arqueo</span> : ''}
+                      <span className="text-xs text-neutral-400"> · {c.registradoPor}</span>
+                    </span>
+                    <span className="font-medium">{c.estado === 'anulada' ? COP.format(0) : `−${COP.format(c.total)}`}</span>
                   </div>
                 ))}
               </Card>

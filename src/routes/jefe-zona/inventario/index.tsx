@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { Package, Droplet, AlertTriangle, PackageSearch, ShoppingBag, X } from 'lucide-react'
+import { Package, Droplet, AlertTriangle, PackageSearch, ShoppingBag, ShoppingBasket, X } from 'lucide-react'
 import { fetchTurnoAbierto } from '../../../data/turnos'
 import { fetchProductosOperativo } from '../../../data/productos'
 import {
@@ -8,12 +8,15 @@ import {
   fetchMovimientosOperativo,
   createMovimientoOperativo,
 } from '../../../data/movimientosInventario'
+import { fetchComprasRecientes, registrarCompra, anularCompra } from '../../../data/compras'
 import { movimientoInventarioInputSchema, type TipoMovimientoInventario } from '../../../schemas/movimientoInventario'
 import type { Producto } from '../../../schemas/producto'
+import type { Compra } from '../../../schemas/compra'
 import { Card } from '../../../components/layout/Card'
 import { StatCard } from '../../../components/layout/StatCard'
 import { CustomSelect } from '../../../components/layout/CustomSelect'
 import { NivelStockModal } from '../../../components/layout/NivelStockModal'
+import { CompraForm, AnularCompraModal } from '../../../components/layout/CompraForm'
 import { FilaFiltros, FiltroTexto, FiltroSelect, FiltroVacio } from '../../../components/layout/TableHeadFilter'
 import { coincide } from '../../../lib/tableFilters'
 import {
@@ -50,13 +53,14 @@ function ModalSheet({ title, onClose, children }: { title: string; onClose: () =
 }
 
 async function loadStock() {
-  const [turno, productos, stock, movimientos] = await Promise.all([
+  const [turno, productos, stock, movimientos, compras] = await Promise.all([
     fetchTurnoAbierto('jefe_zona'),
     fetchProductosOperativo(),
     fetchStockProductosOperativo(),
     fetchMovimientosOperativo(),
+    fetchComprasRecientes(10),
   ])
-  return { turno, productos, stock, movimientos: movimientos.slice(0, 10) }
+  return { turno, productos, stock, movimientos: movimientos.slice(0, 10), compras }
 }
 
 export const Route = createFileRoute('/jefe-zona/inventario/')({
@@ -85,7 +89,10 @@ function StockPage() {
   const [productos] = useState<Producto[]>(data.productos)
   const [stock, setStock] = useState(data.stock)
   const [movimientos, setMovimientos] = useState(data.movimientos)
+  const [compras, setCompras] = useState(data.compras)
   const [movimientoFormOpen, setMovimientoFormOpen] = useState(false)
+  const [compraFormOpen, setCompraFormOpen] = useState(false)
+  const [anulandoCompra, setAnulandoCompra] = useState<Compra | null>(null)
   const [nivelModal, setNivelModal] = useState<NivelStock | null>(null)
 
   async function refresh() {
@@ -93,6 +100,7 @@ function StockPage() {
     setTurno(nuevo.turno)
     setStock(nuevo.stock)
     setMovimientos(nuevo.movimientos)
+    setCompras(nuevo.compras)
     router.invalidate()
   }
 
@@ -135,14 +143,24 @@ function StockPage() {
           Insumos de lavado (jabón, cera, etc.) y productos de nevera para vender — mismo catálogo, registra acá
           el consumo o reposición del día a día. Costos y valorización solo los ve Admin.
         </p>
-        <button
-          type="button"
-          onClick={() => setMovimientoFormOpen(true)}
-          className="flex shrink-0 items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700"
-        >
-          <PackageSearch size={16} />
-          Movimiento
-        </button>
+        <div className="flex shrink-0 gap-2">
+          <button
+            type="button"
+            onClick={() => setCompraFormOpen(true)}
+            className="flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700"
+          >
+            <ShoppingBasket size={16} />
+            Compra
+          </button>
+          <button
+            type="button"
+            onClick={() => setMovimientoFormOpen(true)}
+            className="flex items-center gap-2 rounded-lg border border-neutral-300 px-4 py-2.5 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
+          >
+            <PackageSearch size={16} />
+            Movimiento
+          </button>
+        </div>
       </div>
 
       <StatCard label="Productos activos" value={String(productosActivos.length)} icon={Package} />
@@ -195,6 +213,32 @@ function StockPage() {
         </ModalSheet>
       ) : null}
 
+      {compraFormOpen ? (
+        <CompraForm
+          productos={productosActivos}
+          responsableSugerido={turno?.responsableActual ?? ''}
+          turnoAbiertoId={turno?.id}
+          onClose={() => setCompraFormOpen(false)}
+          onGuardado={async (input) => {
+            await registrarCompra(input)
+            setCompraFormOpen(false)
+            await refresh()
+          }}
+        />
+      ) : null}
+
+      {anulandoCompra ? (
+        <AnularCompraModal
+          compra={anulandoCompra}
+          onClose={() => setAnulandoCompra(null)}
+          onAnulada={async (input) => {
+            await anularCompra(anulandoCompra.id, input)
+            setAnulandoCompra(null)
+            await refresh()
+          }}
+        />
+      ) : null}
+
       <StockTable
         titulo="Insumos de lavado"
         subtitulo="Uso interno — no se venden"
@@ -244,6 +288,47 @@ function StockPage() {
           ))}
           {movimientos.length === 0 ? (
             <p className="px-5 py-6 text-center text-sm text-neutral-400">Todavía no hay movimientos registrados.</p>
+          ) : null}
+        </div>
+      </Card>
+
+      <Card className="p-0">
+        <div className="border-b border-neutral-100 px-5 py-4">
+          <h3 className="text-sm font-semibold text-neutral-900">Compras recientes</h3>
+        </div>
+        <div className="flex flex-col">
+          {compras.map((c) => (
+            <div
+              key={c.id}
+              className={`flex items-center justify-between gap-3 border-b border-neutral-100 px-5 py-3 last:border-0 ${
+                c.estado === 'anulada' ? 'opacity-60' : ''
+              }`}
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-neutral-900">
+                  #{c.consecutivo} · {c.proveedor}
+                  {c.estado === 'anulada' ? <span className="ml-1.5 text-xs font-normal text-danger-600">(anulada)</span> : null}
+                </p>
+                <p className="mt-0.5 truncate text-xs text-neutral-500">
+                  {c.fecha} · {c.origenPago === 'caja' ? 'Caja del turno' : 'Gerencia'} · {c.registradoPor}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="text-sm font-medium text-neutral-900">{COP.format(c.total)}</span>
+                {c.estado === 'activa' ? (
+                  <button
+                    type="button"
+                    onClick={() => setAnulandoCompra(c)}
+                    className="rounded-lg px-2 py-1 text-xs font-medium text-danger-600 transition-colors hover:bg-danger-50"
+                  >
+                    Anular
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ))}
+          {compras.length === 0 ? (
+            <p className="px-5 py-6 text-center text-sm text-neutral-400">Todavía no hay compras registradas.</p>
           ) : null}
         </div>
       </Card>

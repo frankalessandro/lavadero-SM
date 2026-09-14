@@ -14,9 +14,13 @@ import {
   type StockProducto,
 } from '../../../../data/movimientosInventario'
 import { fetchVentasEnRango } from '../../../../data/ventas'
+import { fetchComprasRecientes, registrarCompra, anularCompra } from '../../../../data/compras'
+import { fetchTurnoAbierto } from '../../../../data/turnos'
 import { fetchFaltantesPendientes, type FaltantePendiente } from '../../../../data/conteosInventario'
 import { ProductoExpedienteModal } from '../../../../components/layout/ProductoExpedienteModal'
 import { NivelStockModal } from '../../../../components/layout/NivelStockModal'
+import { CompraForm, AnularCompraModal } from '../../../../components/layout/CompraForm'
+import type { Compra } from '../../../../schemas/compra'
 import { FilaFiltros, FiltroTexto, FiltroSelect, FiltroVacio } from '../../../../components/layout/TableHeadFilter'
 import { coincide } from '../../../../lib/tableFilters'
 import { productoInputSchema, SECCION_PRODUCTO_LABEL, type Producto } from '../../../../schemas/producto'
@@ -50,14 +54,16 @@ function hace30DiasISO(): string {
 }
 
 async function loadInventario() {
-  const [productos, stock, movimientos, ventas, faltantes] = await Promise.all([
+  const [productos, stock, movimientos, ventas, faltantes, compras, turnoJefeZona] = await Promise.all([
     fetchProductos(),
     fetchStockProductos(),
     fetchMovimientos(),
     fetchVentasEnRango(hace30DiasISO(), new Date().toISOString()),
     fetchFaltantesPendientes(),
+    fetchComprasRecientes(15),
+    fetchTurnoAbierto('jefe_zona'),
   ])
-  return { productos, stock, movimientos: movimientos.slice(0, 15), ventas, faltantes }
+  return { productos, stock, movimientos: movimientos.slice(0, 15), ventas, faltantes, compras, turnoJefeZona }
 }
 
 export const Route = createFileRoute('/admin/dinero/inventario/')({
@@ -86,24 +92,32 @@ function InventarioPage() {
   const [stock, setStock] = useState(data.stock)
   const [movimientos, setMovimientos] = useState(data.movimientos)
   const [ventas, setVentas] = useState(data.ventas)
+  const [compras, setCompras] = useState(data.compras)
+  const [turnoJefeZona, setTurnoJefeZona] = useState(data.turnoJefeZona)
   const [editing, setEditing] = useState<Producto | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [movimientoFormOpen, setMovimientoFormOpen] = useState(false)
+  const [compraFormOpen, setCompraFormOpen] = useState(false)
+  const [anulandoCompra, setAnulandoCompra] = useState<Compra | null>(null)
   const [confirmando, setConfirmando] = useState<Producto | null>(null)
   const [expedienteDe, setExpedienteDe] = useState<Producto | null>(null)
   const [nivelModal, setNivelModal] = useState<NivelStock | null>(null)
 
   async function refresh() {
-    const [nuevosProductos, nuevoStock, nuevosMovimientos, nuevasVentas] = await Promise.all([
+    const [nuevosProductos, nuevoStock, nuevosMovimientos, nuevasVentas, nuevasCompras, nuevoTurno] = await Promise.all([
       fetchProductos(),
       fetchStockProductos(),
       fetchMovimientos(),
       fetchVentasEnRango(hace30DiasISO(), new Date().toISOString()),
+      fetchComprasRecientes(15),
+      fetchTurnoAbierto('jefe_zona'),
     ])
     setProductos(nuevosProductos)
     setStock(nuevoStock)
     setMovimientos(nuevosMovimientos.slice(0, 15))
     setVentas(nuevasVentas)
+    setCompras(nuevasCompras)
+    setTurnoJefeZona(nuevoTurno)
     router.invalidate()
   }
 
@@ -149,6 +163,14 @@ function InventarioPage() {
           <p className="text-sm text-neutral-500">Insumos de lavado y productos de nevera, movimientos manuales y valorización.</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setCompraFormOpen(true)}
+            className="flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700"
+          >
+            <ShoppingCart size={16} />
+            Registrar compra
+          </button>
           <button
             type="button"
             onClick={() => setMovimientoFormOpen(true)}
@@ -362,12 +384,117 @@ function InventarioPage() {
         </div>
       </Card>
 
+      <Card className="p-0">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-100 px-5 py-4">
+          <h3 className="flex items-center gap-1.5 text-sm font-semibold text-neutral-900">
+            <ShoppingCart size={15} className="text-primary-500" />
+            Compras recientes
+          </h3>
+          <p className="text-xs text-neutral-500">
+            Total:{' '}
+            <span className="font-semibold text-neutral-900">
+              {COP.format(compras.filter((c) => c.estado === 'activa').reduce((t, c) => t + c.total, 0))}
+            </span>
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[48rem] text-sm">
+            <thead>
+              <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
+                <th className="px-5 py-3">Fecha</th>
+                <th className="px-5 py-3">Proveedor</th>
+                <th className="px-5 py-3">Factura</th>
+                <th className="px-5 py-3">Total</th>
+                <th className="px-5 py-3">Pagada con</th>
+                <th className="px-5 py-3">Registrada por</th>
+                <th className="px-5 py-3">Estado</th>
+                <th className="px-5 py-3 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {compras.map((c) => (
+                <tr
+                  key={c.id}
+                  className={`border-b border-neutral-100 transition-colors last:border-0 hover:bg-primary-50/40 ${
+                    c.estado === 'anulada' ? 'opacity-60' : ''
+                  }`}
+                >
+                  <td className="px-5 py-3 text-neutral-500">{c.fecha}</td>
+                  <td className="px-5 py-3 font-medium text-neutral-900">
+                    #{c.consecutivo} · {c.proveedor}
+                  </td>
+                  <td className="px-5 py-3 text-neutral-600">{c.numeroFactura ?? '—'}</td>
+                  <td className="px-5 py-3 text-neutral-700">{COP.format(c.total)}</td>
+                  <td className="px-5 py-3 text-neutral-600">{c.origenPago === 'caja' ? 'Caja del turno' : 'Gerencia'}</td>
+                  <td className="px-5 py-3 text-neutral-600">{c.registradoPor}</td>
+                  <td className="px-5 py-3">
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
+                        c.estado === 'anulada' ? 'bg-danger-50 text-danger-700' : 'bg-success-50 text-success-700'
+                      }`}
+                      title={c.estado === 'anulada' ? (c.motivoAnulacion ?? undefined) : undefined}
+                    >
+                      {c.estado === 'anulada' ? 'Anulada' : 'Activa'}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3 text-right">
+                    {c.estado === 'activa' ? (
+                      <button
+                        type="button"
+                        onClick={() => setAnulandoCompra(c)}
+                        className="rounded-lg px-2 py-1 text-xs font-medium text-danger-600 transition-colors hover:bg-danger-50"
+                      >
+                        Anular
+                      </button>
+                    ) : null}
+                  </td>
+                </tr>
+              ))}
+              {compras.length === 0 ? (
+                <tr>
+                  <td className="px-5 py-6 text-center text-neutral-400" colSpan={8}>
+                    Todavía no se han registrado compras.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
       {movimientoFormOpen ? (
         <MovimientoForm
           productos={productosActivos}
           onClose={() => setMovimientoFormOpen(false)}
           onSaved={async () => {
             setMovimientoFormOpen(false)
+            await refresh()
+          }}
+        />
+      ) : null}
+
+      {compraFormOpen ? (
+        <CompraForm
+          productos={productosActivos}
+          responsableSugerido=""
+          turnoAbiertoId={turnoJefeZona?.id}
+          size="sm"
+          onClose={() => setCompraFormOpen(false)}
+          onGuardado={async (input) => {
+            await registrarCompra(input)
+            setCompraFormOpen(false)
+            await refresh()
+          }}
+        />
+      ) : null}
+
+      {anulandoCompra ? (
+        <AnularCompraModal
+          compra={anulandoCompra}
+          onClose={() => setAnulandoCompra(null)}
+          onAnulada={async (input) => {
+            await anularCompra(anulandoCompra.id, input)
+            setAnulandoCompra(null)
             await refresh()
           }}
         />

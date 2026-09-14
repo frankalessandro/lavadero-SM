@@ -186,6 +186,12 @@ export function ArqueoCaja({
               <span>− Gastos de caja</span>
               <span className="font-medium text-neutral-900">{COP.format(desglose.gastos)}</span>
             </div>
+            {desglose.compras > 0 ? (
+              <div className="flex items-center justify-between">
+                <span>− Compras pagadas en caja</span>
+                <span className="font-medium text-neutral-900">{COP.format(desglose.compras)}</span>
+              </div>
+            ) : null}
           </div>
         ) : null}
 

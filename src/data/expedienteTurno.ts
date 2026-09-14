@@ -2,6 +2,7 @@ import { fetchOrdenesDeTurno } from './ordenes'
 import { fetchVentasDeTurno } from './ventas'
 import { fetchPagosDeTurno, fetchPagosDeOrdenes } from './pagos'
 import { fetchGastosDeTurno } from './gastos'
+import { fetchComprasDeTurno } from './compras'
 import { fetchTraspasos, desgloseEsperado, type DesgloseEsperado } from './turnos'
 import { fetchConteoDeTurno, fetchLineasDeConteo, type ConteoLineaConProducto } from './conteosInventario'
 import type { TurnoCaja, TraspasoTurno } from '../schemas/turnoCaja'
@@ -9,6 +10,7 @@ import type { ConteoInventario } from '../schemas/conteoInventario'
 import type { Orden } from '../schemas/orden'
 import type { Pago } from '../schemas/pago'
 import type { Venta } from '../schemas/venta'
+import type { Compra } from '../schemas/compra'
 import type { GastoConCategoria } from './gastos'
 
 export interface ConteoConLineas {
@@ -21,6 +23,7 @@ export interface ExpedienteTurno {
   pagosPorOrden: Map<string, Pago[]>
   ventas: Venta[]
   gastos: GastoConCategoria[]
+  compras: Compra[] // compras de inventario pagadas con la caja de este turno (0064)
   pagos: Pago[] // todas las líneas del turno (para el desglose por método)
   traspasos: TraspasoTurno[]
   desglose?: DesgloseEsperado // solo si el turno está cerrado o tiene datos suficientes
@@ -38,11 +41,12 @@ async function conteoConLineas(turnoId: string, momento: 'apertura' | 'cierre'):
 // de caja, el reparto de pagos por método, traspasos de responsabilidad, y los conteos de
 // inventario de apertura y cierre. Para /admin/operacion/turnos.
 export async function fetchExpedienteTurno(turno: TurnoCaja): Promise<ExpedienteTurno> {
-  const [ordenes, ventas, pagos, gastos, traspasos, conteoApertura, conteoCierre] = await Promise.all([
+  const [ordenes, ventas, pagos, gastos, compras, traspasos, conteoApertura, conteoCierre] = await Promise.all([
     fetchOrdenesDeTurno(turno.id),
     fetchVentasDeTurno(turno.id),
     fetchPagosDeTurno(turno.id),
     fetchGastosDeTurno(turno.id),
+    fetchComprasDeTurno(turno.id),
     fetchTraspasos(turno.id),
     conteoConLineas(turno.id, 'apertura'),
     conteoConLineas(turno.id, 'cierre'),
@@ -64,5 +68,5 @@ export async function fetchExpedienteTurno(turno: TurnoCaja): Promise<Expediente
     desglose = undefined
   }
 
-  return { ordenes, pagosPorOrden, ventas, gastos, pagos, traspasos, desglose, conteoApertura, conteoCierre }
+  return { ordenes, pagosPorOrden, ventas, gastos, compras, pagos, traspasos, desglose, conteoApertura, conteoCierre }
 }

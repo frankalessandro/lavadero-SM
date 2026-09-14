@@ -113,12 +113,32 @@ async function gastosDeCaja(turnoId: string): Promise<number> {
   return (data ?? []).reduce((total, g) => total + (g.monto as number), 0)
 }
 
+// Compras de inventario pagadas con la caja de este turno (0064) — mismo mecanismo que
+// gastosDeCaja: salen del efectivo esperado. Las pagadas por gerencia (origen_pago='gerencia')
+// no tienen turno_id, así que no aparecen acá.
+async function comprasDeCaja(turnoId: string): Promise<number> {
+  const { data, error } = await db
+    .from('compras')
+    .select('total')
+    .eq('turno_id', turnoId)
+    .eq('origen_pago', 'caja')
+    .eq('estado', 'activa')
+  if (error) throw new Error(error.message)
+  return (data ?? []).reduce((total, c) => total + (c.total as number), 0)
+}
+
 // Solo la modalidad efectivo es dinero físico que se puede contar — transferencia y datáfono no
 // entran al arqueo (ninguno de los dos es billete en la caja, aunque datáfono sí cuenta como
 // ingreso/ganancia del día — ver StatCards de /admin y /jefe-zona). Gastos en caja se asumen
 // pagados en efectivo desde la misma caja.
 export async function calcularValorEsperado(turno: TurnoCaja): Promise<number> {
-  const salidas = await gastosDeCaja(turno.id)
+  // Compras solo aplican al turno de jefe_zona (es la única caja que las paga, ver
+  // registrar_compra/0064) — vigilante nunca tiene compras cargadas a su turno.
+  const [gastos, compras] = await Promise.all([
+    gastosDeCaja(turno.id),
+    turno.rol === 'jefe_zona' ? comprasDeCaja(turno.id) : Promise.resolve(0),
+  ])
+  const salidas = gastos + compras
 
   let ingresos: number
   if (turno.rol === 'jefe_zona') {
@@ -143,21 +163,26 @@ export interface DesgloseEsperado {
   ingresosLavados: number
   ingresosVentas: number
   gastos: number
+  // Compras de inventario pagadas con esta caja (0064) — 0 para el turno de vigilante.
+  compras: number
   total: number
 }
 
 // Mismas fuentes que calcularValorEsperado, pero separadas — solo para mostrar el detalle en el
 // paso 2 del cierre de turno (arqueo ciego). Ingresos por lavados y por ventas se ven aparte
-// (como pidió el negocio), pero ambos suman al mismo total esperado.
+// (como pidió el negocio), pero todos suman al mismo total esperado.
 export async function desgloseEsperado(turno: TurnoCaja): Promise<DesgloseEsperado> {
-  const gastos = await gastosDeCaja(turno.id)
+  const [gastos, compras] = await Promise.all([
+    gastosDeCaja(turno.id),
+    turno.rol === 'jefe_zona' ? comprasDeCaja(turno.id) : Promise.resolve(0),
+  ])
   const { lavados: ingresosLavados, ventas: ingresosVentas } =
     turno.rol === 'jefe_zona' ? await fetchEfectivoDeTurno(turno.id) : { lavados: 0, ventas: 0 }
   const total =
     turno.rol === 'jefe_zona'
-      ? turno.baseInicial + ingresosLavados + ingresosVentas - gastos
+      ? turno.baseInicial + ingresosLavados + ingresosVentas - gastos - compras
       : await calcularValorEsperado(turno)
-  return { base: turno.baseInicial, ingresosLavados, ingresosVentas, gastos, total }
+  return { base: turno.baseInicial, ingresosLavados, ingresosVentas, gastos, compras, total }
 }
 
 export async function cerrarTurno(
