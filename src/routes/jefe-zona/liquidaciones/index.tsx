@@ -6,6 +6,7 @@ import { fetchLavadores } from '../../../data/lavadores'
 import { fetchCombos } from '../../../data/combos'
 import { fetchTiposVehiculo } from '../../../data/tiposVehiculo'
 import { fetchMontoPeriodo } from '../../../data/liquidaciones'
+import { fetchDeudaPendientePorLavador } from '../../../data/deudasLavador'
 import type { Orden } from '../../../schemas/orden'
 import { Card } from '../../../components/layout/Card'
 import { CustomSelect } from '../../../components/layout/CustomSelect'
@@ -20,13 +21,14 @@ function hoyISO(): string {
 }
 
 async function loadLiquidaciones() {
-  const [ordenesHoy, lavadores, combos, tiposVehiculo] = await Promise.all([
+  const [ordenesHoy, lavadores, combos, tiposVehiculo, deudaPorLavador] = await Promise.all([
     fetchOrdenesHoy(),
     fetchLavadores(),
     fetchCombos(),
     fetchTiposVehiculo(),
+    fetchDeudaPendientePorLavador(),
   ])
-  return { ordenesHoy, lavadores, combos, tiposVehiculo }
+  return { ordenesHoy, lavadores, combos, tiposVehiculo, deudaPorLavador }
 }
 
 export const Route = createFileRoute('/jefe-zona/liquidaciones/')({
@@ -40,6 +42,7 @@ function LiquidacionesJefeZona() {
   const [combos] = useState(data.combos)
   const [tiposVehiculo] = useState(data.tiposVehiculo)
   const [ordenesHoy] = useState(data.ordenesHoy)
+  const [deudaPorLavador] = useState(data.deudaPorLavador)
   const [lavadorFiltro, setLavadorFiltro] = useState<string>('todos')
   const [recibo, setRecibo] = useState<ReciboData | null>(null)
   // "Colilla del día" (2026-09-14): mismo cálculo que generar la diaria de HOY, pero informativo —
@@ -111,6 +114,8 @@ function LiquidacionesJefeZona() {
         monto: preview.monto,
         generadaEn: new Date().toISOString(),
         tipo: 'informativo',
+        deudaPendiente: preview.deudaPendiente,
+        montoNeto: preview.montoNeto,
       })
     } catch (err) {
       toast.desdeError(err, 'No se pudo calcular la colilla del día')
@@ -182,6 +187,11 @@ function LiquidacionesJefeZona() {
                   </div>
                 </div>
                 <p className="text-xl font-semibold text-neutral-900">{COP.format(p.monto)}</p>
+                {(deudaPorLavador.get(p.lavadorId) ?? 0) > 0 ? (
+                  <p className="-mt-1 text-xs text-warning-700">
+                    Debe {COP.format(deudaPorLavador.get(p.lavadorId) ?? 0)} (préstamos/nevera)
+                  </p>
+                ) : null}
                 <button
                   type="button"
                   disabled={cargandoColillaHoy === p.lavadorId}

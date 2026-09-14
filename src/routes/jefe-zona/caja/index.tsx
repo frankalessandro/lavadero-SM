@@ -6,6 +6,8 @@ import { fetchCategoriasGasto, fetchGastosDeTurno, type GastoConCategoria } from
 import { fetchProductosOperativo } from '../../../data/productos'
 import { fetchConteoDeTurno } from '../../../data/conteosInventario'
 import { fetchOrdenesAbiertas } from '../../../data/ordenes'
+import { fetchLavadores } from '../../../data/lavadores'
+import { fetchPrestamosDeTurno, type DeudaLavador } from '../../../data/deudasLavador'
 import type { ConteoInventario as ConteoInventarioType } from '../../../schemas/conteoInventario'
 import type { TurnoCaja } from '../../../schemas/turnoCaja'
 import { toast } from '../../../lib/toast'
@@ -14,6 +16,7 @@ import { Card } from '../../../components/layout/Card'
 import { CurrencyInput } from '../../../components/layout/CurrencyInput'
 import { CustomSelect } from '../../../components/layout/CustomSelect'
 import { GastosDeTurno } from '../../../components/layout/GastosDeTurno'
+import { PrestamosDeTurno } from '../../../components/layout/PrestamosDeTurno'
 import { ConteoInventario } from '../../../components/layout/ConteoInventario'
 import { ArqueoCaja } from '../../../components/layout/ArqueoCaja'
 import { IndicadorCuadrado } from '../../../components/layout/PantallaTarea'
@@ -21,30 +24,34 @@ import { TurnoResponsableBanner } from '../../../components/layout/TurnoResponsa
 import { usePersonalElegible, nombreDe } from '../../../lib/personalElegible'
 
 async function loadCaja() {
-  const [turnoAbierto, turnosRecientes, categorias, productos, ordenesAbiertas] = await Promise.all([
+  const [turnoAbierto, turnosRecientes, categorias, productos, ordenesAbiertas, lavadores] = await Promise.all([
     fetchTurnoAbierto('jefe_zona'),
     fetchTurnos('jefe_zona'),
     fetchCategoriasGasto(),
     fetchProductosOperativo(),
     fetchOrdenesAbiertas(),
+    fetchLavadores(),
   ])
   // Lo que depende del turno abierto va en una segunda ronda.
-  const [gastosTurno, conteoApertura, conteoCierre] = turnoAbierto
+  const [gastosTurno, conteoApertura, conteoCierre, prestamosTurno] = turnoAbierto
     ? await Promise.all([
         fetchGastosDeTurno(turnoAbierto.id),
         fetchConteoDeTurno(turnoAbierto.id, 'apertura'),
         fetchConteoDeTurno(turnoAbierto.id, 'cierre'),
+        fetchPrestamosDeTurno(turnoAbierto.id),
       ])
-    : [[], undefined, undefined]
+    : [[], undefined, undefined, []]
   return {
     turnoAbierto,
     turnosRecientes: turnosRecientes.slice(0, 5),
     categorias,
     productos,
     ordenesAbiertas,
+    lavadores,
     gastosTurno,
     conteoApertura,
     conteoCierre,
+    prestamosTurno,
   }
 }
 
@@ -86,6 +93,8 @@ function CajaJefeZona() {
   const [conteoApertura, setConteoApertura] = useState<ConteoInventarioType | undefined>(data.conteoApertura)
   const [conteoCierre, setConteoCierre] = useState<ConteoInventarioType | undefined>(data.conteoCierre)
   const [ordenesAbiertas, setOrdenesAbiertas] = useState(data.ordenesAbiertas)
+  const [lavadores] = useState(data.lavadores)
+  const [prestamosTurno, setPrestamosTurno] = useState<DeudaLavador[]>(data.prestamosTurno)
   const [tarea, setTarea] = useState<Tarea>(null)
   const [modoCierre, setModoCierre] = useState(false)
   // Resultado del cierre recién hecho — se muestra una vez y se descarta con "Listo".
@@ -103,18 +112,21 @@ function CajaJefeZona() {
     setTurnoAbierto(nuevoAbierto)
     setTurnosRecientes(nuevosRecientes.slice(0, 5))
     if (nuevoAbierto) {
-      const [g, ca, cc] = await Promise.all([
+      const [g, ca, cc, pr] = await Promise.all([
         fetchGastosDeTurno(nuevoAbierto.id),
         fetchConteoDeTurno(nuevoAbierto.id, 'apertura'),
         fetchConteoDeTurno(nuevoAbierto.id, 'cierre'),
+        fetchPrestamosDeTurno(nuevoAbierto.id),
       ])
       setGastosTurno(g)
       setConteoApertura(ca)
       setConteoCierre(cc)
+      setPrestamosTurno(pr)
     } else {
       setGastosTurno([])
       setConteoApertura(undefined)
       setConteoCierre(undefined)
+      setPrestamosTurno([])
       setModoCierre(false)
     }
     router.invalidate()
@@ -334,6 +346,16 @@ function CajaJefeZona() {
           categorias={data.categorias}
           gastos={gastosTurno}
           onRegistrado={(gasto) => setGastosTurno((previos) => [gasto, ...previos])}
+          size="sm"
+        />
+      ) : null}
+
+      {turnoAbierto ? (
+        <PrestamosDeTurno
+          turno={turnoAbierto}
+          lavadores={lavadores}
+          prestamos={prestamosTurno}
+          onRegistrado={(prestamo) => setPrestamosTurno((previos) => [prestamo, ...previos])}
           size="sm"
         />
       ) : null}

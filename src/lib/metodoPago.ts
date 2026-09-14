@@ -8,4 +8,7 @@ export const METODO_PAGO_LABEL: Record<MetodoPago, string> = {
   transferencia: 'Transferencia',
   datafono: 'Datáfono',
   mixto: 'Mixto',
+  // Solo aplica a ventas (0065): producto de nevera cargado a la liquidación de un lavador en vez
+  // de cobrado en plata — nunca aparece como método real de una orden.
+  cuenta_lavador: 'Cargado a lavador',
 }

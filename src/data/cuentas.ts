@@ -72,6 +72,24 @@ export async function cerrarCuenta(cuentaId: string, pagos: PagoLineaInput[], ce
   return cuentaSchema.parse(data)
 }
 
+// Cierra la cuenta cargando el total a la liquidación de un lavador en vez de cobrar plata
+// (0065) — mismo descuento de stock/costo que cerrarCuenta, pero sin pago real hoy: el total
+// queda como deuda de ese lavador (src/data/deudasLavador.ts), a descontar en su próxima
+// liquidación. Confirmar con el negocio (2026-09-14): cambia la regla 4 ("sin descuentos al
+// lavador"), que ya no aplica sin excepción.
+export async function cargarCuentaALavador(cuentaId: string, lavadorId: string, cerradaPor: string): Promise<Cuenta> {
+  const { data, error } = await db
+    .rpc('cargar_cuenta_a_lavador', {
+      p_cuenta_id: cuentaId,
+      p_lavador_id: lavadorId,
+      p_cerrada_por: cerradaPor,
+    })
+    .select(CUENTA_SELECT)
+    .single()
+  if (error) throw new Error(error.message)
+  return cuentaSchema.parse(data)
+}
+
 // Cancela una cuenta abierta sin cobrar (se fue sin pagar, error al abrirla) — regla 13: motivo
 // obligatorio, queda visible. Sus ventas pendientes nunca movieron stock, así que se anulan sin
 // reverso de inventario.

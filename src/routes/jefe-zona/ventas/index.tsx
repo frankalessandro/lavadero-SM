@@ -6,13 +6,23 @@ import { fetchTurnoAbierto } from '../../../data/turnos'
 import { fetchProductosOperativo } from '../../../data/productos'
 import { fetchStockProductosOperativo } from '../../../data/movimientosInventario'
 import { createVenta, createVentaCarrito, anularVenta, fetchVentasHoy, fetchVentasPendientes } from '../../../data/ventas'
-import { fetchCuentasAbiertas, fetchCuentasHoy, abrirCuenta, cerrarCuenta, anularCuenta } from '../../../data/cuentas'
+import {
+  fetchCuentasAbiertas,
+  fetchCuentasHoy,
+  abrirCuenta,
+  cerrarCuenta,
+  anularCuenta,
+  cargarCuentaALavador,
+} from '../../../data/cuentas'
+import { fetchLavadores } from '../../../data/lavadores'
 import { anularVentaInputSchema, type Venta } from '../../../schemas/venta'
 import { abrirCuentaInputSchema, anularCuentaInputSchema, type Cuenta } from '../../../schemas/cuenta'
 import type { Producto } from '../../../schemas/producto'
+import type { Lavador } from '../../../schemas/lavador'
 import type { PagoLineaInput } from '../../../schemas/pago'
 import { Card } from '../../../components/layout/Card'
 import { StatCard } from '../../../components/layout/StatCard'
+import { CustomSelect } from '../../../components/layout/CustomSelect'
 import { AbrirTurnoPrompt } from '../../../components/layout/TurnoResponsableBanner'
 import { VentaReciboModal, type VentaReciboData } from '../../../components/layout/VentaReciboModal'
 import { CorregirPagoModal } from '../../../components/layout/CorregirPagoModal'
@@ -26,7 +36,7 @@ import { queryKeys } from '../../../lib/queryKeys'
 import { toast } from '../../../lib/toast'
 
 async function loadVentas() {
-  const [turno, productos, stock, ventasHoy, cuentasAbiertas, cuentasHoy, pendientes] = await Promise.all([
+  const [turno, productos, stock, ventasHoy, cuentasAbiertas, cuentasHoy, pendientes, lavadores] = await Promise.all([
     fetchTurnoAbierto('jefe_zona'),
     fetchProductosOperativo(),
     fetchStockProductosOperativo(),
@@ -34,8 +44,9 @@ async function loadVentas() {
     fetchCuentasAbiertas(),
     fetchCuentasHoy(),
     fetchVentasPendientes(),
+    fetchLavadores(),
   ])
-  return { turno, productos, stock, ventasHoy, cuentasAbiertas, cuentasHoy, pendientes }
+  return { turno, productos, stock, ventasHoy, cuentasAbiertas, cuentasHoy, pendientes, lavadores }
 }
 
 export const Route = createFileRoute('/jefe-zona/ventas/')({
@@ -113,6 +124,10 @@ function VenderPage() {
     refetchInterval: REFETCH_MS,
   })
 
+  // Lavadores: catálogo que casi no cambia mid-turno — mismo criterio que en el dashboard de
+  // seguimiento (no está en el refresh(), no tenía el bug de "congelado" porque no depende de
+  // ninguna acción de esta pantalla). Se usa para "Cargar a un lavador" al cerrar una cuenta (0065).
+  const [lavadores] = useState(data.lavadores)
   const [tab, setTab] = useState<'mostrador' | 'cuentas'>('mostrador')
   const [recibo, setRecibo] = useState<VentaReciboData | null>(null)
   const [anulando, setAnulando] = useState<Venta | null>(null)
@@ -542,11 +557,18 @@ function VenderPage() {
           items={itemsPorCuenta.get(cerrandoCuenta.id) ?? []}
           productoNombre={productoNombre}
           responsableSugerido={turno?.responsableActual ?? ''}
+          lavadores={lavadores}
           onClose={() => setCerrandoCuenta(null)}
           onCerrada={async (pagos) => {
             const items = itemsPorCuenta.get(cerrandoCuenta.id) ?? []
             abrirReciboDeCuenta(cerrandoCuenta, items, pagos)
             setCerrandoCuenta(null)
+            await refresh()
+          }}
+          onCargarALavador={async (lavadorId, cerradaPor) => {
+            await cargarCuentaALavador(cerrandoCuenta.id, lavadorId, cerradaPor)
+            setCerrandoCuenta(null)
+            toast.exito('Cuenta cargada a la liquidación del lavador')
             await refresh()
           }}
         />
@@ -983,24 +1005,32 @@ function AbrirCuentaModal({
 }
 
 // Cobra todos los productos pendientes de la cuenta juntos (pago partido, 1-3 líneas que deben
-// sumar exacto) — mismo componente `PagoLineas` que ya usa `CobroModal`/`VentaCarrito`.
+// sumar exacto) — mismo componente `PagoLineas` que ya usa `CobroModal`/`VentaCarrito`. Desde
+// 0065 también se puede cerrar SIN cobrar plata: "Cargar a un lavador" descuenta stock/costo
+// igual que siempre pero deja el total como deuda de ese lavador, a saldar en su liquidación.
 function CerrarCuentaModal({
   cuenta,
   items,
   productoNombre,
   responsableSugerido,
+  lavadores,
   onClose,
   onCerrada,
+  onCargarALavador,
 }: {
   cuenta: Cuenta
   items: Venta[]
   productoNombre: (id: string) => string
   responsableSugerido: string
+  lavadores: Lavador[]
   onClose: () => void
   onCerrada: (pagos: PagoLineaInput[]) => Promise<void>
+  onCargarALavador: (lavadorId: string, cerradaPor: string) => Promise<void>
 }) {
   const total = items.reduce((s, v) => s + v.total, 0)
+  const [modo, setModo] = useState<'cobrar' | 'lavador'>('cobrar')
   const [pagoLineas, setPagoLineas] = useState<PagoLineaBorrador[]>([nuevaLineaBorrador(total)])
+  const [lavadorId, setLavadorId] = useState('')
   const [cerradaPor, setCerradaPor] = useState(responsableSugerido)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -1015,6 +1045,24 @@ function CerrarCuentaModal({
     if (enVueloRef.current) return
     if (!cerradaPor.trim()) {
       setError('Indica quién cierra la cuenta')
+      return
+    }
+    if (modo === 'lavador') {
+      if (!lavadorId) {
+        setError('Selecciona a qué lavador se le carga')
+        return
+      }
+      setError(null)
+      enVueloRef.current = true
+      setSaving(true)
+      try {
+        await onCargarALavador(lavadorId, cerradaPor.trim())
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'No se pudo cargar la cuenta al lavador')
+        toast.desdeError(err, 'No se pudo cargar la cuenta al lavador')
+        enVueloRef.current = false
+        setSaving(false)
+      }
       return
     }
     if (!cuadra) {
@@ -1040,7 +1088,7 @@ function CerrarCuentaModal({
     <div className="fixed inset-0 z-30 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
       <div className="custom-scroll flex max-h-[90vh] w-full max-w-sm flex-col overflow-y-auto rounded-t-2xl bg-white p-5 shadow-card-hover sm:rounded-2xl sm:p-6">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-neutral-900">Cobrar y cerrar — {cuenta.titular}</h3>
+          <h3 className="text-base font-semibold text-neutral-900">Cerrar cuenta — {cuenta.titular}</h3>
           <button
             type="button"
             onClick={onClose}
@@ -1066,10 +1114,46 @@ function CerrarCuentaModal({
             </div>
           </div>
 
-          <div className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium text-neutral-700">Cómo paga</span>
-            <PagoLineas lineas={pagoLineasEfectivas} onChange={setPagoLineas} total={total} />
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setModo('cobrar')}
+              className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                modo === 'cobrar' ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-neutral-300 text-neutral-600 hover:bg-neutral-50'
+              }`}
+            >
+              Cobrar ahora
+            </button>
+            <button
+              type="button"
+              onClick={() => setModo('lavador')}
+              className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                modo === 'lavador' ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-neutral-300 text-neutral-600 hover:bg-neutral-50'
+              }`}
+            >
+              Cargar a un lavador
+            </button>
           </div>
+
+          {modo === 'cobrar' ? (
+            <div className="flex flex-col gap-1.5 text-sm">
+              <span className="font-medium text-neutral-700">Cómo paga</span>
+              <PagoLineas lineas={pagoLineasEfectivas} onChange={setPagoLineas} total={total} />
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1.5 text-sm">
+              <span className="font-medium text-neutral-700">¿A qué lavador se le carga?</span>
+              <CustomSelect
+                value={lavadorId}
+                onChange={setLavadorId}
+                placeholder="Selecciona un lavador"
+                options={lavadores.filter((l) => l.activo).map((l) => ({ value: l.id, label: l.nombre }))}
+              />
+              <p className="rounded-lg bg-warning-50 px-3 py-2 text-xs text-warning-700">
+                No entra plata hoy — el total ({COP.format(total)}) se descuenta de su próxima liquidación.
+              </p>
+            </div>
+          )}
 
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-medium text-neutral-700">Quién cierra</span>
@@ -1084,11 +1168,11 @@ function CerrarCuentaModal({
 
           <button
             type="submit"
-            disabled={saving || !cuadra}
+            disabled={saving || (modo === 'cobrar' && !cuadra) || (modo === 'lavador' && !lavadorId)}
             className="flex items-center justify-center gap-2 rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
           >
             <Wallet size={16} />
-            {saving ? 'Cerrando…' : `Cobrar ${COP.format(total)}`}
+            {saving ? 'Cerrando…' : modo === 'cobrar' ? `Cobrar ${COP.format(total)}` : `Cargar ${COP.format(total)} a la liquidación`}
           </button>
         </form>
       </div>

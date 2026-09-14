@@ -16,6 +16,12 @@ export interface ColillaLiquidacionData {
   // siendo semanal. Nunca debe poder confundirse con un pago real, de ahí el rótulo distinto acá
   // y en la impresión.
   tipo?: 'liquidacion' | 'informativo'
+  // Solo en modo 'informativo' (0065): deuda pendiente del lavador AHORA MISMO (préstamos +
+  // nevera, independiente del día que muestra la colilla) y lo que realmente le tocaría cobrar si
+  // se liquidara ya — max(0, monto − deudaPendiente). Ausente/0 = sin deuda, no se muestra la
+  // línea extra.
+  deudaPendiente?: number
+  montoNeto?: number
 }
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
@@ -82,6 +88,19 @@ export function ColillaLiquidacionModal({ colilla, onClose }: { colilla: Colilla
             {COP.format(colilla.monto)}
           </span>
         </div>
+
+        {informativo && colilla.deudaPendiente ? (
+          <div className="mt-2 flex flex-col gap-1 rounded-lg bg-neutral-50 px-3 py-2.5 text-xs text-neutral-600">
+            <div className="flex items-center justify-between">
+              <span>Debe (préstamos/nevera)</span>
+              <span className="font-medium text-neutral-800">−{COP.format(colilla.deudaPendiente)}</span>
+            </div>
+            <div className="flex items-center justify-between border-t border-neutral-200 pt-1 font-medium text-neutral-900">
+              <span>Le quedaría a favor</span>
+              <span>{COP.format(colilla.montoNeto ?? 0)}</span>
+            </div>
+          </div>
+        ) : null}
 
         <button
           type="button"
@@ -169,6 +188,19 @@ function ColillaPrint({ colilla }: { colilla: ColillaLiquidacionData }) {
         <span>{informativo ? 'GANADO HOY' : 'TOTAL'}</span>
         <span>{COP.format(colilla.monto)}</span>
       </div>
+
+      {informativo && colilla.deudaPendiente ? (
+        <>
+          <div className="tiquete-58__fila">
+            <span className="tiquete-58__fila-label">Debe (préstamos/nevera)</span>
+            <span className="tiquete-58__fila-valor">−{COP.format(colilla.deudaPendiente)}</span>
+          </div>
+          <div className="tiquete-58__fila">
+            <span className="tiquete-58__fila-label">Le quedaría a favor</span>
+            <span className="tiquete-58__fila-valor">{COP.format(colilla.montoNeto ?? 0)}</span>
+          </div>
+        </>
+      ) : null}
 
       <div className="tiquete-58__linea" />
 

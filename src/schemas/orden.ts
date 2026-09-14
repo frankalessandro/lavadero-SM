@@ -11,7 +11,10 @@ export const metodoPagoBaseSchema = z.enum(['efectivo', 'transferencia', 'datafo
 // Etiqueta-resumen guardada en `ordenes.metodo_pago` / `ventas.metodo_pago`: el método real
 // cuando el cobro tuvo uno solo, o 'mixto' cuando se repartió en varios. El detalle por método
 // (para arqueo/dashboards) sale de la tabla `pagos`, nunca de esta columna.
-export const metodoPagoSchema = z.enum(['efectivo', 'transferencia', 'datafono', 'mixto'])
+// 'cuenta_lavador' (0065) solo aplica a `ventas` — producto de nevera cargado a la liquidación de
+// un lavador en vez de cobrado en plata; una orden nunca tiene este valor (el check constraint de
+// `ordenes.metodo_pago` no lo incluye, se comparte el enum para no duplicarlo).
+export const metodoPagoSchema = z.enum(['efectivo', 'transferencia', 'datafono', 'mixto', 'cuenta_lavador'])
 export const estadoOrdenSchema = z.enum(['en_proceso', 'listo', 'entregado', 'anulada'])
 
 // Postgres devuelve `null` (no `undefined`) en las columnas nullable sin valor —

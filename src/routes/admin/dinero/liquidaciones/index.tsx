@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { Wallet, CheckCircle2, Receipt, Clock, ShieldCheck, Ban, X } from 'lucide-react'
+import { Wallet, CheckCircle2, Receipt, Clock, ShieldCheck, Ban, X, HandCoins } from 'lucide-react'
 import {
   fetchComisionesPendientes,
   fetchLiquidaciones,
@@ -30,6 +30,8 @@ import {
 import { PeriodoSelector } from '../../../../components/layout/PeriodoSelector'
 import { calcularRango, type ModoPeriodo } from '../../../../lib/periodo'
 import { fetchLavadores } from '../../../../data/lavadores'
+import { fetchTurnoAbierto } from '../../../../data/turnos'
+import { fetchPrestamosDeTurno, type DeudaLavador } from '../../../../data/deudasLavador'
 import { fetchConfiguracion } from '../../../../data/configuracion'
 import { fetchTiposVehiculo } from '../../../../data/tiposVehiculo'
 import { fetchCombos } from '../../../../data/combos'
@@ -45,6 +47,7 @@ import { StatCard } from '../../../../components/layout/StatCard'
 import { ConfirmModal } from '../../../../components/layout/ConfirmModal'
 import { BarChart } from '../../../../components/layout/BarChart'
 import { ColillaLiquidacionModal, type ColillaLiquidacionData } from '../../../../components/layout/ColillaLiquidacionModal'
+import { PrestamosDeTurno } from '../../../../components/layout/PrestamosDeTurno'
 import { ColillaJefeZonaModal, type ColillaJefeZonaData } from '../../../../components/layout/ColillaJefeZonaModal'
 import {
   DetalleOrdenesJefeZonaModal,
@@ -63,7 +66,7 @@ function hoyISO(offsetDias = 0): string {
 }
 
 async function loadData() {
-  const [pendientes, historico, lavadores, configuracion, tiposVehiculo, combos, pendientesJefeZona, historicoJefeZona] =
+  const [pendientes, historico, lavadores, configuracion, tiposVehiculo, combos, pendientesJefeZona, historicoJefeZona, turnoJefeZona] =
     await Promise.all([
       fetchComisionesPendientes(),
       fetchLiquidaciones(),
@@ -73,8 +76,24 @@ async function loadData() {
       fetchCombos(),
       fetchComisionesPendientesJefeZona(),
       fetchLiquidacionesJefeZona(),
+      fetchTurnoAbierto('jefe_zona'),
     ])
-  return { pendientes, historico, lavadores, configuracion, tiposVehiculo, combos, pendientesJefeZona, historicoJefeZona }
+  // Préstamos de la caja del turno abierto (0065) — igual criterio que las compras: solo tiene
+  // sentido si hay turno abierto ahora mismo (admin no abre turno, pero la única caja que presta
+  // es la de jefe de zona).
+  const prestamosTurno = turnoJefeZona ? await fetchPrestamosDeTurno(turnoJefeZona.id) : []
+  return {
+    pendientes,
+    historico,
+    lavadores,
+    configuracion,
+    tiposVehiculo,
+    combos,
+    pendientesJefeZona,
+    historicoJefeZona,
+    turnoJefeZona,
+    prestamosTurno,
+  }
 }
 
 // Admin puede generar liquidación diaria (solo hoy) o semanal (últimos 7 días) para cualquier
@@ -101,6 +120,8 @@ function LiquidacionesPage() {
   const [configuracion, setConfiguracion] = useState(initial.configuracion)
   const [tiposVehiculo] = useState(initial.tiposVehiculo)
   const [combos] = useState(initial.combos)
+  const [turnoJefeZona, setTurnoJefeZona] = useState(initial.turnoJefeZona)
+  const [prestamosTurno, setPrestamosTurno] = useState<DeudaLavador[]>(initial.prestamosTurno)
   const periodicidadLabel = configuracion.periodicidadLiquidacion === 'diaria' ? 'diaria' : 'semanal'
   const [generando, setGenerando] = useState<string | null>(null)
   // Clave `${lavadorId}:${periodicidad}` mientras se calcula el monto real del rango antes de
@@ -243,7 +264,14 @@ function LiquidacionesPage() {
     try {
       const preview = await fetchMontoPeriodo(resumen.lavadorId, rangoPeriodo.periodoInicio, rangoPeriodo.periodoFin, tiposVehiculo, combos)
       setConfirmandoGenerar({
-        comision: { lavadorId: resumen.lavadorId, lavadorNombre: resumen.lavadorNombre, montoPendiente: resumen.montoPendiente, cantidadOrdenes: resumen.cantidadOrdenes },
+        comision: {
+          lavadorId: resumen.lavadorId,
+          lavadorNombre: resumen.lavadorNombre,
+          montoPendiente: resumen.montoPendiente,
+          cantidadOrdenes: resumen.cantidadOrdenes,
+          deudaPendiente: preview.deudaPendiente,
+          montoNeto: preview.montoNeto,
+        },
         periodicidad: 'semanal',
         periodoInicio: rangoPeriodo.periodoInicio,
         periodoFin: rangoPeriodo.periodoFin,
@@ -329,6 +357,8 @@ function LiquidacionesPage() {
     setConfiguracion(data.configuracion)
     setPendientesJefeZona(data.pendientesJefeZona)
     setHistoricoJefeZona(data.historicoJefeZona)
+    setTurnoJefeZona(data.turnoJefeZona)
+    setPrestamosTurno(data.prestamosTurno)
     router.invalidate()
   }
 
@@ -374,6 +404,8 @@ function LiquidacionesPage() {
         monto: preview.monto,
         generadaEn: new Date().toISOString(),
         tipo: 'informativo',
+        deudaPendiente: preview.deudaPendiente,
+        montoNeto: preview.montoNeto,
       })
     } catch (err) {
       toast.desdeError(err, 'No se pudo calcular la colilla del día')
@@ -757,6 +789,12 @@ function LiquidacionesPage() {
                   </div>
                   <p className="text-xl font-semibold text-neutral-900">{COP.format(comision.montoPendiente)}</p>
                   <p className="-mt-2 text-xs text-neutral-400">Acumulado total sin liquidar — no es lo que cae en cada rango de abajo.</p>
+                  {comision.deudaPendiente > 0 ? (
+                    <p className="-mt-1.5 flex items-center gap-1.5 rounded-lg bg-warning-50 px-2.5 py-1.5 text-xs text-warning-700">
+                      <HandCoins size={13} className="shrink-0" />
+                      Debe {COP.format(comision.deudaPendiente)} (préstamos/nevera) — se le descuenta al liquidar
+                    </p>
+                  ) : null}
                   <div className="grid grid-cols-2 gap-2">
                     {(['diaria', 'semanal'] as const).map((periodicidad) => {
                       const key = `${comision.lavadorId}:${periodicidad}`
@@ -794,6 +832,20 @@ function LiquidacionesPage() {
             </>
           )}
         </section>
+
+        {turnoJefeZona ? (
+          <PrestamosDeTurno
+            turno={turnoJefeZona}
+            lavadores={lavadores}
+            prestamos={prestamosTurno}
+            onRegistrado={(prestamo) => setPrestamosTurno((previos) => [prestamo, ...previos])}
+            size="sm"
+          />
+        ) : (
+          <p className="rounded-lg bg-neutral-50 px-4 py-3 text-xs text-neutral-500">
+            No hay turno de jefe de zona abierto ahora mismo — para prestarle a un lavador hace falta una caja abierta.
+          </p>
+        )}
 
         <section className="flex flex-col gap-3">
           <h3 className="text-sm font-semibold text-neutral-900">Histórico de liquidaciones</h3>
@@ -1015,11 +1067,17 @@ function LiquidacionesPage() {
                 : 'de los últimos 7 días'
           } (${confirmandoGenerar.periodoInicio} → ${confirmandoGenerar.periodoFin}) para ${
             confirmandoGenerar.comision.lavadorNombre
-          } por ${COP.format(confirmandoGenerar.preview.monto)}? Carros: ${
-            confirmandoGenerar.preview.desglose.autos.cantidad
-          } (${COP.format(confirmandoGenerar.preview.desglose.autos.monto)}) · Motos: ${
-            confirmandoGenerar.preview.desglose.motos.cantidad
-          } (${COP.format(confirmandoGenerar.preview.desglose.motos.monto)}).`}
+          }? Carros: ${confirmandoGenerar.preview.desglose.autos.cantidad} (${COP.format(
+            confirmandoGenerar.preview.desglose.autos.monto,
+          )}) · Motos: ${confirmandoGenerar.preview.desglose.motos.cantidad} (${COP.format(
+            confirmandoGenerar.preview.desglose.motos.monto,
+          )}).${
+            confirmandoGenerar.preview.deudaPendiente > 0
+              ? ` Comisión: ${COP.format(confirmandoGenerar.preview.monto)} − deuda pendiente ${COP.format(
+                  confirmandoGenerar.preview.deudaPendiente,
+                )} = se le paga ${COP.format(confirmandoGenerar.preview.montoNeto)}.`
+              : ` Se le paga ${COP.format(confirmandoGenerar.preview.monto)}.`
+          }`}
           confirmLabel="Generar liquidación"
           variant="primary"
           onConfirm={handleGenerar}
@@ -1334,7 +1392,14 @@ function LiquidacionRow({
         </div>
         <p className="mt-0.5 text-[11px] text-neutral-400">Generada {FECHA_HORA.format(new Date(liquidacion.creadoEn))}</p>
       </td>
-      <td className="px-5 py-3 text-neutral-900">{COP.format(liquidacion.monto)}</td>
+      <td className="px-5 py-3 text-neutral-900">
+        {COP.format(liquidacion.monto)}
+        {liquidacion.deudaDescontada > 0 ? (
+          <p className="text-[11px] font-normal text-warning-700">
+            −{COP.format(liquidacion.deudaDescontada)} deuda (bruto {COP.format(liquidacion.comisionBruta)})
+          </p>
+        ) : null}
+      </td>
       <td className="px-5 py-3">
         <span
           title={liquidacion.anulada ? liquidacion.motivoAnulacion ?? undefined : undefined}

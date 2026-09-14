@@ -192,6 +192,12 @@ export function ArqueoCaja({
                 <span className="font-medium text-neutral-900">{COP.format(desglose.compras)}</span>
               </div>
             ) : null}
+            {desglose.prestamos > 0 ? (
+              <div className="flex items-center justify-between">
+                <span>− Préstamos a lavadores</span>
+                <span className="font-medium text-neutral-900">{COP.format(desglose.prestamos)}</span>
+              </div>
+            ) : null}
           </div>
         ) : null}
 

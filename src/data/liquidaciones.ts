@@ -2,11 +2,12 @@ import { db } from '../lib/db'
 import { liquidacionSchema, type Liquidacion } from '../schemas/liquidacion'
 import { fetchLavadores } from './lavadores'
 import { fetchOrdenesEnRango } from './ordenes'
+import { fetchDeudaPendiente, fetchDeudaPendientePorLavador } from './deudasLavador'
 import type { TipoVehiculo } from '../schemas/tipoVehiculo'
 import type { Combo } from '../schemas/combo'
 
 const LIQUIDACION_SELECT =
-  'id, lavadorId:lavador_id, periodoInicio:periodo_inicio, periodoFin:periodo_fin, monto, pagada, pagadaEn:pagada_en, anulada, motivoAnulacion:motivo_anulacion, anuladaPor:anulada_por, anuladaEn:anulada_en, creadoEn:creado_en'
+  'id, lavadorId:lavador_id, periodoInicio:periodo_inicio, periodoFin:periodo_fin, monto, comisionBruta:comision_bruta, deudaDescontada:deuda_descontada, pagada, pagadaEn:pagada_en, anulada, motivoAnulacion:motivo_anulacion, anuladaPor:anulada_por, anuladaEn:anulada_en, creadoEn:creado_en'
 
 export async function fetchLiquidaciones(): Promise<Liquidacion[]> {
   const { data, error } = await db
@@ -20,8 +21,15 @@ export async function fetchLiquidaciones(): Promise<Liquidacion[]> {
 export interface ComisionPendiente {
   lavadorId: string
   lavadorNombre: string
+  // Comisión acumulada sin liquidar (sin restar deuda) — mismo significado de siempre.
   montoPendiente: number
   cantidadOrdenes: number
+  // Deuda pendiente del lavador (préstamos + consumo de nevera, 0065) — lo que se le descontaría
+  // si se liquidara TODO lo pendiente ahora mismo.
+  deudaPendiente: number
+  // max(0, montoPendiente − deudaPendiente) — nunca negativo (regla confirmada: si la deuda es
+  // mayor, la liquidación de ese corte queda en $0 y el resto de deuda sigue pendiente).
+  montoNeto: number
 }
 
 // "Lavar entre 2" (a criterio de recepción/jefe de zona): reparte la comisión total de la orden
@@ -93,13 +101,18 @@ export async function fetchComisionesPendientes(): Promise<ComisionPendiente[]> 
     }
   }
 
+  const deudaPorLavador = await fetchDeudaPendientePorLavador()
+
   return elegibles.map((lavador) => {
     const acumuladoLavador = acumulado.get(lavador.id) ?? { monto: 0, cantidad: 0 }
+    const deudaPendiente = deudaPorLavador.get(lavador.id) ?? 0
     return {
       lavadorId: lavador.id,
       lavadorNombre: lavador.nombre,
       montoPendiente: acumuladoLavador.monto,
       cantidadOrdenes: acumuladoLavador.cantidad,
+      deudaPendiente,
+      montoNeto: Math.max(0, acumuladoLavador.monto - deudaPendiente),
     }
   })
 }
@@ -241,16 +254,21 @@ function desglosarPorCategoria(
 }
 
 export interface MontoPeriodo {
+  // Comisión generada en el rango, sin restar deuda (lo que dice el desglose de abajo).
   monto: number
   cantidadOrdenes: number
   desglose: DesgloseVehiculos
+  // Deuda pendiente del lavador AHORA MISMO (no depende del rango — 0065) y lo que realmente se
+  // pagaría si se generara esta liquidación: max(0, monto − deudaPendiente).
+  deudaPendiente: number
+  montoNeto: number
 }
 
 // Preview del monto real que generaría una liquidación diaria o semanal para este lavador y
 // rango — se usa antes de confirmar, porque `montoPendiente` de fetchComisionesPendientes es el
 // acumulado TOTAL sin liquidar, no lo que cae dentro de un rango diario/semanal específico.
 // Incluye el desglose por carros/motos para que el admin vea, antes de generar, cuánto hizo con
-// cada uno en ese periodo.
+// cada uno en ese periodo, y la deuda que se le descontaría (0065).
 export async function fetchMontoPeriodo(
   lavadorId: string,
   periodoInicio: string,
@@ -258,17 +276,23 @@ export async function fetchMontoPeriodo(
   tiposVehiculo: Pick<TipoVehiculo, 'id' | 'categoria'>[],
   combos: Pick<Combo, 'id' | 'nombre'>[],
 ): Promise<MontoPeriodo> {
-  const ordenes = await ordenesElegibles(lavadorId, periodoInicio, periodoFin)
+  const [ordenes, deudaPendiente] = await Promise.all([
+    ordenesElegibles(lavadorId, periodoInicio, periodoFin),
+    fetchDeudaPendiente(lavadorId),
+  ])
   // El desglose y el monto deben ser la MITAD para este lavador cuando la orden se lavó entre 2,
   // no el total de la orden — de ahí el map antes de pasarlo a desglosarPorCategoria.
   const ordenesConSuMonto = ordenes.map((orden) => ({
     ...orden,
     comisionLavador: comisionParaLavador(orden, lavadorId),
   }))
+  const monto = ordenesConSuMonto.reduce((suma, orden) => suma + orden.comisionLavador, 0)
   return {
-    monto: ordenesConSuMonto.reduce((suma, orden) => suma + orden.comisionLavador, 0),
+    monto,
     cantidadOrdenes: ordenes.length,
     desglose: desglosarPorCategoria(ordenesConSuMonto, tiposVehiculo, combos),
+    deudaPendiente,
+    montoNeto: Math.max(0, monto - deudaPendiente),
   }
 }
 
@@ -311,18 +335,28 @@ export async function fetchDesgloseLiquidacion(
   )
 }
 
-// No hay transacciones multi-tabla vía PostgREST plano, así que se hace en dos pasos:
-// 1) inserta la liquidación con el monto calculado, 2) marca las órdenes correspondientes
-// con el id recién creado. Si el paso 2 falla se reporta explícitamente — la liquidación
-// queda creada pero las órdenes sin marcar, hay que revisar manualmente (no falla en silencio).
+// No hay transacciones multi-tabla vía PostgREST plano, así que se hace en tres pasos: 1) inserta
+// la liquidación (con el neto ya calculado — comisionBruta menos deuda aplicada, 0065), 2) marca
+// las órdenes correspondientes con el id recién creado, 3) si se descontó deuda, deja la fila
+// 'liquidacion' en el ledger de deudas_lavador que refleja ese descuento. Si un paso falla se
+// reporta explícitamente con lo que sí quedó hecho — no falla en silencio, hay que revisar manual.
+//
+// La deuda se aplica hasta donde alcance la comisión de ESTE corte (regla confirmada,
+// 2026-09-14): nunca se genera un monto negativo. Si sobra deuda, sigue pendiente para la
+// siguiente liquidación — no se "pierde" ni se inventa, sigue en el ledger sin tocar.
 export async function generarLiquidacion(
   lavadorId: string,
   periodoInicio: string,
   periodoFin: string,
 ): Promise<Liquidacion> {
-  const ordenes = await ordenesElegibles(lavadorId, periodoInicio, periodoFin)
+  const [ordenes, deudaPendiente] = await Promise.all([
+    ordenesElegibles(lavadorId, periodoInicio, periodoFin),
+    fetchDeudaPendiente(lavadorId),
+  ])
 
-  const monto = ordenes.reduce((suma, orden) => suma + comisionParaLavador(orden, lavadorId), 0)
+  const comisionBruta = ordenes.reduce((suma, orden) => suma + comisionParaLavador(orden, lavadorId), 0)
+  const deudaDescontada = Math.min(Math.max(deudaPendiente, 0), comisionBruta)
+  const monto = comisionBruta - deudaDescontada
 
   const { data: creada, error: errorInsert } = await db
     .from('liquidaciones')
@@ -331,6 +365,8 @@ export async function generarLiquidacion(
       periodo_inicio: periodoInicio,
       periodo_fin: periodoFin,
       monto,
+      comision_bruta: comisionBruta,
+      deuda_descontada: deudaDescontada,
     })
     .select(LIQUIDACION_SELECT)
     .single()
@@ -356,6 +392,22 @@ export async function generarLiquidacion(
     if (errorUpdate) {
       throw new Error(
         `La liquidación ${liquidacion.id} se creó por $${monto} pero no se pudo marcar ${ordenes.length} orden(es) como liquidadas: ${errorUpdate.message}. Revisar manualmente.`,
+      )
+    }
+  }
+
+  if (deudaDescontada > 0) {
+    const { error: errorDeuda } = await db.from('deudas_lavador').insert({
+      lavador_id: lavadorId,
+      tipo: 'liquidacion',
+      monto: -deudaDescontada,
+      liquidacion_id: liquidacion.id,
+      motivo: `Descontado al liquidar (periodo ${periodoInicio} → ${periodoFin})`,
+      registrado_por: 'Generación de liquidación',
+    })
+    if (errorDeuda) {
+      throw new Error(
+        `La liquidación ${liquidacion.id} se generó por $${monto} (se descontaron $${deudaDescontada} de deuda) pero no se pudo registrar ese descuento en el ledger de deuda: ${errorDeuda.message}. Revisar manualmente — la deuda del lavador puede quedar duplicada si se vuelve a liquidar sin corregir esto.`,
       )
     }
   }
