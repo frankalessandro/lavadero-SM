@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { createFileRoute, Link } from '@tanstack/react-router'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Droplets,
   Users,
@@ -81,6 +82,7 @@ import { AgregarProductoModal } from '../../components/layout/AgregarProductoMod
 import { QuitarProductoModal } from '../../components/layout/QuitarProductoModal'
 import { BarChart } from '../../components/layout/BarChart'
 import { METODO_PAGO_LABEL } from '../../lib/metodoPago'
+import { queryKeys } from '../../lib/queryKeys'
 
 function hoyISO(): string {
   return new Date().toISOString().slice(0, 10)
@@ -183,25 +185,76 @@ function construirMensajeWhatsapp(orden: Orden, esMoto: boolean): string {
   return `${saludo}\n\n${cuerpo}`
 }
 
+// Mismo intervalo que tenía el `setInterval` manual — reemplazado por `refetchInterval` de
+// TanStack Query, que ya trae su propia protección contra apilar refrescos si uno tarda más que
+// el intervalo (no hace falta el `useRef` de "en vuelo" que tenía el código anterior).
+const REFETCH_MS = 12_000
+
 function JefeZonaDashboard() {
   const data = Route.useLoaderData()
-  const router = useRouter()
-  const [ordenesHoy, setOrdenesHoy] = useState(data.ordenesHoy)
+  const queryClient = useQueryClient()
+
+  // Fase 4 (2026-09-14): mismo patrón que /jefe-zona/ventas — cada pieza que antes vivía en un
+  // useState alimentado por `refresh()` (Promise.all + setState + router.invalidate(), bajando
+  // todo dos veces por acción y otra vez cada 12s) pasa a useQuery con `initialData` del loader.
+  const { data: ordenesHoy = [] } = useQuery({
+    queryKey: queryKeys.ordenesHoy,
+    queryFn: fetchOrdenesHoy,
+    initialData: data.ordenesHoy,
+    refetchInterval: REFETCH_MS,
+  })
   // Tablero: toda orden sin cobrar, de cualquier fecha (ver fetchOrdenesAbiertas).
-  const [ordenesAbiertas, setOrdenesAbiertas] = useState(data.ordenesAbiertas)
-  const [entregadasHoy, setEntregadasHoy] = useState(data.entregadasHoy)
+  const { data: ordenesAbiertas = [] } = useQuery({
+    queryKey: queryKeys.ordenesAbiertas,
+    queryFn: fetchOrdenesAbiertas,
+    initialData: data.ordenesAbiertas,
+    refetchInterval: REFETCH_MS,
+  })
+  const { data: entregadasHoy = [] } = useQuery({
+    queryKey: queryKeys.ordenesEntregadasHoy,
+    queryFn: fetchOrdenesEntregadasHoy,
+    initialData: data.entregadasHoy,
+    refetchInterval: REFETCH_MS,
+  })
   const [lavadores] = useState(data.lavadores)
   const [asistenciasHoy] = useState(data.asistenciasHoy)
   const [descansosHoy] = useState(data.descansosHoy)
   const [combos] = useState(data.combos)
   const [tiposVehiculo] = useState(data.tiposVehiculo)
-  const [turno, setTurno] = useState(data.turno)
-  const [productos] = useState<Producto[]>(data.productos)
-  const [stock, setStock] = useState(data.stock)
+  const { data: turno } = useQuery({
+    queryKey: queryKeys.turnoAbierto('jefe_zona'),
+    queryFn: () => fetchTurnoAbierto('jefe_zona'),
+    initialData: data.turno,
+    refetchInterval: REFETCH_MS,
+  })
+  // Antes un useState sin setter: quedaba congelado toda la sesión aunque cambiara un precio o se
+  // diera de alta un producto desde otra pantalla. Con useQuery se refresca solo (staleTime +
+  // refetch periódico) y comparte caché con /jefe-zona/ventas (misma clave).
+  const { data: productos = [] as Producto[] } = useQuery({
+    queryKey: queryKeys.productosOperativo,
+    queryFn: fetchProductosOperativo,
+    initialData: data.productos,
+  })
+  const { data: stock = [] } = useQuery({
+    queryKey: queryKeys.stockOperativo,
+    queryFn: fetchStockProductosOperativo,
+    initialData: data.stock,
+    refetchInterval: REFETCH_MS,
+  })
   // Productos de nevera cargados a órdenes que todavía no se cobran (estado 'pendiente'). Se
   // agrupan por orden para el chip de cada tarjeta y para sumarlos al total del cobro.
-  const [ventasPendientes, setVentasPendientes] = useState<Venta[]>(data.ventasPendientes)
-  const [pagosHoy, setPagosHoy] = useState<Pago[]>(data.pagosHoy)
+  const { data: ventasPendientes = [] as Venta[] } = useQuery({
+    queryKey: queryKeys.ventasPendientes,
+    queryFn: fetchVentasPendientes,
+    initialData: data.ventasPendientes,
+    refetchInterval: REFETCH_MS,
+  })
+  const { data: pagosHoy = [] as Pago[] } = useQuery({
+    queryKey: queryKeys.pagosHoy,
+    queryFn: fetchPagosHoy,
+    initialData: data.pagosHoy,
+    refetchInterval: REFETCH_MS,
+  })
   const [agregandoProductoA, setAgregandoProductoA] = useState<Orden | null>(null)
   const [quitandoProducto, setQuitandoProducto] = useState<Venta | null>(null)
   // `finalizarPrimero`: cuando se cobra directo desde una orden en_proceso (cliente esperando en
@@ -239,49 +292,24 @@ function JefeZonaDashboard() {
     return () => clearInterval(id)
   }, [])
 
+  // Invalida todo lo que este dashboard lee tras una acción — mismo alcance que el `refresh()`
+  // manual de antes, pero como una sola ronda de refetch deduplicada por TanStack Query, y sin la
+  // segunda descarga que hacía `router.invalidate()` por separado. El sondeo de 12s (antes un
+  // `setInterval` a mano) ya lo cubre `refetchInterval` en cada `useQuery` de arriba — no hace
+  // falta un efecto aparte ni el `useRef` de "no apilar", eso ya lo maneja la librería.
   async function refresh() {
-    const [nuevasOrdenes, nuevasEntregadas, nuevoTurno, nuevoStock, nuevasPendientes, nuevosPagos, nuevasAbiertas] = await Promise.all([
-      fetchOrdenesHoy(),
-      fetchOrdenesEntregadasHoy(),
-      fetchTurnoAbierto('jefe_zona'),
-      fetchStockProductosOperativo(),
-      fetchVentasPendientes(),
-      fetchPagosHoy(),
-      fetchOrdenesAbiertas(),
-    ])
-    setOrdenesHoy(nuevasOrdenes)
-    setOrdenesAbiertas(nuevasAbiertas)
-    setEntregadasHoy(nuevasEntregadas)
-    setTurno(nuevoTurno)
-    setStock(nuevoStock)
-    setVentasPendientes(nuevasPendientes)
-    setPagosHoy(nuevosPagos)
-    router.invalidate()
+    await Promise.all(
+      [
+        queryKeys.ordenesHoy,
+        queryKeys.ordenesAbiertas,
+        queryKeys.ordenesEntregadasHoy,
+        queryKeys.turnoAbierto('jefe_zona'),
+        queryKeys.stockOperativo,
+        queryKeys.ventasPendientes,
+        queryKeys.pagosHoy,
+      ].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+    )
   }
-
-  // Recepción/vigilante meten datos desde otros dispositivos (tablet, otro puesto) al mismo
-  // tiempo — sin esto, el jefe de zona solo veía vehículos/movimientos nuevos si recargaba con
-  // F5. Polling simple (no realtime): funciona igual contra Supabase que contra el sandbox local
-  // de PostgREST, que no tiene servidor de realtime. `enVueloRef` evita apilar refrescos si uno
-  // tarda más que el intervalo (ej. conexión lenta en el momento).
-  const enVueloRef = useRef(false)
-  useEffect(() => {
-    const id = setInterval(async () => {
-      if (enVueloRef.current) return
-      enVueloRef.current = true
-      try {
-        await refresh()
-      } catch {
-        // Sin toast a propósito: es un refresco automático cada 12s — un toast por cada fallo de
-        // red intermitente sería ruido constante, no una señal útil. Si la conexión se cae de
-        // verdad, la próxima acción del usuario (cobrar, anular, etc.) sí falla con su propio toast.
-      } finally {
-        enVueloRef.current = false
-      }
-    }, 12_000)
-    return () => clearInterval(id)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   async function handleMarcarListo(orden: Orden) {
     await marcarListo(orden.id)
