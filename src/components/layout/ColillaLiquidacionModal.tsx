@@ -9,6 +9,13 @@ export interface ColillaLiquidacionData {
   desglose: DesgloseVehiculos
   monto: number
   generadaEn: string
+  // 'liquidacion' (default) = corte real, ya generado — marcó las órdenes como liquidadas.
+  // 'informativo' = "colilla del día" (2026-09-14): mismo cálculo que una diaria real
+  // (fetchMontoPeriodo del día de hoy), pero SIN generar nada — no marca ninguna orden, no crea
+  // fila en `liquidaciones`. Sirve para que el lavador vea cómo va mientras el pago real sigue
+  // siendo semanal. Nunca debe poder confundirse con un pago real, de ahí el rótulo distinto acá
+  // y en la impresión.
+  tipo?: 'liquidacion' | 'informativo'
 }
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
@@ -31,14 +38,17 @@ function periodoLabel(inicio: string, fin: string): string {
 // Se usa recién generada la liquidación (Admin > Liquidaciones) y también para reimprimir
 // cualquiera del histórico.
 export function ColillaLiquidacionModal({ colilla, onClose }: { colilla: ColillaLiquidacionData; onClose: () => void }) {
+  const informativo = colilla.tipo === 'informativo'
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-[2px]">
       <div className="custom-scroll max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-2xl bg-white p-6 shadow-card-hover">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h3 className="text-base font-semibold text-neutral-900">Colilla de liquidación</h3>
+            <h3 className="text-base font-semibold text-neutral-900">
+              {informativo ? 'Colilla del día' : 'Colilla de liquidación'}
+            </h3>
             <p className="text-xs text-neutral-500">
-              {colilla.lavadorNombre} · {periodoLabel(colilla.periodoInicio, colilla.periodoFin)}
+              {colilla.lavadorNombre} · {informativo ? `Corte informativo del ${FECHA.format(new Date(`${colilla.periodoInicio}T00:00:00`))}` : periodoLabel(colilla.periodoInicio, colilla.periodoFin)}
             </p>
             <p className="text-[11px] text-neutral-400">Generada {FECHA_HORA.format(new Date(colilla.generadaEn))}</p>
           </div>
@@ -51,14 +61,26 @@ export function ColillaLiquidacionModal({ colilla, onClose }: { colilla: Colilla
           </button>
         </div>
 
+        {informativo ? (
+          <p className="mb-4 rounded-lg bg-warning-50 px-3 py-2 text-xs text-warning-700">
+            No es un pago — es solo para ver cómo va hoy. El pago real se liquida semanal.
+          </p>
+        ) : null}
+
         <div className="flex flex-col gap-4 text-sm">
           <DesgloseCategoriaBloque label="Carros" categoria={colilla.desglose.autos} />
           <DesgloseCategoriaBloque label="Motos" categoria={colilla.desglose.motos} />
         </div>
 
-        <div className="mt-3 flex items-center justify-between rounded-lg bg-primary-50 px-3 py-2.5 text-sm">
-          <span className="font-medium text-primary-900">Total liquidado</span>
-          <span className="text-lg font-bold text-primary-700">{COP.format(colilla.monto)}</span>
+        <div
+          className={`mt-3 flex items-center justify-between rounded-lg px-3 py-2.5 text-sm ${informativo ? 'bg-warning-50' : 'bg-primary-50'}`}
+        >
+          <span className={`font-medium ${informativo ? 'text-warning-900' : 'text-primary-900'}`}>
+            {informativo ? 'Ganado hoy (sin liquidar aún)' : 'Total liquidado'}
+          </span>
+          <span className={`text-lg font-bold ${informativo ? 'text-warning-700' : 'text-primary-700'}`}>
+            {COP.format(colilla.monto)}
+          </span>
         </div>
 
         <button
@@ -110,11 +132,13 @@ function DesgloseCategoriaBloque({ label, categoria }: { label: string; categori
 // a document.body para que @media print pueda ocultar #root entero sin dejar hueco en blanco.
 function ColillaPrint({ colilla }: { colilla: ColillaLiquidacionData }) {
   const totalVehiculos = colilla.desglose.autos.cantidad + colilla.desglose.motos.cantidad
+  const informativo = colilla.tipo === 'informativo'
   return createPortal(
     <div className="tiquete-58">
       <p className="tiquete-58__marca">Carwash SM</p>
       <p className="tiquete-58__tagline">Lavadero · Parqueadero</p>
-      <p className="tiquete-58__titulo">Colilla de liquidación</p>
+      <p className="tiquete-58__titulo">{informativo ? 'Colilla del día (informativo)' : 'Colilla de liquidación'}</p>
+      {informativo ? <p className="tiquete-58__tagline">*** NO ES UN PAGO — pago semanal ***</p> : null}
 
       <div className="tiquete-58__linea-solida" />
 
@@ -123,8 +147,10 @@ function ColillaPrint({ colilla }: { colilla: ColillaLiquidacionData }) {
         <span className="tiquete-58__fila-valor">{colilla.lavadorNombre}</span>
       </div>
       <div className="tiquete-58__fila">
-        <span className="tiquete-58__fila-label">Periodo</span>
-        <span className="tiquete-58__fila-valor">{periodoLabel(colilla.periodoInicio, colilla.periodoFin)}</span>
+        <span className="tiquete-58__fila-label">{informativo ? 'Corte' : 'Periodo'}</span>
+        <span className="tiquete-58__fila-valor">
+          {informativo ? FECHA.format(new Date(`${colilla.periodoInicio}T00:00:00`)) : periodoLabel(colilla.periodoInicio, colilla.periodoFin)}
+        </span>
       </div>
       <div className="tiquete-58__fila">
         <span className="tiquete-58__fila-label">Generada</span>
@@ -140,13 +166,17 @@ function ColillaPrint({ colilla }: { colilla: ColillaLiquidacionData }) {
       <div className="tiquete-58__linea-solida" />
 
       <div className="tiquete-58__total">
-        <span>TOTAL</span>
+        <span>{informativo ? 'GANADO HOY' : 'TOTAL'}</span>
         <span>{COP.format(colilla.monto)}</span>
       </div>
 
       <div className="tiquete-58__linea" />
 
-      <p className="tiquete-58__pie">Gracias por su trabajo</p>
+      {informativo ? (
+        <p className="tiquete-58__pie">No es un pago — corte informativo. Se liquida semanal.</p>
+      ) : (
+        <p className="tiquete-58__pie">Gracias por su trabajo</p>
+      )}
     </div>,
     document.body,
   )

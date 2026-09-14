@@ -108,6 +108,11 @@ function LiquidacionesPage() {
   const [calculando, setCalculando] = useState<string | null>(null)
   const [pagando, setPagando] = useState<string | null>(null)
   const [cargandoColilla, setCargandoColilla] = useState<string | null>(null)
+  // "Colilla del día" (2026-09-14): corte informativo de hoy, mismo cálculo que una diaria real
+  // pero SIN generar nada — no marca órdenes, no crea liquidación. Sirve para que Admin (y jefe de
+  // patio desde su propia vista) le muestre a un lavador cómo va, mientras el pago real es
+  // semanal. Comparte el mismo estado `colilla`/modal que la colilla real, distinguido por `tipo`.
+  const [cargandoColillaHoy, setCargandoColillaHoy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [confirmandoGenerar, setConfirmandoGenerar] = useState<{
     comision: ComisionPendiente
@@ -350,6 +355,30 @@ function LiquidacionesPage() {
       toast.desdeError(err, 'No se pudo abrir la colilla')
     } finally {
       setCargandoColilla(null)
+    }
+  }
+
+  // Mismo cálculo que se usaría para generar la diaria de HOY (fetchMontoPeriodo del día), pero
+  // no se genera nada — no marca órdenes ni crea fila en `liquidaciones`. Es la "colilla del día"
+  // que Alessandro pidió para mostrarle a un lavador cómo va, mientras el pago real es semanal.
+  async function handleVerColillaHoy(comision: ComisionPendiente) {
+    setCargandoColillaHoy(comision.lavadorId)
+    try {
+      const hoy = hoyISO()
+      const preview = await fetchMontoPeriodo(comision.lavadorId, hoy, hoy, tiposVehiculo, combos)
+      setColilla({
+        lavadorNombre: comision.lavadorNombre,
+        periodoInicio: hoy,
+        periodoFin: hoy,
+        desglose: preview.desglose,
+        monto: preview.monto,
+        generadaEn: new Date().toISOString(),
+        tipo: 'informativo',
+      })
+    } catch (err) {
+      toast.desdeError(err, 'No se pudo calcular la colilla del día')
+    } finally {
+      setCargandoColillaHoy(null)
     }
   }
 
@@ -749,6 +778,16 @@ function LiquidacionesPage() {
                       )
                     })}
                   </div>
+                  <button
+                    type="button"
+                    disabled={cargandoColillaHoy === comision.lavadorId}
+                    onClick={() => handleVerColillaHoy(comision)}
+                    className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-neutral-300 py-2 text-xs font-medium text-neutral-600 transition-colors hover:border-warning-300 hover:text-warning-700 disabled:opacity-50"
+                    title="Corte informativo de hoy — no genera ni marca nada, el pago sigue siendo semanal"
+                  >
+                    <Receipt size={13} />
+                    {cargandoColillaHoy === comision.lavadorId ? 'Calculando…' : 'Colilla del día (informativa)'}
+                  </button>
                 </Card>
               ))}
             </div>

@@ -5,12 +5,19 @@ import { fetchOrdenesHoy } from '../../../data/ordenes'
 import { fetchLavadores } from '../../../data/lavadores'
 import { fetchCombos } from '../../../data/combos'
 import { fetchTiposVehiculo } from '../../../data/tiposVehiculo'
+import { fetchMontoPeriodo } from '../../../data/liquidaciones'
 import type { Orden } from '../../../schemas/orden'
 import { Card } from '../../../components/layout/Card'
 import { CustomSelect } from '../../../components/layout/CustomSelect'
 import { ReciboModal, type ReciboData } from '../../../components/layout/ReciboModal'
+import { ColillaLiquidacionModal, type ColillaLiquidacionData } from '../../../components/layout/ColillaLiquidacionModal'
+import { toast } from '../../../lib/toast'
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
+
+function hoyISO(): string {
+  return new Date().toISOString().slice(0, 10)
+}
 
 async function loadLiquidaciones() {
   const [ordenesHoy, lavadores, combos, tiposVehiculo] = await Promise.all([
@@ -35,6 +42,11 @@ function LiquidacionesJefeZona() {
   const [ordenesHoy] = useState(data.ordenesHoy)
   const [lavadorFiltro, setLavadorFiltro] = useState<string>('todos')
   const [recibo, setRecibo] = useState<ReciboData | null>(null)
+  // "Colilla del día" (2026-09-14): mismo cálculo que generar la diaria de HOY, pero informativo —
+  // no marca ninguna orden ni crea liquidación. El pago real sigue siendo semanal desde Admin
+  // (regla de negocio 4); esto es solo para que el jefe de patio le muestre a un lavador cómo va.
+  const [colilla, setColilla] = useState<ColillaLiquidacionData | null>(null)
+  const [cargandoColillaHoy, setCargandoColillaHoy] = useState<string | null>(null)
 
   const lavadorNombre = (id: string | undefined) => (id ? lavadores.find((l) => l.id === id)?.nombre : undefined) ?? 'Sin asignar'
   const comboNombre = (id: string | undefined) => (id ? combos.find((c) => c.id === id)?.nombre : undefined) ?? 'Sin combo'
@@ -85,6 +97,27 @@ function LiquidacionesJefeZona() {
   }, [entregadasHoy])
 
   const ordenadas = [...filtradas].sort((a, b) => b.consecutivo - a.consecutivo)
+
+  async function handleVerColillaHoy(lavadorId: string) {
+    setCargandoColillaHoy(lavadorId)
+    try {
+      const hoy = hoyISO()
+      const preview = await fetchMontoPeriodo(lavadorId, hoy, hoy, tiposVehiculo, combos)
+      setColilla({
+        lavadorNombre: lavadorNombre(lavadorId),
+        periodoInicio: hoy,
+        periodoFin: hoy,
+        desglose: preview.desglose,
+        monto: preview.monto,
+        generadaEn: new Date().toISOString(),
+        tipo: 'informativo',
+      })
+    } catch (err) {
+      toast.desdeError(err, 'No se pudo calcular la colilla del día')
+    } finally {
+      setCargandoColillaHoy(null)
+    }
+  }
 
   function abrirTiquete(orden: Orden) {
     setRecibo({
@@ -149,6 +182,16 @@ function LiquidacionesJefeZona() {
                   </div>
                 </div>
                 <p className="text-xl font-semibold text-neutral-900">{COP.format(p.monto)}</p>
+                <button
+                  type="button"
+                  disabled={cargandoColillaHoy === p.lavadorId}
+                  onClick={() => handleVerColillaHoy(p.lavadorId)}
+                  className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-neutral-300 py-2 text-xs font-medium text-neutral-600 transition-colors hover:border-warning-300 hover:text-warning-700 disabled:opacity-50"
+                  title="Corte informativo de hoy — no es un pago, se liquida semanal desde Admin"
+                >
+                  <Receipt size={13} />
+                  {cargandoColillaHoy === p.lavadorId ? 'Calculando…' : 'Colilla del día'}
+                </button>
               </Card>
             ))}
           </div>
@@ -222,6 +265,8 @@ function LiquidacionesJefeZona() {
       {recibo ? (
         <ReciboModal recibo={recibo} variant={recibo.metodoPago ? 'pago' : 'ingreso'} onClose={() => setRecibo(null)} />
       ) : null}
+
+      {colilla ? <ColillaLiquidacionModal colilla={colilla} onClose={() => setColilla(null)} /> : null}
     </div>
   )
 }
