@@ -56,6 +56,20 @@ export async function fetchOrdenesHoy(): Promise<Orden[]> {
   return (data as Record<string, unknown>[]).map(mapOrdenRow)
 }
 
+// Órdenes sin cobrar (en proceso / listas), SIN filtro de fecha — fuente del tablero de
+// seguimiento. Con `fetchOrdenesHoy` una orden que no se cobraba el mismo día desaparecía del
+// tablero a medianoche y ya no había botón para cobrarla ni anularla (pasó con 6 órdenes entre
+// ago y sep 2026). Volumen chico: lo que hay en el patio ahora.
+export async function fetchOrdenesAbiertas(): Promise<Orden[]> {
+  const { data, error } = await db
+    .from('ordenes')
+    .select(ORDEN_SELECT)
+    .in('estado', ['en_proceso', 'listo'])
+    .order('consecutivo', { ascending: false })
+  if (error) throw new Error(error.message)
+  return (data as Record<string, unknown>[]).map(mapOrdenRow)
+}
+
 // Dinero que realmente entró hoy — solo órdenes cobradas/entregadas hoy, no lo registrado hoy.
 // Es la fuente correcta para "caja del día" en los dashboards (regla: el ingreso cuenta al
 // cobrar, no al recibir el vehículo).

@@ -86,9 +86,11 @@ function VenderPage() {
     router.invalidate()
   }
 
+  // Disponible, no stock bruto: lo cargado a órdenes/cuentas sin cobrar ya salió de la nevera
+  // (mismo criterio con que valida `registrar_venta`/`registrar_venta_carrito`, 0060).
   const stockPorProducto = useMemo(() => {
     const mapa = new Map<string, number>()
-    for (const s of stock) mapa.set(s.productoId, s.stock)
+    for (const s of stock) mapa.set(s.productoId, s.disponible)
     return mapa
   }, [stock])
 
@@ -619,6 +621,7 @@ function VentaCarrito({
                   const stock = stockPorProducto.get(p.id) ?? 0
                   const cant = carrito.get(p.id) ?? 0
                   const agotado = stock <= 0
+                  const tope = cant >= stock
                   return (
                     <div
                       key={p.id}
@@ -628,13 +631,13 @@ function VentaCarrito({
                     >
                       <button
                         type="button"
-                        disabled={agotado}
+                        disabled={agotado || tope}
                         onClick={() => setCantidad(p.id, cant + 1)}
                         className="text-left disabled:cursor-not-allowed"
                       >
                         <span className="block text-sm font-medium text-neutral-800">{p.nombre}</span>
                         <span className="block text-xs text-neutral-500">
-                          {COP.format(p.precioVenta ?? 0)} · stock {stock}
+                          {COP.format(p.precioVenta ?? 0)} · quedan {stock}
                         </span>
                       </button>
                       {cant > 0 ? (
@@ -649,8 +652,9 @@ function VentaCarrito({
                           <span className="text-sm font-semibold text-neutral-900">{cant}</span>
                           <button
                             type="button"
+                            disabled={tope}
                             onClick={() => setCantidad(p.id, cant + 1)}
-                            className="flex size-7 items-center justify-center rounded text-neutral-600 hover:bg-neutral-100"
+                            className="flex size-7 items-center justify-center rounded text-neutral-600 hover:bg-neutral-100 disabled:opacity-30"
                           >
                             <Plus size={14} />
                           </button>

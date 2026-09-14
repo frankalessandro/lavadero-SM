@@ -47,6 +47,29 @@ function alertaStockBajo(bajos: { nombre: string }[], ruta: string): Alerta | nu
   }
 }
 
+// Desde 0060 el cobro de una orden/cuenta ya no se bloquea por stock (la existencia se valida al
+// cargar el producto), así que el sistema puede quedar por debajo de cero. Eso siempre significa
+// un movimiento sin registrar (compra no ingresada, conteo mal hecho) — se deja a la vista.
+function alertaStockNegativo(
+  stock: { productoId: string; stock: number; disponible: number }[],
+  productos: { id: string; nombre: string }[],
+  ruta: string,
+): Alerta | null {
+  const negativos = stock.filter((s) => s.stock < 0 || s.disponible < 0)
+  if (negativos.length === 0) return null
+  const nombre = (id: string) => productos.find((p) => p.id === id)?.nombre ?? 'Producto'
+  return {
+    id: 'stock-negativo',
+    titulo: `${negativos.length} producto${negativos.length === 1 ? '' : 's'} con stock por debajo de cero`,
+    detalle:
+      negativos
+        .slice(0, 4)
+        .map((s) => `${nombre(s.productoId)} (${Math.min(s.stock, s.disponible)})`)
+        .join(', ') + (negativos.length > 4 ? '…' : '') + ' — falta registrar una entrada o recontar.',
+    ruta,
+  }
+}
+
 function alertaHuecosConsecutivo(consecutivos: number[], ruta: string): Alerta | null {
   const huecos = huecosEntre(consecutivos)
   if (huecos.length === 0) return null
@@ -74,6 +97,9 @@ export async function fetchAlertas(): Promise<Alerta[]> {
   const bajos = productos.filter((p) => p.activo && nivelStock(stockPorProducto.get(p.id) ?? 0) === 'bajo')
 
   const alertas: Alerta[] = []
+
+  const negativo = alertaStockNegativo(stock, productos, '/admin/dinero/inventario')
+  if (negativo) alertas.push(negativo)
 
   const stockBajo = alertaStockBajo(bajos, '/admin/dinero/inventario')
   if (stockBajo) alertas.push(stockBajo)
@@ -130,6 +156,9 @@ export async function fetchAlertasJefeZona(): Promise<Alerta[]> {
   const bajos = productos.filter((p) => p.activo && nivelStock(stockPorProducto.get(p.id) ?? 0) === 'bajo')
 
   const alertas: Alerta[] = []
+
+  const negativo = alertaStockNegativo(stock, productos, '/jefe-zona/inventario')
+  if (negativo) alertas.push(negativo)
 
   const stockBajo = alertaStockBajo(bajos, '/jefe-zona/inventario')
   if (stockBajo) alertas.push(stockBajo)

@@ -173,7 +173,7 @@ function InventarioPage() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <StatCard label="Productos activos" value={String(productosActivos.length)} icon={Boxes} />
-        <StatCard label="Valorización total" value={COP.format(valorizacionTotal)} hint="Costo promedio de entradas" icon={Coins} />
+        <StatCard label="Valorización total" value={COP.format(valorizacionTotal)} hint="Costo promedio de entradas (o costo oficial si no hay)" icon={Coins} />
       </div>
 
       <FaltantesPendientes faltantes={data.faltantes} />
@@ -522,6 +522,9 @@ function StockTable({
                 </td>
                 <td className="px-5 py-3">
                   <span className={`font-medium ${bajoMin ? 'text-danger-600' : 'text-neutral-900'}`}>{stockActual}</span>
+                  {s && s.comprometido > 0 ? (
+                    <p className="text-xs text-warning-700">{s.comprometido} cargadas sin cobrar</p>
+                  ) : null}
                 </td>
                 <td className="px-5 py-3 text-neutral-500">{producto.stockMinimo}</td>
                 <td className="px-5 py-3 text-neutral-700">{COP.format(Math.round(s?.costoPromedio ?? 0))}</td>

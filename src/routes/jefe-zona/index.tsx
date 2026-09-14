@@ -36,9 +36,11 @@ import {
   UserCheck,
   UserX,
   BedDouble,
+  AlertTriangle,
 } from 'lucide-react'
 import {
   fetchOrdenesHoy,
+  fetchOrdenesAbiertas,
   fetchOrdenesEntregadasHoy,
   marcarListo,
   volverAProceso,
@@ -102,6 +104,7 @@ async function loadDashboard() {
     stock,
     ventasPendientes,
     pagosHoy,
+    ordenesAbiertas,
   ] = await Promise.all([
     fetchOrdenesHoy(),
     fetchOrdenesEntregadasHoy(),
@@ -115,9 +118,11 @@ async function loadDashboard() {
     fetchStockProductosOperativo(),
     fetchVentasPendientes(),
     fetchPagosHoy(),
+    fetchOrdenesAbiertas(),
   ])
   return {
     ordenesHoy,
+    ordenesAbiertas,
     entregadasHoy,
     lavadores,
     combos,
@@ -182,6 +187,8 @@ function JefeZonaDashboard() {
   const data = Route.useLoaderData()
   const router = useRouter()
   const [ordenesHoy, setOrdenesHoy] = useState(data.ordenesHoy)
+  // Tablero: toda orden sin cobrar, de cualquier fecha (ver fetchOrdenesAbiertas).
+  const [ordenesAbiertas, setOrdenesAbiertas] = useState(data.ordenesAbiertas)
   const [entregadasHoy, setEntregadasHoy] = useState(data.entregadasHoy)
   const [lavadores] = useState(data.lavadores)
   const [asistenciasHoy] = useState(data.asistenciasHoy)
@@ -233,15 +240,17 @@ function JefeZonaDashboard() {
   }, [])
 
   async function refresh() {
-    const [nuevasOrdenes, nuevasEntregadas, nuevoTurno, nuevoStock, nuevasPendientes, nuevosPagos] = await Promise.all([
+    const [nuevasOrdenes, nuevasEntregadas, nuevoTurno, nuevoStock, nuevasPendientes, nuevosPagos, nuevasAbiertas] = await Promise.all([
       fetchOrdenesHoy(),
       fetchOrdenesEntregadasHoy(),
       fetchTurnoAbierto('jefe_zona'),
       fetchStockProductosOperativo(),
       fetchVentasPendientes(),
       fetchPagosHoy(),
+      fetchOrdenesAbiertas(),
     ])
     setOrdenesHoy(nuevasOrdenes)
+    setOrdenesAbiertas(nuevasAbiertas)
     setEntregadasHoy(nuevasEntregadas)
     setTurno(nuevoTurno)
     setStock(nuevoStock)
@@ -326,9 +335,10 @@ function JefeZonaDashboard() {
     () => productos.filter((p) => p.activo && p.precioVenta != null),
     [productos],
   )
+  // Disponible (stock − lo ya cargado a órdenes/cuentas sin cobrar) — es lo que valida la RPC.
   const stockPorProducto = useMemo(() => {
     const mapa = new Map<string, number>()
-    for (const s of stock) mapa.set(s.productoId, s.stock)
+    for (const s of stock) mapa.set(s.productoId, s.disponible)
     return mapa
   }, [stock])
   // ordenId -> productos pendientes de esa orden (para el chip de la tarjeta y el total del cobro).
@@ -343,8 +353,14 @@ function JefeZonaDashboard() {
     return mapa
   }, [ventasPendientes])
 
-  const enProcesoLista = ordenesHoy.filter((o) => o.estado === 'en_proceso')
-  const listoLista = ordenesHoy.filter((o) => o.estado === 'listo')
+  const enProcesoLista = ordenesAbiertas.filter((o) => o.estado === 'en_proceso')
+  const listoLista = ordenesAbiertas.filter((o) => o.estado === 'listo')
+  // Inicio del día local, derivado del reloj compartido (`ahora`) para no leer la hora en render.
+  const inicioHoyMs = useMemo(() => {
+    const d = new Date(ahora)
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+  }, [ahora])
+  const deOtroDia = (orden: Orden) => new Date(orden.creadoEn).getTime() < inicioHoyMs
   const anuladasHoyLista = ordenesHoy.filter((o) => o.estado === 'anulada')
   // Buscador por placa + filtro por lavador (seguimiento y entregados hoy) — ambos se combinan.
   // Coincidencia de placa parcial, sin distinguir mayúsculas/minúsculas. "Sin asignar" filtra las
@@ -817,6 +833,7 @@ function JefeZonaDashboard() {
                   tiempoTexto={tiempoTranscurrido(orden.creadoEn, ahora)}
                   productosPendientes={ventasPendientesPorOrden.get(orden.id) ?? []}
                   productoNombre={productoNombre}
+                  deOtroDia={deOtroDia(orden)}
                   onAgregarProducto={() => setAgregandoProductoA(orden)}
                   onQuitarProducto={setQuitandoProducto}
                   onFinalizar={() => setFinalizando(orden)}
@@ -854,6 +871,7 @@ function JefeZonaDashboard() {
                   tiempoTexto={tiempoTranscurrido(orden.listaEn ?? orden.creadoEn, ahora)}
                   productosPendientes={ventasPendientesPorOrden.get(orden.id) ?? []}
                   productoNombre={productoNombre}
+                  deOtroDia={deOtroDia(orden)}
                   onAgregarProducto={() => setAgregandoProductoA(orden)}
                   onQuitarProducto={setQuitandoProducto}
                   onCobrar={() => setCobrando({ orden, finalizarPrimero: false })}
@@ -1122,6 +1140,7 @@ function OrdenCard({
   tiempoTexto,
   productosPendientes,
   productoNombre,
+  deOtroDia = false,
   onAgregarProducto,
   onQuitarProducto,
   onFinalizar,
@@ -1146,6 +1165,8 @@ function OrdenCard({
   /** Productos de nevera cargados a esta orden y aún sin cobrar. */
   productosPendientes: Venta[]
   productoNombre: (id: string) => string
+  /** Registrada un día anterior y todavía sin cobrar — se resalta para que no se olvide. */
+  deOtroDia?: boolean
   onAgregarProducto?: () => void
   onQuitarProducto?: (venta: Venta) => void
   onFinalizar?: () => void
@@ -1190,9 +1211,16 @@ function OrdenCard({
         className={`flex items-center justify-between gap-2 p-3 pb-2 ${onVerDetalle ? 'cursor-pointer' : ''}`}
       >
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="font-mono text-lg font-bold tracking-tight text-neutral-900">{orden.placa}</span>
             <span className="text-xs text-neutral-400">#{orden.consecutivo}</span>
+            {deOtroDia ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-danger-600/10 px-2 py-0.5 text-[11px] font-semibold text-danger-700">
+                <AlertTriangle size={11} />
+                Sin cobrar desde el{' '}
+                {new Date(orden.creadoEn).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}
+              </span>
+            ) : null}
           </div>
           <p className="mt-0.5 flex items-center gap-1.5 text-sm font-medium text-neutral-700">
             <UserRound size={14} className="shrink-0 text-neutral-400" />

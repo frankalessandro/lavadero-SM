@@ -70,55 +70,55 @@ export async function createMovimiento(input: MovimientoInventarioInput): Promis
   return movimientoInventarioSchema.parse(data)
 }
 
-export interface StockProducto {
+// `stock` = lo que dice el sistema (Σ movimientos). `comprometido` = unidades cargadas a órdenes
+// o cuentas sin cobrar (ya salieron de la nevera, el stock aún no las descontó). `disponible` =
+// stock − comprometido: lo que se puede vender o cargar. Las pantallas de VENTA usan `disponible`;
+// las de INVENTARIO/conteo usan `stock`.
+export interface StockOperativo {
   productoId: string
   stock: number
+  comprometido: number
+  disponible: number
+}
+
+export interface StockProducto extends StockOperativo {
   costoPromedio: number
   valorizacion: number
 }
 
-// Stock = suma de `cantidad` (con signo) de todos los movimientos del producto. Valorización
-// usa costo promedio ponderado de las entradas (no hay tabla de "costo actual" aparte, se
-// deriva del histórico) — no agrega en SQL, trae todo y suma en JS (mismo patrón que
-// `fetchTotalGastosPorCategoria`, suficiente para el volumen esperado).
+// Se agrega en SQL (RPC `stock_productos`, 0060), no en el navegador: bajar todos los
+// movimientos chocaba con el tope de 1000 filas de PostgREST. Costo promedio con el mismo
+// fallback a `productos.costo` que usa el snapshot de costo de las ventas. Solo admin.
 export async function fetchStockProductos(): Promise<StockProducto[]> {
-  const { data, error } = await db
-    .from('movimientos_inventario')
-    .select('producto_id, tipo, cantidad, costo_unitario')
+  const { data, error } = await db.rpc('stock_productos')
   if (error) throw new Error(error.message)
-
-  const acumulado = new Map<string, { stock: number; costoTotalEntradas: number; cantidadEntradas: number }>()
-  for (const m of data as { producto_id: string; tipo: string; cantidad: number; costo_unitario: number | null }[]) {
-    const actual = acumulado.get(m.producto_id) ?? { stock: 0, costoTotalEntradas: 0, cantidadEntradas: 0 }
-    actual.stock += m.cantidad
-    if (m.tipo === 'entrada' && m.costo_unitario != null) {
-      actual.costoTotalEntradas += m.cantidad * m.costo_unitario
-      actual.cantidadEntradas += m.cantidad
-    }
-    acumulado.set(m.producto_id, actual)
-  }
-
-  return Array.from(acumulado.entries()).map(([productoId, v]) => {
-    const costoPromedio = v.cantidadEntradas > 0 ? v.costoTotalEntradas / v.cantidadEntradas : 0
-    return {
-      productoId,
-      stock: v.stock,
-      costoPromedio,
-      valorizacion: Math.round(v.stock * costoPromedio),
-    }
-  })
+  return (
+    data as {
+      producto_id: string
+      stock: number
+      comprometido: number
+      disponible: number
+      costo_promedio: number
+      valorizacion: number
+    }[]
+  ).map((r) => ({
+    productoId: r.producto_id,
+    stock: r.stock,
+    comprometido: r.comprometido,
+    disponible: r.disponible,
+    costoPromedio: r.costo_promedio,
+    valorizacion: r.valorizacion,
+  }))
 }
 
-// Para jefe_zona: solo cantidad de stock, sin costo/valorización (esos datos no llegan por la
-// vista operativa — jefe_zona no tiene acceso a costos/márgenes, ver CLAUDE.md §Roles).
-export async function fetchStockProductosOperativo(): Promise<Pick<StockProducto, 'productoId' | 'stock'>[]> {
-  const { data, error } = await db.from('movimientos_inventario_operativo').select('producto_id, cantidad')
+// Para jefe_zona: mismas cantidades, sin costo/valorización (CLAUDE.md §Roles).
+export async function fetchStockProductosOperativo(): Promise<StockOperativo[]> {
+  const { data, error } = await db.rpc('stock_productos_operativo')
   if (error) throw new Error(error.message)
-
-  const stockPorProducto = new Map<string, number>()
-  for (const m of data as { producto_id: string; cantidad: number }[]) {
-    stockPorProducto.set(m.producto_id, (stockPorProducto.get(m.producto_id) ?? 0) + m.cantidad)
-  }
-
-  return Array.from(stockPorProducto.entries()).map(([productoId, stock]) => ({ productoId, stock }))
+  return (data as { producto_id: string; stock: number; comprometido: number; disponible: number }[]).map((r) => ({
+    productoId: r.producto_id,
+    stock: r.stock,
+    comprometido: r.comprometido,
+    disponible: r.disponible,
+  }))
 }

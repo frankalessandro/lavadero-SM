@@ -21,6 +21,8 @@ export function AgregarProductoModal({
   titulo: string
   subtitulo: string
   productos: Producto[]
+  // DISPONIBLE por producto (stock − lo ya cargado a órdenes/cuentas sin cobrar), no el stock
+  // bruto: lo comprometido ya salió de la nevera. Es el mismo criterio con que valida la RPC.
   stockPorProducto: Map<string, number>
   onClose: () => void
   onAgregar: (productoId: string, cantidad: number) => Promise<void>
@@ -107,6 +109,7 @@ export function AgregarProductoModal({
                     const stock = stockPorProducto.get(p.id) ?? 0
                     const cant = carrito.get(p.id) ?? 0
                     const agotado = stock <= 0
+                    const tope = cant >= stock
                     return (
                       <div
                         key={p.id}
@@ -116,13 +119,13 @@ export function AgregarProductoModal({
                       >
                         <button
                           type="button"
-                          disabled={agotado}
+                          disabled={agotado || tope}
                           onClick={() => setCantidad(p.id, cant + 1)}
                           className="text-left disabled:cursor-not-allowed"
                         >
                           <span className="block text-sm font-medium text-neutral-800">{p.nombre}</span>
                           <span className="block text-xs text-neutral-500">
-                            {COP.format(p.precioVenta ?? 0)} · stock {stock}
+                            {COP.format(p.precioVenta ?? 0)} · quedan {stock}
                           </span>
                         </button>
                         {cant > 0 ? (
@@ -137,8 +140,9 @@ export function AgregarProductoModal({
                             <span className="text-sm font-semibold text-neutral-900">{cant}</span>
                             <button
                               type="button"
+                              disabled={tope}
                               onClick={() => setCantidad(p.id, cant + 1)}
-                              className="flex size-6 items-center justify-center rounded text-neutral-600 hover:bg-neutral-100"
+                              className="flex size-6 items-center justify-center rounded text-neutral-600 hover:bg-neutral-100 disabled:opacity-30"
                             >
                               <Plus size={13} />
                             </button>

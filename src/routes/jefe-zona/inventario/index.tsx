@@ -101,6 +101,11 @@ function StockPage() {
     for (const s of stock) mapa.set(s.productoId, s.stock)
     return mapa
   }, [stock])
+  const comprometidoPorProducto = useMemo(() => {
+    const mapa = new Map<string, number>()
+    for (const s of stock) if (s.comprometido > 0) mapa.set(s.productoId, s.comprometido)
+    return mapa
+  }, [stock])
 
   const productoNombre = (id: string) => productos.find((p) => p.id === id)?.nombre ?? '—'
 
@@ -209,6 +214,7 @@ function StockPage() {
         badgeClass="bg-warning-50 text-warning-700"
         productos={vendibles}
         stockPorProducto={stockPorProducto}
+        comprometidoPorProducto={comprometidoPorProducto}
         mostrarPrecio
         vacio="No hay productos de nevera registrados en Admin › Dinero › Inventario y ventas."
       />
@@ -253,6 +259,7 @@ function StockTable({
   badgeClass,
   productos,
   stockPorProducto,
+  comprometidoPorProducto,
   mostrarPrecio = false,
   vacio,
 }: {
@@ -263,6 +270,7 @@ function StockTable({
   badgeClass: string
   productos: Producto[]
   stockPorProducto: Map<string, number>
+  comprometidoPorProducto?: Map<string, number>
   mostrarPrecio?: boolean
   vacio: string
 }) {
@@ -321,13 +329,19 @@ function StockTable({
             const stockActual = stockPorProducto.get(producto.id) ?? 0
             const nivel = nivelStock(stockActual)
             const bajoMin = nivel === 'bajo'
+            const comprometido = comprometidoPorProducto?.get(producto.id) ?? 0
             return (
               <tr key={producto.id} className="border-b border-neutral-100 last:border-0">
                 <td className="px-5 py-3">
                   <p className="font-medium text-neutral-900">{producto.nombre}</p>
                   <p className="text-xs text-neutral-400">{producto.unidadMedida}</p>
                 </td>
-                <td className={`px-5 py-3 font-medium ${bajoMin ? 'text-danger-600' : 'text-neutral-900'}`}>{stockActual}</td>
+                <td className={`px-5 py-3 font-medium ${bajoMin ? 'text-danger-600' : 'text-neutral-900'}`}>
+                  {stockActual}
+                  {comprometido > 0 ? (
+                    <p className="text-xs font-normal text-warning-700">{comprometido} cargadas sin cobrar</p>
+                  ) : null}
+                </td>
                 <td className="px-5 py-3 text-neutral-500">{producto.stockMinimo}</td>
                 {mostrarPrecio ? (
                   <td className="px-5 py-3 text-neutral-700">

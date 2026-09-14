@@ -5,6 +5,7 @@ import { fetchTurnoAbierto, fetchTurnos, abrirTurno } from '../../../data/turnos
 import { fetchCategoriasGasto, fetchGastosDeTurno, type GastoConCategoria } from '../../../data/gastos'
 import { fetchProductosOperativo } from '../../../data/productos'
 import { fetchConteoDeTurno } from '../../../data/conteosInventario'
+import { fetchOrdenesAbiertas } from '../../../data/ordenes'
 import type { ConteoInventario as ConteoInventarioType } from '../../../schemas/conteoInventario'
 import type { TurnoCaja } from '../../../schemas/turnoCaja'
 import { toast } from '../../../lib/toast'
@@ -20,11 +21,12 @@ import { TurnoResponsableBanner } from '../../../components/layout/TurnoResponsa
 import { usePersonalElegible, nombreDe } from '../../../lib/personalElegible'
 
 async function loadCaja() {
-  const [turnoAbierto, turnosRecientes, categorias, productos] = await Promise.all([
+  const [turnoAbierto, turnosRecientes, categorias, productos, ordenesAbiertas] = await Promise.all([
     fetchTurnoAbierto('jefe_zona'),
     fetchTurnos('jefe_zona'),
     fetchCategoriasGasto(),
     fetchProductosOperativo(),
+    fetchOrdenesAbiertas(),
   ])
   // Lo que depende del turno abierto va en una segunda ronda.
   const [gastosTurno, conteoApertura, conteoCierre] = turnoAbierto
@@ -39,6 +41,7 @@ async function loadCaja() {
     turnosRecientes: turnosRecientes.slice(0, 5),
     categorias,
     productos,
+    ordenesAbiertas,
     gastosTurno,
     conteoApertura,
     conteoCierre,
@@ -82,6 +85,7 @@ function CajaJefeZona() {
   const [gastosTurno, setGastosTurno] = useState<GastoConCategoria[]>(data.gastosTurno)
   const [conteoApertura, setConteoApertura] = useState<ConteoInventarioType | undefined>(data.conteoApertura)
   const [conteoCierre, setConteoCierre] = useState<ConteoInventarioType | undefined>(data.conteoCierre)
+  const [ordenesAbiertas, setOrdenesAbiertas] = useState(data.ordenesAbiertas)
   const [tarea, setTarea] = useState<Tarea>(null)
   const [modoCierre, setModoCierre] = useState(false)
   // Resultado del cierre recién hecho — se muestra una vez y se descarta con "Listo".
@@ -90,10 +94,12 @@ function CajaJefeZona() {
   )
 
   async function refresh() {
-    const [nuevoAbierto, nuevosRecientes] = await Promise.all([
+    const [nuevoAbierto, nuevosRecientes, nuevasAbiertas] = await Promise.all([
       fetchTurnoAbierto('jefe_zona'),
       fetchTurnos('jefe_zona'),
+      fetchOrdenesAbiertas(),
     ])
+    setOrdenesAbiertas(nuevasAbiertas)
     setTurnoAbierto(nuevoAbierto)
     setTurnosRecientes(nuevosRecientes.slice(0, 5))
     if (nuevoAbierto) {
@@ -205,6 +211,20 @@ function CajaJefeZona() {
           {modoCierre ? (
             <div className="flex flex-col gap-2 border-t border-neutral-100 pt-4">
               <p className="text-xs font-medium uppercase tracking-wide text-neutral-400">Para cerrar el turno</p>
+              {ordenesAbiertas.length > 0 ? (
+                // Aviso, no bloqueo: se puede cerrar caja con lavados por cobrar. Pero una orden que se
+                // entrega sin pasar por "Cobrar" nunca entra al arqueo, y si se pagó por transferencia
+                // la caja cuadra igual y nadie se entera.
+                <div className="flex items-start gap-2.5 rounded-xl border border-warning-600/25 bg-warning-50 p-3 text-sm text-warning-700">
+                  <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+                  <p>
+                    Hay {ordenesAbiertas.length} {ordenesAbiertas.length === 1 ? 'orden sin cobrar' : 'órdenes sin cobrar'}{' '}
+                    ({ordenesAbiertas.map((o) => o.placa).slice(0, 4).join(', ')}
+                    {ordenesAbiertas.length > 4 ? '…' : ''}). Si ya se entregaron, cóbralas en el tablero antes de
+                    hacer el arqueo; si siguen en el patio, puedes cerrar igual.
+                  </p>
+                </div>
+              ) : null}
               <ItemChecklist
                 numero={1}
                 icono={Boxes}
