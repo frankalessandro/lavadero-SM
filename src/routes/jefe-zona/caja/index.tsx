@@ -1,11 +1,18 @@
 import { useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { Lock, CheckCircle2, AlertTriangle, Circle, X, Wallet } from 'lucide-react'
-import { fetchTurnoAbierto, fetchTurnos, abrirTurno } from '../../../data/turnos'
+import { Lock, CheckCircle2, AlertTriangle, Circle, X, Boxes, Wallet } from 'lucide-react'
+import { fetchTurnoAbierto, fetchTurnos, abrirTurno, traspasarTurno } from '../../../data/turnos'
 import { fetchCategoriasGasto, fetchGastosDeTurno, type GastoConCategoria } from '../../../data/gastos'
+import { fetchProductosOperativo } from '../../../data/productos'
+import { fetchConteoDeTurno, fetchPendientesPorConfirmar, marcaConteo } from '../../../data/conteosInventario'
 import { fetchOrdenesAbiertas } from '../../../data/ordenes'
 import { fetchLavadores } from '../../../data/lavadores'
 import { fetchPrestamosDeTurno, type DeudaLavador } from '../../../data/deudasLavador'
+import type {
+  ConteoInventario as ConteoInventarioType,
+  MomentoConteo,
+  PendienteCobro,
+} from '../../../schemas/conteoInventario'
 import type { TurnoCaja } from '../../../schemas/turnoCaja'
 import { toast } from '../../../lib/toast'
 
@@ -14,33 +21,42 @@ import { CurrencyInput } from '../../../components/layout/CurrencyInput'
 import { CustomSelect } from '../../../components/layout/CustomSelect'
 import { GastosDeTurno } from '../../../components/layout/GastosDeTurno'
 import { PrestamosDeTurno } from '../../../components/layout/PrestamosDeTurno'
+import { ConteoInventario } from '../../../components/layout/ConteoInventario'
 import { ArqueoCaja } from '../../../components/layout/ArqueoCaja'
 import { IndicadorCuadrado } from '../../../components/layout/PantallaTarea'
 import { TurnoResponsableBanner } from '../../../components/layout/TurnoResponsableBanner'
 import { usePersonalElegible, nombreDe } from '../../../lib/personalElegible'
 
-// El conteo de inventario (apertura/cierre, 0048) está desactivado hasta nuevo aviso (auditoría
-// pendiente, 2026-09-15) — trigger `turnos_caja_cierre_requiere_conteo` deshabilitado en la base
-// y esta pantalla ya no lo pide. No se borró el componente/RPCs, solo se sacó del flujo acá.
+// Conteo de inventario encadenado (0068): apertura antes de vender (la base bloquea la venta sin
+// ella) y cierre antes del arqueo (trigger `turnos_caja_cierre_requiere_conteo`, sin excepciones).
 async function loadCaja() {
-  const [turnoAbierto, turnosRecientes, categorias, ordenesAbiertas, lavadores] = await Promise.all([
+  const [turnoAbierto, turnosRecientes, categorias, productos, ordenesAbiertas, lavadores] = await Promise.all([
     fetchTurnoAbierto('jefe_zona'),
     fetchTurnos('jefe_zona'),
     fetchCategoriasGasto(),
+    fetchProductosOperativo(),
     fetchOrdenesAbiertas(),
     fetchLavadores(),
   ])
   // Lo que depende del turno abierto va en una segunda ronda.
-  const [gastosTurno, prestamosTurno] = turnoAbierto
-    ? await Promise.all([fetchGastosDeTurno(turnoAbierto.id), fetchPrestamosDeTurno(turnoAbierto.id)])
-    : [[], []]
+  const [gastosTurno, conteoApertura, conteoCierre, prestamosTurno] = turnoAbierto
+    ? await Promise.all([
+        fetchGastosDeTurno(turnoAbierto.id),
+        fetchConteoDeTurno(turnoAbierto.id, 'apertura'),
+        fetchConteoDeTurno(turnoAbierto.id, 'cierre'),
+        fetchPrestamosDeTurno(turnoAbierto.id),
+      ])
+    : [[], undefined, undefined, []]
   return {
     turnoAbierto,
     turnosRecientes: turnosRecientes.slice(0, 5),
     categorias,
+    productos,
     ordenesAbiertas,
     lavadores,
     gastosTurno,
+    conteoApertura,
+    conteoCierre,
     prestamosTurno,
   }
 }
@@ -62,6 +78,16 @@ function formatHora(iso: string | undefined) {
   return new Date(iso).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
 }
 
+// Un conteo ya guardado solo se puede leer por su cabecera (`conteos_inventario`) — las líneas con
+// las diferencias son admin-only porque llevan el valor a costo (ver §Roles). La justificación es
+// obligatoria cuando hay diferencia y no se pide cuando no la hay, así que su presencia es la
+// señal de si ese conteo cuadró. El 'reinicio' (0067) siempre lleva texto y no es un descuadre.
+function conteoCuadro(conteo: ConteoInventarioType | undefined): boolean | undefined {
+  if (!conteo) return undefined
+  if (conteo.momento === 'reinicio') return true
+  return !conteo.justificacion
+}
+
 /** Qué tarea de pantalla completa (o modal) está abierta. */
 type Tarea = 'abrir-caja' | 'arqueo' | null
 
@@ -71,13 +97,25 @@ function CajaJefeZona() {
   const [turnoAbierto, setTurnoAbierto] = useState(data.turnoAbierto)
   const [turnosRecientes, setTurnosRecientes] = useState(data.turnosRecientes)
   const [gastosTurno, setGastosTurno] = useState<GastoConCategoria[]>(data.gastosTurno)
+  const [conteoApertura, setConteoApertura] = useState<ConteoInventarioType | undefined>(data.conteoApertura)
+  const [conteoCierre, setConteoCierre] = useState<ConteoInventarioType | undefined>(data.conteoCierre)
   const [ordenesAbiertas, setOrdenesAbiertas] = useState(data.ordenesAbiertas)
   const [lavadores] = useState(data.lavadores)
   const [prestamosTurno, setPrestamosTurno] = useState<DeudaLavador[]>(data.prestamosTurno)
   const [tarea, setTarea] = useState<Tarea>(null)
+  // Conteo en curso: momento + hora del servidor en que se empezó (lo movido después se reconta) +
+  // cuentas/órdenes con productos sin cobrar a confirmar (cierre y traspaso) + a quién se entrega.
+  const [conteoEnCurso, setConteoEnCurso] = useState<{
+    momento: MomentoConteo
+    marca: string
+    pendientes: PendienteCobro[]
+    destino?: { id: string; nombre: string }
+  } | null>(null)
   const [modoCierre, setModoCierre] = useState(false)
   // Resultado del cierre recién hecho — se muestra una vez y se descarta con "Listo".
-  const [resumenCierre, setResumenCierre] = useState<{ diferenciaCaja: number } | null>(null)
+  const [resumenCierre, setResumenCierre] = useState<{ inventarioCuadrado: boolean; diferenciaCaja: number } | null>(
+    null,
+  )
 
   async function refresh() {
     const [nuevoAbierto, nuevosRecientes, nuevasAbiertas] = await Promise.all([
@@ -89,18 +127,85 @@ function CajaJefeZona() {
     setTurnoAbierto(nuevoAbierto)
     setTurnosRecientes(nuevosRecientes.slice(0, 5))
     if (nuevoAbierto) {
-      const [g, pr] = await Promise.all([fetchGastosDeTurno(nuevoAbierto.id), fetchPrestamosDeTurno(nuevoAbierto.id)])
+      const [g, ca, cc, pr] = await Promise.all([
+        fetchGastosDeTurno(nuevoAbierto.id),
+        fetchConteoDeTurno(nuevoAbierto.id, 'apertura'),
+        fetchConteoDeTurno(nuevoAbierto.id, 'cierre'),
+        fetchPrestamosDeTurno(nuevoAbierto.id),
+      ])
       setGastosTurno(g)
+      setConteoApertura(ca)
+      setConteoCierre(cc)
       setPrestamosTurno(pr)
     } else {
       setGastosTurno([])
+      setConteoApertura(undefined)
+      setConteoCierre(undefined)
       setPrestamosTurno([])
       setModoCierre(false)
     }
     router.invalidate()
   }
 
+  async function empezarConteo(momento: MomentoConteo, destino?: { id: string; nombre: string }) {
+    try {
+      const [marca, pendientes] = await Promise.all([
+        marcaConteo(),
+        momento === 'apertura' ? Promise.resolve([]) : fetchPendientesPorConfirmar(),
+      ])
+      setConteoEnCurso({ momento, marca, pendientes, destino })
+    } catch (err) {
+      toast.desdeError(err, 'No se pudo iniciar el conteo')
+    }
+  }
+
+  // Traspaso (0068): con inventario a cargo (apertura contada y sin cierre) pide conteo; si no,
+  // traspasa directo. La base aplica la misma regla, esto solo evita un error de ida y vuelta.
+  async function solicitarTraspaso(destino: { id: string; nombre: string }) {
+    if (!turnoAbierto) return
+    if (conteoApertura && !conteoCierre) {
+      await empezarConteo('traspaso', destino)
+      return
+    }
+    const actualizado = await traspasarTurno(turnoAbierto.id, destino.id)
+    setTurnoAbierto(actualizado)
+    toast.exito('Responsabilidad transferida')
+  }
+
+  const aperturaCuadro = conteoCuadro(conteoApertura)
+  const cierreCuadro = conteoCuadro(conteoCierre)
+  // Espeja el trigger `turnos_caja_cierre_requiere_conteo` (0068): sin conteo de cierre no hay arqueo.
+  const puedeArquear = Boolean(conteoCierre)
+
   // ── Tareas de pantalla completa ──────────────────────────────────────────────────────────────
+  if (conteoEnCurso && turnoAbierto) {
+    return (
+      <ConteoInventario
+        key={conteoEnCurso.marca}
+        turno={turnoAbierto}
+        momento={conteoEnCurso.momento}
+        marcaInicial={conteoEnCurso.marca}
+        productos={data.productos}
+        pendientes={conteoEnCurso.pendientes}
+        entregaA={conteoEnCurso.destino?.nombre}
+        onRegistrarTraspaso={
+          conteoEnCurso.destino
+            ? async (conteo) => {
+                const destino = conteoEnCurso.destino
+                if (!destino) return
+                await traspasarTurno(turnoAbierto.id, destino.id, conteo)
+              }
+            : undefined
+        }
+        onVolver={() => setConteoEnCurso(null)}
+        onConfirmado={async () => {
+          setConteoEnCurso(null)
+          await refresh()
+        }}
+      />
+    )
+  }
+
   if (tarea === 'arqueo' && turnoAbierto) {
     return (
       <ArqueoCaja
@@ -108,7 +213,7 @@ function CajaJefeZona() {
         onVolver={() => setTarea(null)}
         onCerrado={async ({ diferencia }) => {
           setTarea(null)
-          setResumenCierre({ diferenciaCaja: diferencia })
+          setResumenCierre({ inventarioCuadrado: cierreCuadro ?? true, diferenciaCaja: diferencia })
           await refresh()
         }}
       />
@@ -124,6 +229,10 @@ function CajaJefeZona() {
             <h2 className="text-base font-semibold text-neutral-900">Turno cerrado</h2>
             <p className="text-xs text-neutral-500">Así quedó el cuadre.</p>
           </div>
+          <IndicadorCuadrado
+            cuadrado={resumenCierre.inventarioCuadrado}
+            label={resumenCierre.inventarioCuadrado ? 'Inventario cuadrado' : 'Inventario con diferencia registrada'}
+          />
           <IndicadorCuadrado
             cuadrado={resumenCierre.diferenciaCaja === 0}
             label={
@@ -145,7 +254,14 @@ function CajaJefeZona() {
       ) : null}
 
       {turnoAbierto ? (
-        <TurnoResponsableBanner turno={turnoAbierto} onTransferido={setTurnoAbierto}>
+        <TurnoResponsableBanner
+          turno={turnoAbierto}
+          onTransferido={setTurnoAbierto}
+          onSolicitarTraspaso={solicitarTraspaso}
+          avisoTraspaso={
+            conteoApertura && !conteoCierre ? 'Antes de entregar se cuenta el inventario: lo que falte queda a tu nombre.' : undefined
+          }
+        >
           {modoCierre ? (
             <div className="flex flex-col gap-2 border-t border-neutral-100 pt-4">
               <p className="text-xs font-medium uppercase tracking-wide text-neutral-400">Para cerrar el turno</p>
@@ -165,11 +281,33 @@ function CajaJefeZona() {
               ) : null}
               <ItemChecklist
                 numero={1}
+                icono={Boxes}
+                estado={!conteoApertura ? 'pendiente' : conteoCierre ? (cierreCuadro ? 'ok' : 'alerta') : 'pendiente'}
+                titulo="Contar inventario"
+                detalle={
+                  !conteoApertura
+                    ? 'Primero registra el conteo de apertura'
+                    : conteoCierre
+                      ? cierreCuadro
+                        ? 'Cuadrado'
+                        : 'Con diferencia registrada'
+                      : 'Nevera y bodega, antes de la plata — ya no se podrá vender en este turno'
+                }
+                accion={
+                  conteoApertura && !conteoCierre ? (
+                    <BotonItem onClick={() => empezarConteo('cierre')}>Contar</BotonItem>
+                  ) : !conteoApertura ? (
+                    <BotonItem onClick={() => empezarConteo('apertura')}>Contar apertura</BotonItem>
+                  ) : null
+                }
+              />
+              <ItemChecklist
+                numero={2}
                 icono={Wallet}
-                estado="pendiente"
+                estado={puedeArquear ? 'pendiente' : 'bloqueado'}
                 titulo="Arqueo de caja"
-                detalle="Cuenta el efectivo y cierra"
-                accion={<BotonItem onClick={() => setTarea('arqueo')}>Hacer arqueo</BotonItem>}
+                detalle={puedeArquear ? 'Cuenta el efectivo y cierra' : 'Primero cuenta el inventario'}
+                accion={puedeArquear ? <BotonItem onClick={() => setTarea('arqueo')}>Hacer arqueo</BotonItem> : null}
               />
               <button
                 type="button"
@@ -189,6 +327,24 @@ function CajaJefeZona() {
                 titulo="Caja abierta"
                 detalle={`${formatHora(turnoAbierto.abiertoEn)} · base ${COP.format(turnoAbierto.baseInicial)}`}
               />
+              <ItemChecklist
+                numero={2}
+                icono={Boxes}
+                estado={conteoApertura ? (aperturaCuadro ? 'ok' : 'alerta') : 'pendiente'}
+                titulo="Inventario contado"
+                detalle={
+                  conteoApertura
+                    ? conteoApertura.momento === 'reinicio'
+                      ? 'Inventario base cargado'
+                      : aperturaCuadro
+                        ? 'Cuadrado'
+                        : 'Con diferencia registrada'
+                    : 'Sin contar — no se puede vender hasta contarlo'
+                }
+                accion={
+                  conteoApertura ? null : <BotonItem onClick={() => empezarConteo('apertura')}>Contar</BotonItem>
+                }
+              />
               <button
                 type="button"
                 onClick={() => setModoCierre(true)}
@@ -207,12 +363,13 @@ function CajaJefeZona() {
             </span>
             <div>
               <h2 className="text-base font-semibold text-neutral-900">Sin turno abierto</h2>
-              <p className="text-xs text-neutral-500">Antes de empezar a operar.</p>
+              <p className="text-xs text-neutral-500">Dos cosas antes de empezar a operar.</p>
             </div>
           </div>
 
           <div className="flex flex-col gap-2">
             <ItemChecklist numero={1} icono={Wallet} estado="pendiente" titulo="Abrir caja" detalle="Responsable y base inicial" />
+            <ItemChecklist numero={2} icono={Boxes} estado="bloqueado" titulo="Contar inventario" detalle="Nevera y bodega" />
           </div>
 
           <button
@@ -263,6 +420,9 @@ function CajaJefeZona() {
           onAbierta={async () => {
             await refresh()
             setTarea(null)
+            // Encadena directo con el conteo de apertura: sin él no se puede vender. Si se sale, el
+            // checklist lo sigue mostrando pendiente.
+            await empezarConteo('apertura')
           }}
         />
       ) : null}

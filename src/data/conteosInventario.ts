@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import { db } from '../lib/db'
 import {
   conteoInventarioSchema,
@@ -8,16 +9,30 @@ import {
   type ConteoLineaInput,
   type MomentoConteo,
   type PreviewLineaConteo,
+  pendienteCobroSchema,
+  type PendienteCobro,
 } from '../schemas/conteoInventario'
 
 const CONTEO_SELECT =
-  'id, turnoId:turno_id, momento, contadoPor:contado_por, contadoPorPersonaId:contado_por_persona_id, justificacion, creadoEn:creado_en'
+  'id, turnoId:turno_id, momento, contadoPor:contado_por, contadoPorPersonaId:contado_por_persona_id, justificacion, creadoEn:creado_en, pendientesConfirmados:pendientes_confirmados'
+
+// Todos los conteos de un turno en orden (reinicio/apertura, traspasos, cierre) — expediente de admin.
+export async function fetchConteosDeTurno(turnoId: string): Promise<ConteoInventario[]> {
+  const { data, error } = await db
+    .from('conteos_inventario')
+    .select(CONTEO_SELECT)
+    .eq('turno_id', turnoId)
+    .order('creado_en', { ascending: true })
+  if (error) throw new Error(error.message)
+  return conteoInventarioSchema.array().parse(data)
+}
 
 const LINEA_SELECT =
-  'id, conteoId:conteo_id, productoId:producto_id, esperado, contado, enCuentasPendientes:en_cuentas_pendientes, diferencia, valorDiferencia:valor_diferencia, respondePersonaId:responde_persona_id, motivo, ajusteMovimientoId:ajuste_movimiento_id, estadoFaltante:estado_faltante'
+  'id, conteoId:conteo_id, productoId:producto_id, esperado, contado, contadoInicial:contado_inicial, enCuentasPendientes:en_cuentas_pendientes, diferencia, valorDiferencia:valor_diferencia, respondePersonaId:responde_persona_id, motivo, ajusteMovimientoId:ajuste_movimiento_id, estadoFaltante:estado_faltante'
 
 // ¿Este turno ya tiene el conteo de apertura / de cierre? La UI de `/jefe-zona/caja` lo usa para
-// decidir si muestra el paso de conteo.
+// decidir si muestra el paso de conteo. Para 'apertura' también vale un conteo 'reinicio' (0067):
+// el turno donde se cargó la base ya arrancó contado.
 export async function fetchConteoDeTurno(
   turnoId: string,
   momento: MomentoConteo,
@@ -26,19 +41,34 @@ export async function fetchConteoDeTurno(
     .from('conteos_inventario')
     .select(CONTEO_SELECT)
     .eq('turno_id', turnoId)
-    .eq('momento', momento)
+    .in('momento', momento === 'apertura' ? ['apertura', 'reinicio'] : ['cierre'])
+    .order('creado_en', { ascending: true })
+    .limit(1)
     .maybeSingle()
   if (error) throw new Error(error.message)
   return data ? conteoInventarioSchema.parse(data) : undefined
 }
 
+// Hora del servidor al empezar a contar (0068). Se manda al revelar y al registrar: cualquier
+// producto que se haya movido después (venta, carga a una orden, anulación) hay que recontarlo.
+export async function marcaConteo(): Promise<string> {
+  const { data, error } = await db.rpc('marca_conteo_inventario')
+  if (error) throw new Error(error.message)
+  return z.string().parse(data)
+}
+
 // Lo que "debería haber" de cada producto vendible — se llama DESPUÉS del conteo ciego, para
 // revelar la comparación. Va por RPC porque suma `movimientos_inventario` (admin-only) y resta
 // las unidades en cuentas/órdenes abiertas.
-export async function previewConteo(turnoId: string, momento: MomentoConteo): Promise<PreviewLineaConteo[]> {
+export async function previewConteo(
+  turnoId: string,
+  momento: MomentoConteo,
+  desde: string,
+): Promise<PreviewLineaConteo[]> {
   const { data, error } = await db.rpc('preview_conteo_inventario', {
     p_turno_id: turnoId,
     p_momento: momento,
+    p_desde: desde,
   })
   if (error) throw new Error(error.message)
   return previewLineaConteoSchema.array().parse(
@@ -48,20 +78,47 @@ export async function previewConteo(turnoId: string, momento: MomentoConteo): Pr
       unidadMedida: row.unidad_medida,
       esperado: row.esperado,
       enCuentasPendientes: row.en_cuentas_pendientes,
+      anterior: row.anterior,
+      anteriorEn: row.anterior_en,
+      vendido: row.vendido,
+      entradas: row.entradas,
+      otros: row.otros,
+      movido: row.movido,
+      marca: row.marca,
     })),
   )
+}
+
+// Cuentas abiertas y órdenes con productos cargados sin cobrar — el cierre y el traspaso exigen
+// confirmarlas una por una (0068).
+export async function fetchPendientesPorConfirmar(): Promise<PendienteCobro[]> {
+  const { data, error } = await db.rpc('pendientes_por_confirmar')
+  if (error) throw new Error(error.message)
+  return pendienteCobroSchema.array().parse(data)
+}
+
+export function lineasPayload(lineas: ConteoLineaInput[]) {
+  return lineas.map((l) => ({
+    producto_id: l.productoId,
+    contado: l.contado,
+    contado_inicial: l.contadoInicial ?? null,
+    responde_persona_id: l.respondePersonaId ?? null,
+    motivo: l.motivo ?? null,
+  }))
 }
 
 export async function abrirConteoInventario(
   turnoId: string,
   lineas: ConteoLineaInput[],
   justificacion: string | undefined,
+  desde: string,
 ): Promise<ConteoInventario> {
   const { data, error } = await db
     .rpc('abrir_conteo_inventario', {
       p_turno_id: turnoId,
-      p_lineas: lineas.map((l) => ({ producto_id: l.productoId, contado: l.contado })),
+      p_lineas: lineasPayload(lineas),
       p_justificacion: justificacion ?? null,
+      p_desde: desde,
     })
     .select(CONTEO_SELECT)
     .single()
@@ -73,17 +130,16 @@ export async function cerrarConteoInventario(
   turnoId: string,
   lineas: ConteoLineaInput[],
   justificacion: string | undefined,
+  desde: string,
+  confirmados: string[],
 ): Promise<ConteoInventario> {
   const { data, error } = await db
     .rpc('cerrar_conteo_inventario', {
       p_turno_id: turnoId,
-      p_lineas: lineas.map((l) => ({
-        producto_id: l.productoId,
-        contado: l.contado,
-        responde_persona_id: l.respondePersonaId ?? null,
-        motivo: l.motivo ?? null,
-      })),
+      p_lineas: lineasPayload(lineas),
       p_justificacion: justificacion ?? null,
+      p_desde: desde,
+      p_confirmados: confirmados,
     })
     .select(CONTEO_SELECT)
     .single()
@@ -132,7 +188,8 @@ export async function fetchFaltantesPendientes(): Promise<FaltantePendiente[]> {
     return {
       linea: conteoLineaSchema.parse(row),
       productoNombre: (row.productos as { nombre: string } | null)?.nombre ?? '—',
-      respondeNombre: (row.perfiles as { nombre: string | null } | null)?.nombre ?? 'Sin asignar',
+      // Sin persona = faltante de apertura (0068): se perdió entre turnos, nadie tenía la nevera a cargo.
+      respondeNombre: (row.perfiles as { nombre: string | null } | null)?.nombre ?? 'Entre turnos (sin responsable)',
       turnoId: conteo?.turno_id ?? '',
       fecha: conteo?.creado_en ?? '',
     }

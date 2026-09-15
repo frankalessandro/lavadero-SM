@@ -72,6 +72,8 @@ export const traspasoTurnoSchema = z.object({
   dePersonaId: nullableTrimmedString,
   aPersonaId: nullableTrimmedString,
   hechoEn: z.string(),
+  // Conteo de inventario hecho al traspasar (0068); vacío si el turno no tenía inventario a cargo.
+  conteoId: nullableTrimmedString,
 })
 
 export type RolCaja = z.infer<typeof rolCajaSchema>

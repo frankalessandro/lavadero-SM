@@ -111,12 +111,20 @@ export function AbrirTurnoPrompt({ rol = 'jefe_zona', onAbierto }: { rol?: RolCa
 export function TurnoResponsableBanner({
   turno,
   onTransferido,
+  onSolicitarTraspaso,
+  avisoTraspaso,
   children,
 }: {
   turno: TurnoCaja
   onTransferido: (turno: TurnoCaja) => void
+  /** Turno de jefe de zona (0068): el traspaso va por `traspasar_turno`, con conteo de inventario
+   *  si el turno lo tiene a cargo. Quien lo pasa decide el flujo (Caja). Sin esto, en un turno de
+   *  jefe de zona el banner no ofrece transferir y manda a hacerlo desde Caja. */
+  onSolicitarTraspaso?: (destino: { id: string; nombre: string }) => Promise<void>
+  avisoTraspaso?: string
   children?: ReactNode
 }) {
+  const traspasoDesdeCaja = turno.rol === 'jefe_zona' && !onSolicitarTraspaso
   const [transfiriendo, setTransfiriendo] = useState(false)
   const [nuevoPersonaId, setNuevoPersonaId] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -138,6 +146,20 @@ export function TurnoResponsableBanner({
       return
     }
     setSaving(true)
+    if (onSolicitarTraspaso) {
+      try {
+        await onSolicitarTraspaso({ id: persona.id, nombre: nombreDe(persona) })
+        setTransfiriendo(false)
+        setNuevoPersonaId('')
+        setHistorial(null)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'No se pudo transferir la responsabilidad')
+        toast.desdeError(err, 'No se pudo transferir la responsabilidad')
+      } finally {
+        setSaving(false)
+      }
+      return
+    }
     try {
       const actualizado = await transferirResponsable(
         turno.id,
@@ -219,6 +241,7 @@ export function TurnoResponsableBanner({
               emptyLabel="No hay otra cuenta habilitada para esta caja"
             />
           </label>
+          {avisoTraspaso ? <p className="text-xs text-primary-800">{avisoTraspaso}</p> : null}
           {error ? <p className="text-xs text-danger-600">{error}</p> : null}
           <div className="flex gap-2">
             <button
@@ -226,7 +249,7 @@ export function TurnoResponsableBanner({
               disabled={saving}
               className="flex-1 rounded-lg bg-primary-600 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-700 disabled:opacity-60"
             >
-              {saving ? 'Transfiriendo…' : 'Confirmar traspaso'}
+              {saving ? 'Transfiriendo…' : avisoTraspaso ? 'Contar y traspasar' : 'Confirmar traspaso'}
             </button>
             <button
               type="button"
@@ -240,6 +263,11 @@ export function TurnoResponsableBanner({
             </button>
           </div>
         </form>
+      ) : traspasoDesdeCaja ? (
+        <p className="flex items-center gap-2 rounded-lg bg-neutral-50 px-3 py-2.5 text-xs text-neutral-500">
+          <ArrowLeftRight size={14} className="shrink-0" />
+          Para transferir la responsabilidad ve a Caja — el traspaso incluye el conteo de inventario.
+        </p>
       ) : (
         <button
           type="button"

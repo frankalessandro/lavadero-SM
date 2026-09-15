@@ -5,7 +5,7 @@ import { fetchGastosDeTurno } from './gastos'
 import { fetchComprasDeTurno } from './compras'
 import { fetchPrestamosDeTurno } from './deudasLavador'
 import { fetchTraspasos, desgloseEsperado, type DesgloseEsperado } from './turnos'
-import { fetchConteoDeTurno, fetchLineasDeConteo, type ConteoLineaConProducto } from './conteosInventario'
+import { fetchConteosDeTurno, fetchLineasDeConteo, type ConteoLineaConProducto } from './conteosInventario'
 import type { TurnoCaja, TraspasoTurno } from '../schemas/turnoCaja'
 import type { ConteoInventario } from '../schemas/conteoInventario'
 import type { Orden } from '../schemas/orden'
@@ -30,21 +30,19 @@ export interface ExpedienteTurno {
   pagos: Pago[] // todas las líneas del turno (para el desglose por método)
   traspasos: TraspasoTurno[]
   desglose?: DesgloseEsperado // solo si el turno está cerrado o tiene datos suficientes
-  conteoApertura?: ConteoConLineas
-  conteoCierre?: ConteoConLineas
+  conteos: ConteoConLineas[] // reinicio/apertura, traspasos y cierre, en orden (0068)
 }
 
-async function conteoConLineas(turnoId: string, momento: 'apertura' | 'cierre'): Promise<ConteoConLineas | undefined> {
-  const conteo = await fetchConteoDeTurno(turnoId, momento)
-  if (!conteo) return undefined
-  return { conteo, lineas: await fetchLineasDeConteo(conteo.id) }
+async function conteosConLineas(turnoId: string): Promise<ConteoConLineas[]> {
+  const conteos = await fetchConteosDeTurno(turnoId)
+  return Promise.all(conteos.map(async (conteo) => ({ conteo, lineas: await fetchLineasDeConteo(conteo.id) })))
 }
 
 // Expediente del turno: todo lo que se movió en él — órdenes cobradas, ventas de nevera, gastos
 // de caja, el reparto de pagos por método, traspasos de responsabilidad, y los conteos de
 // inventario de apertura y cierre. Para /admin/operacion/turnos.
 export async function fetchExpedienteTurno(turno: TurnoCaja): Promise<ExpedienteTurno> {
-  const [ordenes, ventas, pagos, gastos, compras, prestamos, traspasos, conteoApertura, conteoCierre] = await Promise.all([
+  const [ordenes, ventas, pagos, gastos, compras, prestamos, traspasos, conteos] = await Promise.all([
     fetchOrdenesDeTurno(turno.id),
     fetchVentasDeTurno(turno.id),
     fetchPagosDeTurno(turno.id),
@@ -52,8 +50,7 @@ export async function fetchExpedienteTurno(turno: TurnoCaja): Promise<Expediente
     fetchComprasDeTurno(turno.id),
     fetchPrestamosDeTurno(turno.id),
     fetchTraspasos(turno.id),
-    conteoConLineas(turno.id, 'apertura'),
-    conteoConLineas(turno.id, 'cierre'),
+    conteosConLineas(turno.id),
   ])
 
   const pagosDeOrdenes = await fetchPagosDeOrdenes(ordenes.map((o) => o.id))
@@ -72,5 +69,5 @@ export async function fetchExpedienteTurno(turno: TurnoCaja): Promise<Expediente
     desglose = undefined
   }
 
-  return { ordenes, pagosPorOrden, ventas, gastos, compras, prestamos, pagos, traspasos, desglose, conteoApertura, conteoCierre }
+  return { ordenes, pagosPorOrden, ventas, gastos, compras, prestamos, pagos, traspasos, desglose, conteos }
 }

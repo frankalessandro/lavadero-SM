@@ -8,6 +8,12 @@ import { OrdenDetalleCard } from './OrdenDetalleCard'
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 const FECHA_HORA = new Intl.DateTimeFormat('es-CO', { dateStyle: 'short', timeStyle: 'short' })
+const MOMENTO_CONTEO_LABEL = {
+  apertura: 'apertura',
+  cierre: 'cierre',
+  traspaso: 'traspaso',
+  reinicio: 'inventario base (reinicio)',
+} as const
 
 interface Props {
   turno: TurnoCaja
@@ -133,11 +139,14 @@ export function TurnoExpedienteModal({ turno, comboNombre, lavadorNombre, produc
             </div>
 
             {/* Conteos de inventario */}
-            {[data.conteoApertura, data.conteoCierre].map((c, i) =>
+            {data.conteos.map((c) =>
               c ? (
-                <Card key={i} className="flex flex-col gap-2 p-4">
+                <Card key={c.conteo.id} className="flex flex-col gap-2 p-4">
                   <h3 className="text-sm font-semibold text-neutral-900">
-                    Conteo de inventario — {c.conteo.momento === 'apertura' ? 'apertura' : 'cierre'}
+                    Conteo de inventario — {MOMENTO_CONTEO_LABEL[c.conteo.momento]}
+                    <span className="ml-1.5 text-xs font-normal text-neutral-400">
+                      {FECHA_HORA.format(new Date(c.conteo.creadoEn))} · {c.conteo.contadoPor}
+                    </span>
                   </h3>
                   {c.lineas.filter((l) => l.diferencia !== 0).length === 0 ? (
                     <p className="text-xs text-success-700">Todo cuadró.</p>
@@ -149,6 +158,9 @@ export function TurnoExpedienteModal({ turno, comboNombre, lavadorNombre, produc
                           <li key={l.id} className="flex items-center justify-between gap-3">
                             <span>
                               {l.productoNombre}: esperado {l.esperado}, contado {l.contado}
+                              {l.contadoInicial != null && l.contadoInicial !== l.contado
+                                ? ` (primer conteo ${l.contadoInicial})`
+                                : ''}
                             </span>
                             <span
                               className={l.diferencia < 0 ? 'font-medium text-danger-600' : 'font-medium text-warning-700'}
@@ -162,6 +174,16 @@ export function TurnoExpedienteModal({ turno, comboNombre, lavadorNombre, produc
                   )}
                   {c.conteo.justificacion ? (
                     <p className="text-xs text-neutral-500">Justificación: {c.conteo.justificacion}</p>
+                  ) : null}
+                  {c.conteo.pendientesConfirmados && c.conteo.pendientesConfirmados.length > 0 ? (
+                    <div className="flex flex-col gap-0.5 border-t border-neutral-100 pt-2 text-xs text-neutral-500">
+                      <p className="font-medium text-neutral-700">Confirmó sin cobrar:</p>
+                      {c.conteo.pendientesConfirmados.map((p) => (
+                        <p key={p.id}>
+                          {p.titulo} — {p.detalle} · {COP.format(p.total)}
+                        </p>
+                      ))}
+                    </div>
                   ) : null}
                 </Card>
               ) : null,

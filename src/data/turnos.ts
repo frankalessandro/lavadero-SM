@@ -1,5 +1,7 @@
 import { db } from '../lib/db'
 import { fetchEfectivoDeTurno } from './pagos'
+import { lineasPayload } from './conteosInventario'
+import type { ConteoLineaInput } from '../schemas/conteoInventario'
 import {
   abrirTurnoInputSchema,
   turnoCajaSchema,
@@ -14,7 +16,7 @@ const TURNO_SELECT =
   'id, rol, responsable, responsableActual:responsable_actual, responsablePersonaId:responsable_persona_id, responsableActualPersonaId:responsable_actual_persona_id, baseInicial:base_inicial, abiertoEn:abierto_en, cerrado, conteoFisico:conteo_fisico, valorEsperado:valor_esperado, diferencia, justificacionDiferencia:justificacion_diferencia, cerradoPor:cerrado_por, cerradoEn:cerrado_en, recibidoPor:recibido_por'
 
 const TRASPASO_SELECT =
-  'id, turnoId:turno_id, de, a, dePersonaId:de_persona_id, aPersonaId:a_persona_id, hechoEn:hecho_en'
+  'id, turnoId:turno_id, de, a, dePersonaId:de_persona_id, aPersonaId:a_persona_id, hechoEn:hecho_en, conteoId:conteo_id'
 
 export async function fetchTurnoAbierto(rol: RolCaja): Promise<TurnoCaja | undefined> {
   const { data, error } = await db
@@ -88,6 +90,30 @@ export async function transferirResponsable(
       `El traspaso quedó registrado pero no se pudo actualizar el turno ${turnoId} — revisa manualmente. ${error.message}`,
     )
   }
+  return turnoCajaSchema.parse(data)
+}
+
+// Traspaso del turno de jefe de zona (0068): una sola RPC atómica que, si el turno tiene inventario
+// a cargo (apertura contada y sin cierre), registra el conteo de traspaso — lo que falte queda a
+// nombre de quien entrega — y después cambia el responsable. Sin `conteo` solo sirve cuando el turno
+// no tiene inventario a cargo; si lo tiene, la base lo rechaza.
+export async function traspasarTurno(
+  turnoId: string,
+  aPersonaId: string,
+  conteo?: { lineas: ConteoLineaInput[]; justificacion: string | undefined; desde: string; confirmados: string[] },
+): Promise<TurnoCaja> {
+  const { data, error } = await db
+    .rpc('traspasar_turno', {
+      p_turno_id: turnoId,
+      p_a_persona_id: aPersonaId,
+      p_lineas: conteo ? lineasPayload(conteo.lineas) : null,
+      p_justificacion: conteo?.justificacion ?? null,
+      p_desde: conteo?.desde ?? null,
+      p_confirmados: conteo?.confirmados ?? null,
+    })
+    .select(TURNO_SELECT)
+    .single()
+  if (error) throw new Error(error.message)
   return turnoCajaSchema.parse(data)
 }
 
