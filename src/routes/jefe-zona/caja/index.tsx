@@ -1,14 +1,11 @@
 import { useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { Lock, CheckCircle2, AlertTriangle, Circle, X, Boxes, Wallet } from 'lucide-react'
+import { Lock, CheckCircle2, AlertTriangle, Circle, X, Wallet } from 'lucide-react'
 import { fetchTurnoAbierto, fetchTurnos, abrirTurno } from '../../../data/turnos'
 import { fetchCategoriasGasto, fetchGastosDeTurno, type GastoConCategoria } from '../../../data/gastos'
-import { fetchProductosOperativo } from '../../../data/productos'
-import { fetchConteoDeTurno } from '../../../data/conteosInventario'
 import { fetchOrdenesAbiertas } from '../../../data/ordenes'
 import { fetchLavadores } from '../../../data/lavadores'
 import { fetchPrestamosDeTurno, type DeudaLavador } from '../../../data/deudasLavador'
-import type { ConteoInventario as ConteoInventarioType } from '../../../schemas/conteoInventario'
 import type { TurnoCaja } from '../../../schemas/turnoCaja'
 import { toast } from '../../../lib/toast'
 
@@ -17,40 +14,33 @@ import { CurrencyInput } from '../../../components/layout/CurrencyInput'
 import { CustomSelect } from '../../../components/layout/CustomSelect'
 import { GastosDeTurno } from '../../../components/layout/GastosDeTurno'
 import { PrestamosDeTurno } from '../../../components/layout/PrestamosDeTurno'
-import { ConteoInventario } from '../../../components/layout/ConteoInventario'
 import { ArqueoCaja } from '../../../components/layout/ArqueoCaja'
 import { IndicadorCuadrado } from '../../../components/layout/PantallaTarea'
 import { TurnoResponsableBanner } from '../../../components/layout/TurnoResponsableBanner'
 import { usePersonalElegible, nombreDe } from '../../../lib/personalElegible'
 
+// El conteo de inventario (apertura/cierre, 0048) está desactivado hasta nuevo aviso (auditoría
+// pendiente, 2026-09-15) — trigger `turnos_caja_cierre_requiere_conteo` deshabilitado en la base
+// y esta pantalla ya no lo pide. No se borró el componente/RPCs, solo se sacó del flujo acá.
 async function loadCaja() {
-  const [turnoAbierto, turnosRecientes, categorias, productos, ordenesAbiertas, lavadores] = await Promise.all([
+  const [turnoAbierto, turnosRecientes, categorias, ordenesAbiertas, lavadores] = await Promise.all([
     fetchTurnoAbierto('jefe_zona'),
     fetchTurnos('jefe_zona'),
     fetchCategoriasGasto(),
-    fetchProductosOperativo(),
     fetchOrdenesAbiertas(),
     fetchLavadores(),
   ])
   // Lo que depende del turno abierto va en una segunda ronda.
-  const [gastosTurno, conteoApertura, conteoCierre, prestamosTurno] = turnoAbierto
-    ? await Promise.all([
-        fetchGastosDeTurno(turnoAbierto.id),
-        fetchConteoDeTurno(turnoAbierto.id, 'apertura'),
-        fetchConteoDeTurno(turnoAbierto.id, 'cierre'),
-        fetchPrestamosDeTurno(turnoAbierto.id),
-      ])
-    : [[], undefined, undefined, []]
+  const [gastosTurno, prestamosTurno] = turnoAbierto
+    ? await Promise.all([fetchGastosDeTurno(turnoAbierto.id), fetchPrestamosDeTurno(turnoAbierto.id)])
+    : [[], []]
   return {
     turnoAbierto,
     turnosRecientes: turnosRecientes.slice(0, 5),
     categorias,
-    productos,
     ordenesAbiertas,
     lavadores,
     gastosTurno,
-    conteoApertura,
-    conteoCierre,
     prestamosTurno,
   }
 }
@@ -72,17 +62,8 @@ function formatHora(iso: string | undefined) {
   return new Date(iso).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
 }
 
-// Un conteo ya guardado solo se puede leer por su cabecera (`conteos_inventario`) — las líneas con
-// las diferencias son admin-only porque llevan el valor a costo (ver §Roles). La justificación es
-// obligatoria cuando hay diferencia y no se pide cuando no la hay, así que su presencia es la
-// señal de si ese conteo cuadró, sin necesidad de leer nada sensible.
-function conteoCuadro(conteo: ConteoInventarioType | undefined): boolean | undefined {
-  if (!conteo) return undefined
-  return !conteo.justificacion
-}
-
 /** Qué tarea de pantalla completa (o modal) está abierta. */
-type Tarea = 'abrir-caja' | 'conteo-apertura' | 'conteo-cierre' | 'arqueo' | null
+type Tarea = 'abrir-caja' | 'arqueo' | null
 
 function CajaJefeZona() {
   const data = Route.useLoaderData()
@@ -90,17 +71,13 @@ function CajaJefeZona() {
   const [turnoAbierto, setTurnoAbierto] = useState(data.turnoAbierto)
   const [turnosRecientes, setTurnosRecientes] = useState(data.turnosRecientes)
   const [gastosTurno, setGastosTurno] = useState<GastoConCategoria[]>(data.gastosTurno)
-  const [conteoApertura, setConteoApertura] = useState<ConteoInventarioType | undefined>(data.conteoApertura)
-  const [conteoCierre, setConteoCierre] = useState<ConteoInventarioType | undefined>(data.conteoCierre)
   const [ordenesAbiertas, setOrdenesAbiertas] = useState(data.ordenesAbiertas)
   const [lavadores] = useState(data.lavadores)
   const [prestamosTurno, setPrestamosTurno] = useState<DeudaLavador[]>(data.prestamosTurno)
   const [tarea, setTarea] = useState<Tarea>(null)
   const [modoCierre, setModoCierre] = useState(false)
   // Resultado del cierre recién hecho — se muestra una vez y se descarta con "Listo".
-  const [resumenCierre, setResumenCierre] = useState<{ inventarioCuadrado: boolean; diferenciaCaja: number } | null>(
-    null,
-  )
+  const [resumenCierre, setResumenCierre] = useState<{ diferenciaCaja: number } | null>(null)
 
   async function refresh() {
     const [nuevoAbierto, nuevosRecientes, nuevasAbiertas] = await Promise.all([
@@ -112,65 +89,18 @@ function CajaJefeZona() {
     setTurnoAbierto(nuevoAbierto)
     setTurnosRecientes(nuevosRecientes.slice(0, 5))
     if (nuevoAbierto) {
-      const [g, ca, cc, pr] = await Promise.all([
-        fetchGastosDeTurno(nuevoAbierto.id),
-        fetchConteoDeTurno(nuevoAbierto.id, 'apertura'),
-        fetchConteoDeTurno(nuevoAbierto.id, 'cierre'),
-        fetchPrestamosDeTurno(nuevoAbierto.id),
-      ])
+      const [g, pr] = await Promise.all([fetchGastosDeTurno(nuevoAbierto.id), fetchPrestamosDeTurno(nuevoAbierto.id)])
       setGastosTurno(g)
-      setConteoApertura(ca)
-      setConteoCierre(cc)
       setPrestamosTurno(pr)
     } else {
       setGastosTurno([])
-      setConteoApertura(undefined)
-      setConteoCierre(undefined)
       setPrestamosTurno([])
       setModoCierre(false)
     }
     router.invalidate()
   }
 
-  const aperturaCuadro = conteoCuadro(conteoApertura)
-  const cierreCuadro = conteoCuadro(conteoCierre)
-  // Espeja el trigger `turnos_caja_cierre_requiere_conteo` (0048): el conteo de cierre solo es
-  // obligatorio si el turno ya tiene uno de apertura — turnos abiertos antes del feature (o sin
-  // apertura contada) cierran sin ese paso, porque `cerrar_conteo_inventario` exige la apertura.
-  const requiereConteoCierre = Boolean(conteoApertura)
-  const puedeArquear = !requiereConteoCierre || Boolean(conteoCierre)
-
   // ── Tareas de pantalla completa ──────────────────────────────────────────────────────────────
-  if (tarea === 'conteo-apertura' && turnoAbierto) {
-    return (
-      <ConteoInventario
-        turno={turnoAbierto}
-        momento="apertura"
-        productos={data.productos}
-        onVolver={() => setTarea(null)}
-        onConfirmado={async () => {
-          setTarea(null)
-          await refresh()
-        }}
-      />
-    )
-  }
-
-  if (tarea === 'conteo-cierre' && turnoAbierto) {
-    return (
-      <ConteoInventario
-        turno={turnoAbierto}
-        momento="cierre"
-        productos={data.productos}
-        onVolver={() => setTarea(null)}
-        onConfirmado={async () => {
-          setTarea(null)
-          await refresh()
-        }}
-      />
-    )
-  }
-
   if (tarea === 'arqueo' && turnoAbierto) {
     return (
       <ArqueoCaja
@@ -178,7 +108,7 @@ function CajaJefeZona() {
         onVolver={() => setTarea(null)}
         onCerrado={async ({ diferencia }) => {
           setTarea(null)
-          setResumenCierre({ inventarioCuadrado: cierreCuadro ?? true, diferenciaCaja: diferencia })
+          setResumenCierre({ diferenciaCaja: diferencia })
           await refresh()
         }}
       />
@@ -194,10 +124,6 @@ function CajaJefeZona() {
             <h2 className="text-base font-semibold text-neutral-900">Turno cerrado</h2>
             <p className="text-xs text-neutral-500">Así quedó el cuadre.</p>
           </div>
-          <IndicadorCuadrado
-            cuadrado={resumenCierre.inventarioCuadrado}
-            label={resumenCierre.inventarioCuadrado ? 'Inventario cuadrado' : 'Inventario con diferencia registrada'}
-          />
           <IndicadorCuadrado
             cuadrado={resumenCierre.diferenciaCaja === 0}
             label={
@@ -239,33 +165,11 @@ function CajaJefeZona() {
               ) : null}
               <ItemChecklist
                 numero={1}
-                icono={Boxes}
-                estado={
-                  !requiereConteoCierre ? 'ok' : conteoCierre ? (cierreCuadro ? 'ok' : 'alerta') : 'pendiente'
-                }
-                titulo="Contar inventario"
-                detalle={
-                  !requiereConteoCierre
-                    ? 'No aplica — este turno no tiene conteo de apertura'
-                    : conteoCierre
-                      ? cierreCuadro
-                        ? 'Cuadrado'
-                        : 'Con diferencia registrada'
-                      : 'Nevera y vitrina, antes de la plata'
-                }
-                accion={
-                  requiereConteoCierre && !conteoCierre ? (
-                    <BotonItem onClick={() => setTarea('conteo-cierre')}>Contar</BotonItem>
-                  ) : null
-                }
-              />
-              <ItemChecklist
-                numero={2}
                 icono={Wallet}
-                estado={puedeArquear ? 'pendiente' : 'bloqueado'}
+                estado="pendiente"
                 titulo="Arqueo de caja"
-                detalle={puedeArquear ? 'Cuenta el efectivo y cierra' : 'Primero cuenta el inventario'}
-                accion={puedeArquear ? <BotonItem onClick={() => setTarea('arqueo')}>Hacer arqueo</BotonItem> : null}
+                detalle="Cuenta el efectivo y cierra"
+                accion={<BotonItem onClick={() => setTarea('arqueo')}>Hacer arqueo</BotonItem>}
               />
               <button
                 type="button"
@@ -285,24 +189,6 @@ function CajaJefeZona() {
                 titulo="Caja abierta"
                 detalle={`${formatHora(turnoAbierto.abiertoEn)} · base ${COP.format(turnoAbierto.baseInicial)}`}
               />
-              <ItemChecklist
-                numero={2}
-                icono={Boxes}
-                estado={conteoApertura ? (aperturaCuadro ? 'ok' : 'alerta') : 'pendiente'}
-                titulo="Inventario contado"
-                detalle={
-                  conteoApertura
-                    ? aperturaCuadro
-                      ? 'Cuadrado'
-                      : 'Con diferencia registrada'
-                    : 'Sin contar — cuéntalo para arrancar'
-                }
-                accion={
-                  conteoApertura ? null : (
-                    <BotonItem onClick={() => setTarea('conteo-apertura')}>Contar</BotonItem>
-                  )
-                }
-              />
               <button
                 type="button"
                 onClick={() => setModoCierre(true)}
@@ -321,13 +207,12 @@ function CajaJefeZona() {
             </span>
             <div>
               <h2 className="text-base font-semibold text-neutral-900">Sin turno abierto</h2>
-              <p className="text-xs text-neutral-500">Dos cosas antes de empezar a operar.</p>
+              <p className="text-xs text-neutral-500">Antes de empezar a operar.</p>
             </div>
           </div>
 
           <div className="flex flex-col gap-2">
             <ItemChecklist numero={1} icono={Wallet} estado="pendiente" titulo="Abrir caja" detalle="Responsable y base inicial" />
-            <ItemChecklist numero={2} icono={Boxes} estado="bloqueado" titulo="Contar inventario" detalle="Nevera y vitrina" />
           </div>
 
           <button
@@ -377,10 +262,7 @@ function CajaJefeZona() {
           onClose={() => setTarea(null)}
           onAbierta={async () => {
             await refresh()
-            // Encadena directo con el conteo: es el segundo paso del checklist y no tiene sentido
-            // hacer volver al usuario a la pantalla solo para tocar "Contar". Si se sale, el
-            // checklist lo sigue mostrando pendiente.
-            setTarea('conteo-apertura')
+            setTarea(null)
           }}
         />
       ) : null}
@@ -518,7 +400,7 @@ function AbrirCajaModal({ onClose, onAbierta }: { onClose: () => void; onAbierta
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <h3 className="text-base font-semibold text-neutral-900">Abrir caja</h3>
-            <p className="text-xs text-neutral-500">Después sigue el conteo de inventario.</p>
+            <p className="text-xs text-neutral-500">Responsable y base inicial.</p>
           </div>
           <button
             type="button"
