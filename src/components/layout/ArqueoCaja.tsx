@@ -194,8 +194,14 @@ export function ArqueoCaja({
             ) : null}
             {desglose.prestamos > 0 ? (
               <div className="flex items-center justify-between">
-                <span>− Préstamos a lavadores</span>
+                <span>− Préstamos al personal</span>
                 <span className="font-medium text-neutral-900">{COP.format(desglose.prestamos)}</span>
+              </div>
+            ) : null}
+            {desglose.abonos > 0 ? (
+              <div className="flex items-center justify-between">
+                <span>+ Abonos de deudas en efectivo</span>
+                <span className="font-medium text-neutral-900">{COP.format(desglose.abonos)}</span>
               </div>
             ) : null}
           </div>

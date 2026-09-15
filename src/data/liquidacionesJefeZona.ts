@@ -2,9 +2,10 @@ import { db } from '../lib/db'
 import { liquidacionJefeZonaSchema, type LiquidacionJefeZona } from '../schemas/liquidacionJefeZona'
 import { fetchOrdenesEnRango } from './ordenes'
 import { fetchPerfiles } from './perfiles'
+import { fetchDeudaPendiente, fetchDeudaPendientePorPersona } from './deudasPersonal'
 
 const LIQUIDACION_SELECT =
-  'id, responsable, personaId:persona_id, periodoInicio:periodo_inicio, periodoFin:periodo_fin, monto, pagada, pagadaEn:pagada_en, anulada, motivoAnulacion:motivo_anulacion, anuladaPor:anulada_por, anuladaEn:anulada_en, creadoEn:creado_en'
+  'id, responsable, personaId:persona_id, periodoInicio:periodo_inicio, periodoFin:periodo_fin, monto, comisionBruta:comision_bruta, deudaDescontada:deuda_descontada, pagada, pagadaEn:pagada_en, anulada, motivoAnulacion:motivo_anulacion, anuladaPor:anulada_por, anuladaEn:anulada_en, creadoEn:creado_en'
 
 export async function fetchLiquidacionesJefeZona(): Promise<LiquidacionJefeZona[]> {
   const { data, error } = await db
@@ -20,6 +21,7 @@ export interface ComisionPendienteJefeZona {
   responsable: string
   montoPendiente: number
   cantidadOrdenes: number
+  deudaPendiente: number // 0070
 }
 
 // Agrupa por `jefe_zona_persona_id`, NO por el texto `jefe_zona_responsable`. Ese texto se tecleaba
@@ -29,13 +31,14 @@ export interface ComisionPendienteJefeZona {
 // quedan fuera (no hay a quién pagarles); las migraciones 0043 y 0056 abortan si existiera alguna
 // así, de modo que en la práctica no las hay.
 export async function fetchComisionesPendientesJefeZona(): Promise<ComisionPendienteJefeZona[]> {
-  const [{ data, error }, personal] = await Promise.all([
+  const [{ data, error }, personal, deudaPorPersona] = await Promise.all([
     db
       .from('ordenes')
       .select('jefe_zona_persona_id, comision_jefe_zona')
       .is('liquidacion_jefe_zona_id', null)
       .neq('estado', 'anulada'),
     fetchPerfiles(),
+    fetchDeudaPendientePorPersona(),
   ])
   if (error) throw new Error(error.message)
 
@@ -55,6 +58,7 @@ export async function fetchComisionesPendientesJefeZona(): Promise<ComisionPendi
       responsable: nombrePorId.get(personaId) ?? 'Persona no encontrada',
       montoPendiente: v.monto,
       cantidadOrdenes: v.cantidad,
+      deudaPendiente: deudaPorPersona.get(personaId) ?? 0,
     }))
     .sort((a, b) => b.montoPendiente - a.montoPendiente)
 }
@@ -167,6 +171,8 @@ async function ordenesElegiblesJefeZona(personaId: string, periodoInicio: string
 export interface MontoPeriodoJefeZona {
   monto: number
   cantidadOrdenes: number
+  // Deuda pendiente de la persona (0070): préstamos, consumo de nevera, faltantes cobrados.
+  deudaPendiente: number
 }
 
 export async function fetchMontoPeriodoJefeZona(
@@ -174,35 +180,74 @@ export async function fetchMontoPeriodoJefeZona(
   periodoInicio: string,
   periodoFin: string,
 ): Promise<MontoPeriodoJefeZona> {
-  const ordenes = await ordenesElegiblesJefeZona(personaId, periodoInicio, periodoFin)
+  const [ordenes, deudaPendiente] = await Promise.all([
+    ordenesElegiblesJefeZona(personaId, periodoInicio, periodoFin),
+    fetchDeudaPendiente({ tipo: 'persona', id: personaId }),
+  ])
   return {
     monto: ordenes.reduce((suma, orden) => suma + orden.comisionJefeZona, 0),
     cantidadOrdenes: ordenes.length,
+    deudaPendiente,
   }
 }
 
 // Mismo patrón no-atómico que generarLiquidacion (lavadores): PostgREST plano no da transacciones
-// multi-tabla, así que si el paso 2 (marcar las órdenes) falla, se reporta explícito para revisión
-// manual en vez de fallar en silencio.
+// multi-tabla, así que si el paso 2 (marcar las órdenes) o el 3 (registrar el descuento de deuda)
+// falla, se reporta explícito para revisión manual en vez de fallar en silencio. El descuento de
+// deuda lo elige admin (0070), igual que en lavadores.
 export async function generarLiquidacionJefeZona(
   personaId: string,
   responsable: string,
   periodoInicio: string,
   periodoFin: string,
+  deudaADescontar: number,
 ): Promise<LiquidacionJefeZona> {
-  const ordenes = await ordenesElegiblesJefeZona(personaId, periodoInicio, periodoFin)
-  const monto = ordenes.reduce((suma, orden) => suma + orden.comisionJefeZona, 0)
+  const [ordenes, deudaPendiente] = await Promise.all([
+    ordenesElegiblesJefeZona(personaId, periodoInicio, periodoFin),
+    fetchDeudaPendiente({ tipo: 'persona', id: personaId }),
+  ])
+  const comisionBruta = ordenes.reduce((suma, orden) => suma + orden.comisionJefeZona, 0)
+  const maximo = Math.min(Math.max(deudaPendiente, 0), comisionBruta)
+  const deudaDescontada = Math.round(deudaADescontar)
+  if (deudaDescontada < 0 || deudaDescontada > maximo) {
+    throw new Error(`El descuento debe estar entre $0 y $${maximo} (deuda pendiente o comisión del corte, lo menor)`)
+  }
+  const monto = comisionBruta - deudaDescontada
 
   const { data: creada, error: errorInsert } = await db
     .from('liquidaciones_jefe_zona')
     // `responsable` se guarda como snapshot del nombre al momento del corte; `persona_id` es la
     // clave real (renombrar a alguien después no debe reescribir su histórico de colillas).
-    .insert({ responsable, persona_id: personaId, periodo_inicio: periodoInicio, periodo_fin: periodoFin, monto })
+    .insert({
+      responsable,
+      persona_id: personaId,
+      periodo_inicio: periodoInicio,
+      periodo_fin: periodoFin,
+      monto,
+      comision_bruta: comisionBruta,
+      deuda_descontada: deudaDescontada,
+    })
     .select(LIQUIDACION_SELECT)
     .single()
   if (errorInsert) throw new Error(errorInsert.message)
 
   const liquidacion = liquidacionJefeZonaSchema.parse(creada)
+
+  if (deudaDescontada > 0) {
+    const { error: errorDeuda } = await db.from('deudas_personal').insert({
+      persona_id: personaId,
+      tipo: 'liquidacion',
+      monto: -deudaDescontada,
+      liquidacion_jefe_zona_id: liquidacion.id,
+      motivo: `Descontado al liquidar (periodo ${periodoInicio} → ${periodoFin})`,
+      registrado_por: 'Generación de liquidación',
+    })
+    if (errorDeuda) {
+      throw new Error(
+        `La liquidación ${liquidacion.id} se generó por $${monto} (descuento de deuda $${deudaDescontada}) pero no se pudo registrar el descuento: ${errorDeuda.message}. Revisar manualmente.`,
+      )
+    }
+  }
 
   if (ordenes.length > 0) {
     const { error: errorUpdate } = await db

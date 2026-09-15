@@ -36,6 +36,19 @@ export async function fetchPerfilesElegibles(rol: Rol): Promise<Perfil[]> {
   return perfilSchema.array().parse(data)
 }
 
+// Personas con cuenta del sistema a las que se les puede cargar deuda (0070): jefes de patio y
+// gerencia. Los lavadores no tienen cuenta — van aparte, desde `lavadores`.
+export async function fetchPersonasDeudoras(): Promise<Perfil[]> {
+  const { data, error } = await db
+    .from('perfiles')
+    .select(PERFIL_SELECT)
+    .eq('activo', true)
+    .overlaps('roles', ['jefe_zona', 'admin'])
+    .order('nombre')
+  if (error) throw new Error(error.message)
+  return perfilSchema.array().parse(data)
+}
+
 export async function fetchPerfilActual(userId: string): Promise<Perfil | null> {
   const { data, error } = await db.from('perfiles').select(PERFIL_SELECT).eq('id', userId).maybeSingle()
   if (error) throw new Error(error.message)

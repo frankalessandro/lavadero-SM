@@ -7,7 +7,7 @@ import { fetchProductosOperativo } from '../../../data/productos'
 import { fetchConteoDeTurno, fetchPendientesPorConfirmar, marcaConteo } from '../../../data/conteosInventario'
 import { fetchOrdenesAbiertas } from '../../../data/ordenes'
 import { fetchLavadores } from '../../../data/lavadores'
-import { fetchPrestamosDeTurno, type DeudaLavador } from '../../../data/deudasLavador'
+import { fetchPrestamosDeTurno, type DeudaPersonal } from '../../../data/deudasPersonal'
 import type {
   ConteoInventario as ConteoInventarioType,
   MomentoConteo,
@@ -101,7 +101,7 @@ function CajaJefeZona() {
   const [conteoCierre, setConteoCierre] = useState<ConteoInventarioType | undefined>(data.conteoCierre)
   const [ordenesAbiertas, setOrdenesAbiertas] = useState(data.ordenesAbiertas)
   const [lavadores] = useState(data.lavadores)
-  const [prestamosTurno, setPrestamosTurno] = useState<DeudaLavador[]>(data.prestamosTurno)
+  const [prestamosTurno, setPrestamosTurno] = useState<DeudaPersonal[]>(data.prestamosTurno)
   const [tarea, setTarea] = useState<Tarea>(null)
   // Conteo en curso: momento + hora del servidor en que se empezó (lo movido después se reconta) +
   // cuentas/órdenes con productos sin cobrar a confirmar (cierre y traspaso) + a quién se entrega.

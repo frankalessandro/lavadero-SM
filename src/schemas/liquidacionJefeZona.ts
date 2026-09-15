@@ -15,6 +15,9 @@ export const liquidacionJefeZonaSchema = z.object({
   periodoInicio: z.string(),
   periodoFin: z.string(),
   monto: z.number().int().nonnegative(),
+  // 0070: monto = comisionBruta − deudaDescontada (antes de 0070, comisionBruta = monto).
+  comisionBruta: z.number().int().nonnegative(),
+  deudaDescontada: z.number().int().nonnegative(),
   pagada: z.boolean(),
   anulada: z.boolean().default(false),
   motivoAnulacion: z.string().nullish().transform((v) => v ?? undefined),

@@ -153,18 +153,24 @@ async function comprasDeCaja(turnoId: string): Promise<number> {
   return (data ?? []).reduce((total, c) => total + (c.total as number), 0)
 }
 
-// Préstamos en efectivo entregados a lavadores desde la caja de este turno (0065) — mismo
-// mecanismo que compras/gastos: el efectivo sale de la caja en el momento, independientemente de
-// que la deuda se descuente después en la liquidación del lavador.
-async function prestamosDeCaja(turnoId: string): Promise<number> {
+// Deudas del personal que movieron efectivo de esta caja (0065/0070): préstamos (salen, monto
+// positivo) y abonos en efectivo (entran, monto negativo en el ledger). Mismo mecanismo que
+// compras/gastos — cuentan en el momento, sin importar cuándo se salde la deuda.
+async function deudasDeCaja(turnoId: string): Promise<{ prestamos: number; abonos: number }> {
   const { data, error } = await db
-    .from('deudas_lavador')
-    .select('monto')
+    .from('deudas_personal')
+    .select('tipo, monto')
     .eq('turno_id', turnoId)
-    .eq('tipo', 'prestamo')
+    .in('tipo', ['prestamo', 'abono'])
     .eq('estado', 'activo')
   if (error) throw new Error(error.message)
-  return (data ?? []).reduce((total, d) => total + (d.monto as number), 0)
+  let prestamos = 0
+  let abonos = 0
+  for (const d of data as { tipo: string; monto: number }[]) {
+    if (d.tipo === 'prestamo') prestamos += d.monto
+    else abonos += -d.monto
+  }
+  return { prestamos, abonos }
 }
 
 // Solo la modalidad efectivo es dinero físico que se puede contar — transferencia y datáfono no
@@ -172,20 +178,20 @@ async function prestamosDeCaja(turnoId: string): Promise<number> {
 // ingreso/ganancia del día — ver StatCards de /admin y /jefe-zona). Gastos en caja se asumen
 // pagados en efectivo desde la misma caja.
 export async function calcularValorEsperado(turno: TurnoCaja): Promise<number> {
-  // Compras y préstamos solo aplican al turno de jefe_zona (es la única caja que los paga, ver
-  // registrar_compra/0064 y registrar_prestamo_lavador/0065) — vigilante nunca tiene ninguno de
-  // los dos cargados a su turno.
-  const [gastos, compras, prestamos] = await Promise.all([
+  // Compras, préstamos y abonos solo aplican al turno de jefe_zona (es la única caja que los
+  // mueve, ver registrar_compra/0064 y registrar_prestamo_personal/0070) — vigilante nunca tiene
+  // ninguno cargado a su turno.
+  const [gastos, compras, deudas] = await Promise.all([
     gastosDeCaja(turno.id),
     turno.rol === 'jefe_zona' ? comprasDeCaja(turno.id) : Promise.resolve(0),
-    turno.rol === 'jefe_zona' ? prestamosDeCaja(turno.id) : Promise.resolve(0),
+    turno.rol === 'jefe_zona' ? deudasDeCaja(turno.id) : Promise.resolve({ prestamos: 0, abonos: 0 }),
   ])
-  const salidas = gastos + compras + prestamos
+  const salidas = gastos + compras + deudas.prestamos
 
   let ingresos: number
   if (turno.rol === 'jefe_zona') {
     const { lavados, ventas } = await fetchEfectivoDeTurno(turno.id)
-    ingresos = lavados + ventas
+    ingresos = lavados + ventas + deudas.abonos
   } else {
     const estanciasRes = await db
       .from('estancias_parqueadero')
@@ -207,8 +213,10 @@ export interface DesgloseEsperado {
   gastos: number
   // Compras de inventario pagadas con esta caja (0064) — 0 para el turno de vigilante.
   compras: number
-  // Préstamos en efectivo a lavadores desde esta caja (0065) — 0 para el turno de vigilante.
+  // Préstamos en efectivo al personal desde esta caja (0065/0070) — 0 para el turno de vigilante.
   prestamos: number
+  // Abonos a deudas del personal pagados en efectivo a esta caja (0070).
+  abonos: number
   total: number
 }
 
@@ -216,18 +224,19 @@ export interface DesgloseEsperado {
 // paso 2 del cierre de turno (arqueo ciego). Ingresos por lavados y por ventas se ven aparte
 // (como pidió el negocio), pero todos suman al mismo total esperado.
 export async function desgloseEsperado(turno: TurnoCaja): Promise<DesgloseEsperado> {
-  const [gastos, compras, prestamos] = await Promise.all([
+  const [gastos, compras, deudas] = await Promise.all([
     gastosDeCaja(turno.id),
     turno.rol === 'jefe_zona' ? comprasDeCaja(turno.id) : Promise.resolve(0),
-    turno.rol === 'jefe_zona' ? prestamosDeCaja(turno.id) : Promise.resolve(0),
+    turno.rol === 'jefe_zona' ? deudasDeCaja(turno.id) : Promise.resolve({ prestamos: 0, abonos: 0 }),
   ])
   const { lavados: ingresosLavados, ventas: ingresosVentas } =
     turno.rol === 'jefe_zona' ? await fetchEfectivoDeTurno(turno.id) : { lavados: 0, ventas: 0 }
+  const { prestamos, abonos } = deudas
   const total =
     turno.rol === 'jefe_zona'
-      ? turno.baseInicial + ingresosLavados + ingresosVentas - gastos - compras - prestamos
+      ? turno.baseInicial + ingresosLavados + ingresosVentas + abonos - gastos - compras - prestamos
       : await calcularValorEsperado(turno)
-  return { base: turno.baseInicial, ingresosLavados, ingresosVentas, gastos, compras, prestamos, total }
+  return { base: turno.baseInicial, ingresosLavados, ingresosVentas, gastos, compras, prestamos, abonos, total }
 }
 
 export async function cerrarTurno(

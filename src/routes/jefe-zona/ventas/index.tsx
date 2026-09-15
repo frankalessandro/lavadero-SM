@@ -12,9 +12,11 @@ import {
   abrirCuenta,
   cerrarCuenta,
   anularCuenta,
-  cargarCuentaALavador,
+  cargarCuentaAPersonal,
 } from '../../../data/cuentas'
 import { fetchLavadores } from '../../../data/lavadores'
+import { fetchPersonasDeudoras } from '../../../data/deudasPersonal'
+import type { Deudor } from '../../../schemas/deudaPersonal'
 import { anularVentaInputSchema, type Venta } from '../../../schemas/venta'
 import { abrirCuentaInputSchema, anularCuentaInputSchema, type Cuenta } from '../../../schemas/cuenta'
 import type { Producto } from '../../../schemas/producto'
@@ -566,10 +568,10 @@ function VenderPage() {
             setCerrandoCuenta(null)
             await refresh()
           }}
-          onCargarALavador={async (lavadorId, cerradaPor) => {
-            await cargarCuentaALavador(cerrandoCuenta.id, lavadorId, cerradaPor)
+          onCargarALavador={async (deudor, cerradaPor) => {
+            await cargarCuentaAPersonal(cerrandoCuenta.id, deudor, cerradaPor)
             setCerrandoCuenta(null)
-            toast.exito('Cuenta cargada a la liquidación del lavador')
+            toast.exito('Cuenta cargada como deuda del trabajador')
             await refresh()
           }}
         />
@@ -1028,12 +1030,21 @@ function CerrarCuentaModal({
   lavadores: Lavador[]
   onClose: () => void
   onCerrada: (pagos: PagoLineaInput[]) => Promise<void>
-  onCargarALavador: (lavadorId: string, cerradaPor: string) => Promise<void>
+  onCargarALavador: (deudor: Deudor, cerradaPor: string) => Promise<void>
 }) {
   const total = items.reduce((s, v) => s + v.total, 0)
   const [modo, setModo] = useState<'cobrar' | 'lavador'>('cobrar')
   const [pagoLineas, setPagoLineas] = useState<PagoLineaBorrador[]>([nuevaLineaBorrador(total)])
+  // 'l:<id>' = lavador · 'p:<id>' = jefe de patio o gerencia (0070).
   const [lavadorId, setLavadorId] = useState('')
+  const personasQuery = useQuery({ queryKey: ['perfiles', 'deudores'], queryFn: fetchPersonasDeudoras })
+  const opcionesDeudor = [
+    ...lavadores.filter((l) => l.activo).map((l) => ({ value: `l:${l.id}`, label: `${l.nombre} · lavador` })),
+    ...(personasQuery.data ?? []).map((p) => ({
+      value: `p:${p.id}`,
+      label: `${p.nombre?.trim() || 'Sin nombre'} · ${p.roles.includes('admin') ? 'gerencia' : 'jefe de patio'}`,
+    })),
+  ]
   const [cerradaPor, setCerradaPor] = useState(responsableSugerido)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -1052,17 +1063,20 @@ function CerrarCuentaModal({
     }
     if (modo === 'lavador') {
       if (!lavadorId) {
-        setError('Selecciona a qué lavador se le carga')
+        setError('Selecciona a quién se le carga')
         return
       }
       setError(null)
       enVueloRef.current = true
       setSaving(true)
       try {
-        await onCargarALavador(lavadorId, cerradaPor.trim())
+        await onCargarALavador(
+          { tipo: lavadorId.startsWith('l:') ? 'lavador' : 'persona', id: lavadorId.slice(2) },
+          cerradaPor.trim(),
+        )
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'No se pudo cargar la cuenta al lavador')
-        toast.desdeError(err, 'No se pudo cargar la cuenta al lavador')
+        setError(err instanceof Error ? err.message : 'No se pudo cargar la cuenta')
+        toast.desdeError(err, 'No se pudo cargar la cuenta')
         enVueloRef.current = false
         setSaving(false)
       }
@@ -1134,7 +1148,7 @@ function CerrarCuentaModal({
                 modo === 'lavador' ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-neutral-300 text-neutral-600 hover:bg-neutral-50'
               }`}
             >
-              Cargar a un lavador
+              Cargar a un trabajador
             </button>
           </div>
 
@@ -1145,15 +1159,16 @@ function CerrarCuentaModal({
             </div>
           ) : (
             <div className="flex flex-col gap-1.5 text-sm">
-              <span className="font-medium text-neutral-700">¿A qué lavador se le carga?</span>
+              <span className="font-medium text-neutral-700">¿A quién se le carga?</span>
               <CustomSelect
                 value={lavadorId}
                 onChange={setLavadorId}
-                placeholder="Selecciona un lavador"
-                options={lavadores.filter((l) => l.activo).map((l) => ({ value: l.id, label: l.nombre }))}
+                placeholder={personasQuery.isPending ? 'Cargando…' : 'Lavador, jefe de patio o gerencia'}
+                options={opcionesDeudor}
               />
               <p className="rounded-lg bg-warning-50 px-3 py-2 text-xs text-warning-700">
-                No entra plata hoy — el total ({COP.format(total)}) se descuenta de su próxima liquidación.
+                No entra plata hoy — el total ({COP.format(total)}) queda como deuda de esa persona: la paga con abonos o
+                se le descuenta al liquidar.
               </p>
             </div>
           )}
@@ -1175,7 +1190,7 @@ function CerrarCuentaModal({
             className="flex items-center justify-center gap-2 rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
           >
             <Wallet size={16} />
-            {saving ? 'Cerrando…' : modo === 'cobrar' ? `Cobrar ${COP.format(total)}` : `Cargar ${COP.format(total)} a la liquidación`}
+            {saving ? 'Cerrando…' : modo === 'cobrar' ? `Cobrar ${COP.format(total)}` : `Cargar ${COP.format(total)} como deuda`}
           </button>
         </form>
       </div>

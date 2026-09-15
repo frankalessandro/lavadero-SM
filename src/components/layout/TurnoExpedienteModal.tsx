@@ -90,8 +90,11 @@ export function TurnoExpedienteModal({ turno, comboNombre, lavadorNombre, produc
                   {data.desglose.compras > 0 ? (
                     <Linea label="− Compras pagadas en caja" valor={-data.desglose.compras} />
                   ) : null}
+                  {data.desglose.abonos > 0 ? (
+                    <Linea label="+ Abonos de deudas en efectivo" valor={data.desglose.abonos} />
+                  ) : null}
                   {data.desglose.prestamos > 0 ? (
-                    <Linea label="− Préstamos a lavadores" valor={-data.desglose.prestamos} />
+                    <Linea label="− Préstamos al personal" valor={-data.desglose.prestamos} />
                   ) : null}
                   <div className="mt-1 flex items-center justify-between border-t border-neutral-200 pt-1 font-semibold">
                     <span>Esperado</span>
@@ -237,21 +240,30 @@ export function TurnoExpedienteModal({ turno, comboNombre, lavadorNombre, produc
               </Card>
             ) : null}
 
-            {/* Préstamos a lavadores pagados con esta caja (0065) */}
+            {/* Préstamos y abonos en efectivo del personal con esta caja (0065/0070) */}
             {data.prestamos.length > 0 ? (
               <Card className="flex flex-col gap-1 p-4">
-                <h3 className="mb-1 text-sm font-semibold text-neutral-900">Préstamos a lavadores ({data.prestamos.length})</h3>
+                <h3 className="mb-1 text-sm font-semibold text-neutral-900">
+                  Préstamos y abonos del personal ({data.prestamos.length})
+                </h3>
                 {data.prestamos.map((p) => (
                   <div
                     key={p.id}
                     className={`flex items-center justify-between gap-3 text-sm text-neutral-700 ${p.estado === 'anulado' ? 'opacity-60' : ''}`}
                   >
                     <span>
-                      {lavadorNombre(p.lavadorId) ?? '—'}
+                      {p.tipo === 'abono' ? 'Abono · ' : 'Préstamo · '}
+                      {(p.lavadorId ? lavadorNombre(p.lavadorId) : data.personaNombrePorId.get(p.personaId ?? '')) ?? '—'}
                       {p.estado === 'anulado' ? <span className="text-danger-600"> · anulado</span> : ''}
                       <span className="text-xs text-neutral-400"> · {p.motivo ?? 'sin motivo'} · {p.registradoPor}</span>
                     </span>
-                    <span className="font-medium">{p.estado === 'anulado' ? COP.format(0) : `−${COP.format(p.monto)}`}</span>
+                    <span className="font-medium">
+                      {p.estado === 'anulado'
+                        ? COP.format(0)
+                        : p.tipo === 'abono'
+                          ? `+${COP.format(-p.monto)}`
+                          : `−${COP.format(p.monto)}`}
+                    </span>
                   </div>
                 ))}
               </Card>

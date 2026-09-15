@@ -8,6 +8,7 @@ import {
   type Cuenta,
 } from '../schemas/cuenta'
 import type { PagoLineaInput } from '../schemas/pago'
+import type { Deudor } from '../schemas/deudaPersonal'
 
 const CUENTA_SELECT =
   'id, titular, nota, estado, abiertaPor:abierta_por, abiertaEn:abierta_en, cerradaEn:cerrada_en, cerradaPor:cerrada_por, turnoId:turno_id, creadoEn:creado_en'
@@ -72,16 +73,16 @@ export async function cerrarCuenta(cuentaId: string, pagos: PagoLineaInput[], ce
   return cuentaSchema.parse(data)
 }
 
-// Cierra la cuenta cargando el total a la liquidación de un lavador en vez de cobrar plata
-// (0065) — mismo descuento de stock/costo que cerrarCuenta, pero sin pago real hoy: el total
-// queda como deuda de ese lavador (src/data/deudasLavador.ts), a descontar en su próxima
-// liquidación. Confirmar con el negocio (2026-09-14): cambia la regla 4 ("sin descuentos al
-// lavador"), que ya no aplica sin excepción.
-export async function cargarCuentaALavador(cuentaId: string, lavadorId: string, cerradaPor: string): Promise<Cuenta> {
+// Cierra la cuenta cargándola a un trabajador (lavador, jefe de patio o gerencia; 0065 → 0070) en
+// vez de cobrar plata — mismo descuento de stock/costo que cerrarCuenta, sin pago hoy: el total, a
+// precio de venta, queda como deuda de esa persona (src/data/deudasPersonal.ts), que se salda con
+// abonos o descontándola al liquidar.
+export async function cargarCuentaAPersonal(cuentaId: string, deudor: Deudor, cerradaPor: string): Promise<Cuenta> {
   const { data, error } = await db
-    .rpc('cargar_cuenta_a_lavador', {
+    .rpc('cargar_cuenta_a_personal', {
       p_cuenta_id: cuentaId,
-      p_lavador_id: lavadorId,
+      p_lavador_id: deudor.tipo === 'lavador' ? deudor.id : null,
+      p_persona_id: deudor.tipo === 'persona' ? deudor.id : null,
       p_cerrada_por: cerradaPor,
     })
     .select(CUENTA_SELECT)

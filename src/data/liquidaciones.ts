@@ -2,7 +2,7 @@ import { db } from '../lib/db'
 import { liquidacionSchema, type Liquidacion } from '../schemas/liquidacion'
 import { fetchLavadores } from './lavadores'
 import { fetchOrdenesEnRango } from './ordenes'
-import { fetchDeudaPendiente, fetchDeudaPendientePorLavador } from './deudasLavador'
+import { fetchDeudaPendiente, fetchDeudaPendientePorLavador } from './deudasPersonal'
 import type { TipoVehiculo } from '../schemas/tipoVehiculo'
 import type { Combo } from '../schemas/combo'
 
@@ -278,7 +278,7 @@ export async function fetchMontoPeriodo(
 ): Promise<MontoPeriodo> {
   const [ordenes, deudaPendiente] = await Promise.all([
     ordenesElegibles(lavadorId, periodoInicio, periodoFin),
-    fetchDeudaPendiente(lavadorId),
+    fetchDeudaPendiente({ tipo: 'lavador', id: lavadorId }),
   ])
   // El desglose y el monto deben ser la MITAD para este lavador cuando la orden se lavó entre 2,
   // no el total de la orden — de ahí el map antes de pasarlo a desglosarPorCategoria.
@@ -341,21 +341,27 @@ export async function fetchDesgloseLiquidacion(
 // 'liquidacion' en el ledger de deudas_lavador que refleja ese descuento. Si un paso falla se
 // reporta explícitamente con lo que sí quedó hecho — no falla en silencio, hay que revisar manual.
 //
-// La deuda se aplica hasta donde alcance la comisión de ESTE corte (regla confirmada,
-// 2026-09-14): nunca se genera un monto negativo. Si sobra deuda, sigue pendiente para la
-// siguiente liquidación — no se "pierde" ni se inventa, sigue en el ledger sin tocar.
+// Cuánto de la deuda se descuenta lo ELIGE admin al generar (decisión de Alessandro, 2026-09-15:
+// descuento parcial o total el día de liquidar; entre semana se abona). Se valida acá contra la
+// comisión del corte y la deuda pendiente — nunca negativo — y además la base rechaza cualquier
+// descuento que deje la deuda por debajo de cero (trigger `deudas_personal_no_negativa`, 0070).
 export async function generarLiquidacion(
   lavadorId: string,
   periodoInicio: string,
   periodoFin: string,
+  deudaADescontar: number,
 ): Promise<Liquidacion> {
   const [ordenes, deudaPendiente] = await Promise.all([
     ordenesElegibles(lavadorId, periodoInicio, periodoFin),
-    fetchDeudaPendiente(lavadorId),
+    fetchDeudaPendiente({ tipo: 'lavador', id: lavadorId }),
   ])
 
   const comisionBruta = ordenes.reduce((suma, orden) => suma + comisionParaLavador(orden, lavadorId), 0)
-  const deudaDescontada = Math.min(Math.max(deudaPendiente, 0), comisionBruta)
+  const maximo = Math.min(Math.max(deudaPendiente, 0), comisionBruta)
+  const deudaDescontada = Math.round(deudaADescontar)
+  if (deudaDescontada < 0 || deudaDescontada > maximo) {
+    throw new Error(`El descuento debe estar entre $0 y $${maximo} (deuda pendiente o comisión del corte, lo menor)`)
+  }
   const monto = comisionBruta - deudaDescontada
 
   const { data: creada, error: errorInsert } = await db
@@ -397,7 +403,7 @@ export async function generarLiquidacion(
   }
 
   if (deudaDescontada > 0) {
-    const { error: errorDeuda } = await db.from('deudas_lavador').insert({
+    const { error: errorDeuda } = await db.from('deudas_personal').insert({
       lavador_id: lavadorId,
       tipo: 'liquidacion',
       monto: -deudaDescontada,

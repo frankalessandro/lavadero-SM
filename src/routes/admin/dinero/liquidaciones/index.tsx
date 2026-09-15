@@ -31,7 +31,7 @@ import { PeriodoSelector } from '../../../../components/layout/PeriodoSelector'
 import { calcularRango, type ModoPeriodo } from '../../../../lib/periodo'
 import { fetchLavadores } from '../../../../data/lavadores'
 import { fetchTurnoAbierto } from '../../../../data/turnos'
-import { fetchPrestamosDeTurno, type DeudaLavador } from '../../../../data/deudasLavador'
+import { fetchPrestamosDeTurno, type DeudaPersonal } from '../../../../data/deudasPersonal'
 import { fetchConfiguracion } from '../../../../data/configuracion'
 import { fetchTiposVehiculo } from '../../../../data/tiposVehiculo'
 import { fetchCombos } from '../../../../data/combos'
@@ -45,6 +45,7 @@ import { FilaFiltros, FiltroTexto, FiltroSelect, FiltroVacio } from '../../../..
 import { coincide } from '../../../../lib/tableFilters'
 import { StatCard } from '../../../../components/layout/StatCard'
 import { ConfirmModal } from '../../../../components/layout/ConfirmModal'
+import { GenerarLiquidacionModal } from '../../../../components/layout/GenerarLiquidacionModal'
 import { BarChart } from '../../../../components/layout/BarChart'
 import { ColillaLiquidacionModal, type ColillaLiquidacionData } from '../../../../components/layout/ColillaLiquidacionModal'
 import { PrestamosDeTurno } from '../../../../components/layout/PrestamosDeTurno'
@@ -121,7 +122,7 @@ function LiquidacionesPage() {
   const [tiposVehiculo] = useState(initial.tiposVehiculo)
   const [combos] = useState(initial.combos)
   const [turnoJefeZona, setTurnoJefeZona] = useState(initial.turnoJefeZona)
-  const [prestamosTurno, setPrestamosTurno] = useState<DeudaLavador[]>(initial.prestamosTurno)
+  const [prestamosTurno, setPrestamosTurno] = useState<DeudaPersonal[]>(initial.prestamosTurno)
   const periodicidadLabel = configuracion.periodicidadLiquidacion === 'diaria' ? 'diaria' : 'semanal'
   const [generando, setGenerando] = useState<string | null>(null)
   // Clave `${lavadorId}:${periodicidad}` mientras se calcula el monto real del rango antes de
@@ -298,6 +299,7 @@ function LiquidacionesPage() {
           responsable: resumen.responsable,
           montoPendiente: resumen.montoPendiente,
           cantidadOrdenes: resumen.cantidadOrdenes,
+          deudaPendiente: preview.deudaPendiente,
         },
         periodicidad: 'semanal',
         periodoInicio: rangoPeriodo.periodoInicio,
@@ -440,22 +442,20 @@ function LiquidacionesPage() {
     }
   }
 
-  async function handleGenerar() {
+  // El modal atrapa el error (y se queda abierto para corregir el descuento); si sale bien se cierra.
+  async function handleGenerar(deudaADescontar: number) {
     if (!confirmandoGenerar) return
     const { comision, periodoInicio, periodoFin } = confirmandoGenerar
     setError(null)
     setGenerando(comision.lavadorId)
     try {
-      const liquidacion = await generarLiquidacion(comision.lavadorId, periodoInicio, periodoFin)
+      const liquidacion = await generarLiquidacion(comision.lavadorId, periodoInicio, periodoFin, deudaADescontar)
+      setConfirmandoGenerar(null)
       await refresh()
       await refreshResumen()
       await abrirColilla(liquidacion, comision.lavadorNombre)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo generar la liquidación')
-      toast.desdeError(err, 'No se pudo generar la liquidación')
     } finally {
       setGenerando(null)
-      setConfirmandoGenerar(null)
     }
   }
 
@@ -492,7 +492,7 @@ function LiquidacionesPage() {
     }
   }
 
-  async function handleGenerarJefeZona() {
+  async function handleGenerarJefeZona(deudaADescontar: number) {
     if (!confirmandoGenerarJefeZona) return
     const { comision, periodoInicio, periodoFin } = confirmandoGenerarJefeZona
     setError(null)
@@ -503,7 +503,9 @@ function LiquidacionesPage() {
         comision.responsable,
         periodoInicio,
         periodoFin,
+        deudaADescontar,
       )
+      setConfirmandoGenerarJefeZona(null)
       await refresh()
       await refreshResumen()
       setColillaJefeZona({
@@ -514,12 +516,8 @@ function LiquidacionesPage() {
         monto: liquidacion.monto,
         generadaEn: liquidacion.creadoEn,
       })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo generar la liquidación')
-      toast.desdeError(err, 'No se pudo generar la liquidación')
     } finally {
       setGenerandoJefeZona(null)
-      setConfirmandoGenerarJefeZona(null)
     }
   }
 
@@ -792,7 +790,7 @@ function LiquidacionesPage() {
                   {comision.deudaPendiente > 0 ? (
                     <p className="-mt-1.5 flex items-center gap-1.5 rounded-lg bg-warning-50 px-2.5 py-1.5 text-xs text-warning-700">
                       <HandCoins size={13} className="shrink-0" />
-                      Debe {COP.format(comision.deudaPendiente)} (préstamos/nevera) — se le descuenta al liquidar
+                      Debe {COP.format(comision.deudaPendiente)} — se elige cuánto descontar al liquidar
                     </p>
                   ) : null}
                   <div className="grid grid-cols-2 gap-2">
@@ -954,6 +952,12 @@ function LiquidacionesPage() {
                     </div>
                   </div>
                   <p className="text-xl font-semibold text-neutral-900">{COP.format(comision.montoPendiente)}</p>
+                  {comision.deudaPendiente > 0 ? (
+                    <p className="-mt-1.5 flex items-center gap-1.5 rounded-lg bg-warning-50 px-2.5 py-1.5 text-xs text-warning-700">
+                      <HandCoins size={13} className="shrink-0" />
+                      Debe {COP.format(comision.deudaPendiente)} — se elige cuánto descontar al liquidar
+                    </p>
+                  ) : null}
                   <button
                     type="button"
                     disabled={cargandoDetalleJefeZona === comision.personaId}
@@ -1057,9 +1061,12 @@ function LiquidacionesPage() {
       )}
 
       {confirmandoGenerar ? (
-        <ConfirmModal
-          title={confirmandoGenerar.rangoLabel ? `Generar liquidación — ${confirmandoGenerar.rangoLabel}` : `Generar liquidación ${confirmandoGenerar.periodicidad}`}
-          message={`¿Generar la liquidación ${
+        <GenerarLiquidacionModal
+          titulo={confirmandoGenerar.rangoLabel ? `Generar liquidación — ${confirmandoGenerar.rangoLabel}` : `Generar liquidación ${confirmandoGenerar.periodicidad}`}
+          nombre={confirmandoGenerar.comision.lavadorNombre}
+          comisionBruta={confirmandoGenerar.preview.monto}
+          deudaPendiente={confirmandoGenerar.preview.deudaPendiente}
+          resumen={`Liquidación ${
             confirmandoGenerar.rangoLabel
               ? `de ${confirmandoGenerar.rangoLabel}`
               : confirmandoGenerar.periodicidad === 'diaria'
@@ -1067,19 +1074,11 @@ function LiquidacionesPage() {
                 : 'de los últimos 7 días'
           } (${confirmandoGenerar.periodoInicio} → ${confirmandoGenerar.periodoFin}) para ${
             confirmandoGenerar.comision.lavadorNombre
-          }? Carros: ${confirmandoGenerar.preview.desglose.autos.cantidad} (${COP.format(
+          }. Carros: ${confirmandoGenerar.preview.desglose.autos.cantidad} (${COP.format(
             confirmandoGenerar.preview.desglose.autos.monto,
           )}) · Motos: ${confirmandoGenerar.preview.desglose.motos.cantidad} (${COP.format(
             confirmandoGenerar.preview.desglose.motos.monto,
-          )}).${
-            confirmandoGenerar.preview.deudaPendiente > 0
-              ? ` Comisión: ${COP.format(confirmandoGenerar.preview.monto)} − deuda pendiente ${COP.format(
-                  confirmandoGenerar.preview.deudaPendiente,
-                )} = se le paga ${COP.format(confirmandoGenerar.preview.montoNeto)}.`
-              : ` Se le paga ${COP.format(confirmandoGenerar.preview.monto)}.`
-          }`}
-          confirmLabel="Generar liquidación"
-          variant="primary"
+          )}).`}
           onConfirm={handleGenerar}
           onCancel={() => setConfirmandoGenerar(null)}
         />
@@ -1103,9 +1102,12 @@ function LiquidacionesPage() {
       ) : null}
 
       {confirmandoGenerarJefeZona ? (
-        <ConfirmModal
-          title={confirmandoGenerarJefeZona.rangoLabel ? `Generar liquidación — ${confirmandoGenerarJefeZona.rangoLabel}` : `Generar liquidación ${confirmandoGenerarJefeZona.periodicidad}`}
-          message={`¿Generar la liquidación ${
+        <GenerarLiquidacionModal
+          titulo={confirmandoGenerarJefeZona.rangoLabel ? `Generar liquidación — ${confirmandoGenerarJefeZona.rangoLabel}` : `Generar liquidación ${confirmandoGenerarJefeZona.periodicidad}`}
+          nombre={confirmandoGenerarJefeZona.comision.responsable}
+          comisionBruta={confirmandoGenerarJefeZona.preview.monto}
+          deudaPendiente={confirmandoGenerarJefeZona.preview.deudaPendiente}
+          resumen={`Liquidación ${
             confirmandoGenerarJefeZona.rangoLabel
               ? `de ${confirmandoGenerarJefeZona.rangoLabel}`
               : confirmandoGenerarJefeZona.periodicidad === 'diaria'
@@ -1113,11 +1115,9 @@ function LiquidacionesPage() {
                 : 'de los últimos 7 días'
           } (${confirmandoGenerarJefeZona.periodoInicio} → ${confirmandoGenerarJefeZona.periodoFin}) para ${
             confirmandoGenerarJefeZona.comision.responsable
-          } por ${COP.format(confirmandoGenerarJefeZona.preview.monto)} (${
-            confirmandoGenerarJefeZona.preview.cantidadOrdenes
-          } orden${confirmandoGenerarJefeZona.preview.cantidadOrdenes === 1 ? '' : 'es'})?`}
-          confirmLabel="Generar liquidación"
-          variant="primary"
+          } — ${confirmandoGenerarJefeZona.preview.cantidadOrdenes} orden${
+            confirmandoGenerarJefeZona.preview.cantidadOrdenes === 1 ? '' : 'es'
+          }.`}
           onConfirm={handleGenerarJefeZona}
           onCancel={() => setConfirmandoGenerarJefeZona(null)}
         />

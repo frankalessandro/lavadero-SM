@@ -3,7 +3,7 @@ import { fetchVentasDeTurno } from './ventas'
 import { fetchPagosDeTurno, fetchPagosDeOrdenes } from './pagos'
 import { fetchGastosDeTurno } from './gastos'
 import { fetchComprasDeTurno } from './compras'
-import { fetchPrestamosDeTurno } from './deudasLavador'
+import { fetchPrestamosDeTurno } from './deudasPersonal'
 import { fetchTraspasos, desgloseEsperado, type DesgloseEsperado } from './turnos'
 import { fetchConteosDeTurno, fetchLineasDeConteo, type ConteoLineaConProducto } from './conteosInventario'
 import type { TurnoCaja, TraspasoTurno } from '../schemas/turnoCaja'
@@ -12,7 +12,8 @@ import type { Orden } from '../schemas/orden'
 import type { Pago } from '../schemas/pago'
 import type { Venta } from '../schemas/venta'
 import type { Compra } from '../schemas/compra'
-import type { DeudaLavador } from '../schemas/deudaLavador'
+import type { DeudaPersonal } from '../schemas/deudaPersonal'
+import { fetchPerfiles } from './perfiles'
 import type { GastoConCategoria } from './gastos'
 
 export interface ConteoConLineas {
@@ -26,7 +27,8 @@ export interface ExpedienteTurno {
   ventas: Venta[]
   gastos: GastoConCategoria[]
   compras: Compra[] // compras de inventario pagadas con la caja de este turno (0064)
-  prestamos: DeudaLavador[] // préstamos a lavadores pagados con la caja de este turno (0065)
+  prestamos: DeudaPersonal[] // préstamos y abonos en efectivo del personal con la caja de este turno (0065/0070)
+  personaNombrePorId: Map<string, string> // jefes de patio / gerencia, para las deudas del personal
   pagos: Pago[] // todas las líneas del turno (para el desglose por método)
   traspasos: TraspasoTurno[]
   desglose?: DesgloseEsperado // solo si el turno está cerrado o tiene datos suficientes
@@ -42,7 +44,7 @@ async function conteosConLineas(turnoId: string): Promise<ConteoConLineas[]> {
 // de caja, el reparto de pagos por método, traspasos de responsabilidad, y los conteos de
 // inventario de apertura y cierre. Para /admin/operacion/turnos.
 export async function fetchExpedienteTurno(turno: TurnoCaja): Promise<ExpedienteTurno> {
-  const [ordenes, ventas, pagos, gastos, compras, prestamos, traspasos, conteos] = await Promise.all([
+  const [ordenes, ventas, pagos, gastos, compras, prestamos, traspasos, conteos, perfiles] = await Promise.all([
     fetchOrdenesDeTurno(turno.id),
     fetchVentasDeTurno(turno.id),
     fetchPagosDeTurno(turno.id),
@@ -51,7 +53,9 @@ export async function fetchExpedienteTurno(turno: TurnoCaja): Promise<Expediente
     fetchPrestamosDeTurno(turno.id),
     fetchTraspasos(turno.id),
     conteosConLineas(turno.id),
+    fetchPerfiles(),
   ])
+  const personaNombrePorId = new Map(perfiles.map((p) => [p.id, p.nombre?.trim() || 'Sin nombre']))
 
   const pagosDeOrdenes = await fetchPagosDeOrdenes(ordenes.map((o) => o.id))
   const pagosPorOrden = new Map<string, Pago[]>()
@@ -69,5 +73,5 @@ export async function fetchExpedienteTurno(turno: TurnoCaja): Promise<Expediente
     desglose = undefined
   }
 
-  return { ordenes, pagosPorOrden, ventas, gastos, compras, prestamos, pagos, traspasos, desglose, conteos }
+  return { ordenes, pagosPorOrden, ventas, gastos, compras, prestamos, pagos, traspasos, desglose, conteos, personaNombrePorId }
 }
