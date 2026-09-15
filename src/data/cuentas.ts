@@ -100,6 +100,7 @@ export async function anularCuenta(cuentaId: string, input: AnularCuentaInput): 
       p_cuenta_id: cuentaId,
       p_motivo: parsed.motivo,
       p_anulada_por: parsed.anuladaPor,
+      p_se_consumio: parsed.seConsumio,
     })
     .select(CUENTA_SELECT)
     .single()

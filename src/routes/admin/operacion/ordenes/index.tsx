@@ -1,5 +1,9 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useMemo, useRef, useState, type FormEvent } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
+import { useQuery } from '@tanstack/react-query'
+import { fetchVentasDeOrden } from '../../../../data/ventas'
+import { queryKeys } from '../../../../lib/queryKeys'
+import { DestinoProductoAnulado } from '../../../../components/layout/DestinoProductoAnulado'
 import { Ban, ClipboardList, Wallet, X } from 'lucide-react'
 import { anularOrden, fetchOrdenesEnRango } from '../../../../data/ordenes'
 import { fetchLavadores } from '../../../../data/lavadores'
@@ -400,17 +404,37 @@ function AnularModal({
 }) {
   const [motivo, setMotivo] = useState('')
   const [anuladaPor, setAnuladaPor] = useState('')
+  const [seConsumio, setSeConsumio] = useState<boolean | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const enVueloRef = useRef(false)
+  // Productos de la orden (pendientes o cobrados con ella): si hay, la base exige decir qué pasó
+  // con ellos (0069) — se anulan junto con la orden.
+  const productosQuery = useQuery({
+    queryKey: queryKeys.ventasDeOrden(orden.id),
+    queryFn: () => fetchVentasDeOrden(orden.id),
+  })
+  const productosOrden = productosQuery.data ?? []
+  const tieneProductos = productosOrden.length > 0
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    const parsed = anularOrdenInputSchema.safeParse({ motivo, anuladaPor })
+    if (enVueloRef.current) return
+    const parsed = anularOrdenInputSchema.safeParse({ motivo, anuladaPor, seConsumio: seConsumio ?? undefined })
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Datos inválidos')
       return
     }
+    if (productosQuery.isPending) {
+      setError('Cargando los productos de la orden…')
+      return
+    }
+    if (tieneProductos && seConsumio === null) {
+      setError('Indica qué pasó con los productos de la orden')
+      return
+    }
     setError(null)
+    enVueloRef.current = true
     setSaving(true)
     try {
       await anularOrden(orden.id, parsed.data)
@@ -420,6 +444,7 @@ function AnularModal({
       setError(err instanceof Error ? err.message : 'No se pudo anular la orden')
       toast.desdeError(err, 'No se pudo anular la orden')
     } finally {
+      enVueloRef.current = false
       setSaving(false)
     }
   }
@@ -446,6 +471,16 @@ function AnularModal({
         </p>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+          {tieneProductos ? (
+            <div className="flex flex-col gap-2 rounded-lg border border-warning-600/25 bg-warning-50/60 p-3">
+              <p className="text-xs text-warning-700">
+                Esta orden tiene {productosOrden.reduce((s, v) => s + v.cantidad, 0)} producto(s) de vitrina — se anulan con
+                ella.
+              </p>
+              <DestinoProductoAnulado value={seConsumio} onChange={setSeConsumio} plural={productosOrden.length > 1} />
+            </div>
+          ) : null}
+
           <label className="flex flex-col gap-1.5 text-left text-sm">
             <span className="font-medium text-neutral-700">Motivo de anulación</span>
             <textarea

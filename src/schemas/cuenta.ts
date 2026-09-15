@@ -38,6 +38,8 @@ export const abrirCuentaInputSchema = z.object({
 export const anularCuentaInputSchema = z.object({
   motivo: z.string().trim().min(3, 'El motivo de anulación es obligatorio'),
   anuladaPor: z.string().trim().min(1, 'Indica quién anula la cuenta'),
+  // 0068: ¿los productos se consumieron (salen del inventario) o volvieron a la nevera?
+  seConsumio: z.boolean({ error: 'Indica si los productos se consumieron o volvieron a la nevera' }),
 })
 
 export type EstadoCuenta = z.infer<typeof estadoCuentaSchema>

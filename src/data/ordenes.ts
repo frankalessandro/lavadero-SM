@@ -542,7 +542,12 @@ export async function corregirOrden(
 export async function anularOrden(id: string, input: AnularOrdenInput): Promise<Orden> {
   const parsed = anularOrdenInputSchema.parse(input)
   const { data, error } = await db
-    .rpc('anular_orden', { p_orden_id: id, p_motivo: parsed.motivo, p_anulada_por: parsed.anuladaPor })
+    .rpc('anular_orden', {
+      p_orden_id: id,
+      p_motivo: parsed.motivo,
+      p_anulada_por: parsed.anuladaPor,
+      p_se_consumio: parsed.seConsumio ?? null,
+    })
     .select(ORDEN_SELECT)
     .single()
   if (error) throw new Error(error.message)

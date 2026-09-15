@@ -1,7 +1,9 @@
+import { z } from 'zod'
 import { db } from '../lib/db'
 import {
   movimientoInventarioInputSchema,
   movimientoInventarioSchema,
+  tipoMovimientoInventarioSchema,
   type MovimientoInventario,
   type MovimientoInventarioInput,
 } from '../schemas/movimientoInventario'
@@ -29,45 +31,65 @@ export async function fetchMovimientosOperativo(productoId?: string): Promise<Mo
   return movimientoInventarioSchema.array().parse(data)
 }
 
-// Para jefe_zona: RLS bloquea INSERT directo sobre movimientos_inventario (0012_rls_policies.sql
-// — solo admin), así que registra el movimiento a través de la vista operativa (mismo trigger
-// INSTEAD OF que ya usa fetchMovimientosOperativo para leer). Sin costo_unitario/proveedor porque
-// esas columnas no existen en la vista — jefe_zona no ve costos (CLAUDE.md §Roles); una entrada
-// registrada así queda sin costo, igual que hoy pasa con cualquier entrada sin costo capturado.
-//
-// No hace `.select()` de vuelta: en una vista con trigger `INSTEAD OF INSERT`, el `RETURNING`
-// entrega el `NEW` del trigger, que no trae `id` ni `creado_en` (se generan en la tabla base),
-// así que parsearlo reventaba con `invalid_type` en esos dos campos aunque la fila SÍ se
-// insertaba. El llamador descarta el resultado y refresca la lista, así que no se pierde nada.
-export async function createMovimientoOperativo(input: MovimientoInventarioInput): Promise<void> {
+// Movimiento manual (entrada/salida/ajuste que no es venta, compra ni conteo). Desde 0069 solo por
+// RPC — ni jefe de zona ni admin escriben la tabla directo: la base exige justificación, valida el
+// signo, fija la fecha y el responsable (el del turno abierto para jefe de zona). Costo y proveedor
+// solo los acepta para admin; jefe de zona no ve costos (CLAUDE.md §Roles).
+export async function registrarMovimientoManual(input: MovimientoInventarioInput): Promise<void> {
   const parsed = movimientoInventarioInputSchema.parse(input)
-  const { error } = await db.from('movimientos_inventario_operativo').insert({
-    producto_id: parsed.productoId,
-    tipo: parsed.tipo,
-    cantidad: parsed.cantidad,
-    motivo: parsed.motivo,
-    responsable: parsed.responsable,
+  const { error } = await db.rpc('registrar_movimiento_inventario', {
+    p_producto_id: parsed.productoId,
+    p_tipo: parsed.tipo,
+    p_cantidad: parsed.cantidad,
+    p_motivo: parsed.motivo,
+    p_costo_unitario: parsed.costoUnitario ?? null,
+    p_proveedor: parsed.proveedor ?? null,
   })
   if (error) throw new Error(error.message)
 }
 
-export async function createMovimiento(input: MovimientoInventarioInput): Promise<MovimientoInventario> {
-  const parsed = movimientoInventarioInputSchema.parse(input)
-  const { data, error } = await db
-    .from('movimientos_inventario')
-    .insert({
-      producto_id: parsed.productoId,
-      tipo: parsed.tipo,
-      cantidad: parsed.cantidad,
-      costo_unitario: parsed.costoUnitario,
-      proveedor: parsed.proveedor,
-      motivo: parsed.motivo,
-      responsable: parsed.responsable,
-    })
-    .select(MOVIMIENTO_SELECT)
-    .single()
+export interface MovimientoManual {
+  id: string
+  productoId: string
+  producto: string
+  tipo: MovimientoInventario['tipo']
+  cantidad: number
+  motivo: string | undefined
+  responsable: string
+  registradoPor: string | undefined
+  creadoEn: string
+}
+
+// Para gerencia (0069): todo lo que movió stock a mano en el periodo, con justificación, a nombre
+// de quién quedó y qué cuenta lo registró. Solo admin.
+export async function fetchMovimientosManuales(desde: string): Promise<MovimientoManual[]> {
+  const { data, error } = await db.rpc('movimientos_manuales', { p_desde: desde })
   if (error) throw new Error(error.message)
-  return movimientoInventarioSchema.parse(data)
+  return (data as Record<string, unknown>[]).map((r) =>
+    z
+      .object({
+        id: z.string(),
+        productoId: z.string(),
+        producto: z.string(),
+        tipo: tipoMovimientoInventarioSchema,
+        cantidad: z.number().int(),
+        motivo: z.string().nullish().transform((v) => v ?? undefined),
+        responsable: z.string(),
+        registradoPor: z.string().nullish().transform((v) => v ?? undefined),
+        creadoEn: z.string(),
+      })
+      .parse({
+        id: r.id,
+        productoId: r.producto_id,
+        producto: r.producto,
+        tipo: r.tipo,
+        cantidad: r.cantidad,
+        motivo: r.motivo,
+        responsable: r.responsable,
+        registradoPor: r.registrado_por,
+        creadoEn: r.creado_en,
+      }),
+  )
 }
 
 // `stock` = lo que dice el sistema (Σ movimientos). `comprometido` = unidades cargadas a órdenes

@@ -345,10 +345,11 @@ function JefeZonaDashboard() {
     await refresh()
   }
 
-  async function handleQuitarProducto(venta: Venta, motivo: string) {
+  async function handleQuitarProducto(venta: Venta, motivo: string, seConsumio: boolean) {
     await anularVenta(venta.id, {
       motivo,
       anuladaPor: turno?.responsableActual ?? 'jefe de zona',
+      seConsumio,
     })
     setQuitandoProducto(null)
     await refresh()

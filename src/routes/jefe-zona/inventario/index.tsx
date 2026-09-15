@@ -6,7 +6,7 @@ import { fetchProductosOperativo } from '../../../data/productos'
 import {
   fetchStockProductosOperativo,
   fetchMovimientosOperativo,
-  createMovimientoOperativo,
+  registrarMovimientoManual,
 } from '../../../data/movimientosInventario'
 import { fetchComprasRecientes, registrarCompra, anularCompra } from '../../../data/compras'
 import { movimientoInventarioInputSchema, type TipoMovimientoInventario } from '../../../schemas/movimientoInventario'
@@ -471,7 +471,6 @@ function MovimientoForm({
   const [direccionAjuste, setDireccionAjuste] = useState<'aumento' | 'disminucion'>('aumento')
   const [cantidad, setCantidad] = useState('')
   const [motivo, setMotivo] = useState('')
-  const [responsable, setResponsable] = useState(responsableSugerido)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   // `disabled={saving}` se aplica un render después; un doble clic rápido dispararía el insert
@@ -495,8 +494,7 @@ function MovimientoForm({
       productoId,
       tipo,
       cantidad: cantidadConSigno,
-      motivo: motivo || undefined,
-      responsable,
+      motivo,
     })
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Revisa los datos del formulario')
@@ -506,7 +504,7 @@ function MovimientoForm({
     enVueloRef.current = true
     setSaving(true)
     try {
-      await createMovimientoOperativo(parsed.data)
+      await registrarMovimientoManual(parsed.data)
       reset()
       await onSaved()
       toast.exito('Movimiento registrado')
@@ -588,35 +586,26 @@ function MovimientoForm({
 
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="font-medium text-neutral-700">
-            Motivo {tipo === 'ajuste' ? <span className="text-danger-600">*</span> : <span className="font-normal text-neutral-400">(opcional)</span>}
+            Justificación <span className="text-danger-600">*</span>
           </span>
-          <input
+          <textarea
             value={motivo}
             onChange={(e) => setMotivo(e.target.value)}
+            rows={2}
             placeholder={
               tipo === 'ajuste'
-                ? 'Obligatorio — ej. conteo físico, daño, vencimiento'
+                ? 'Qué pasó y por qué cambia el stock — ej. se encontraron 2 en la bodega que no estaban registradas'
                 : tipo === 'salida'
-                  ? 'Ej. consumo del día, se usó en lavado'
-                  : 'Ej. reposición de nevera'
+                  ? 'Qué pasó — ej. se rompió una botella al descargar'
+                  : 'De dónde salió — para mercancía comprada usa Registrar compra'
             }
-            className="rounded-lg border border-neutral-300 px-3 py-3 text-base outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+            className="resize-none rounded-lg border border-neutral-300 px-3 py-3 text-base outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
           />
         </label>
 
-        <label className="flex flex-col gap-1.5 text-sm">
-          <span className="font-medium text-neutral-700">Responsable</span>
-          <input
-            value={responsable}
-            onChange={(e) => setResponsable(e.target.value)}
-            placeholder="Nombre de quien registra"
-            className="rounded-lg border border-neutral-300 px-3 py-3 text-base outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-          />
-        </label>
-
-        <p className="text-xs text-neutral-400">
-          Este registro no incluye costo ni proveedor — esos datos solo los administra Admin al recibir mercancía
-          nueva.
+        <p className="rounded-lg bg-neutral-50 px-3 py-2 text-xs text-neutral-500">
+          Queda a nombre de <span className="font-medium text-neutral-700">{responsableSugerido || 'el responsable del turno'}</span>{' '}
+          y lo revisa gerencia. Sin costo ni proveedor — la mercancía comprada va por Compras.
         </p>
 
         {error ? <p className="text-xs text-danger-600">{error}</p> : null}

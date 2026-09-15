@@ -137,6 +137,8 @@ export const ordenSchema = z.object({
 export const anularOrdenInputSchema = z.object({
   motivo: z.string().trim().min(3, 'El motivo de anulación es obligatorio'),
   anuladaPor: z.string().trim().min(1, 'Indica quién anula la orden'),
+  // 0069: obligatorio en la base si la orden tiene productos (pendientes o cobrados con ella).
+  seConsumio: z.boolean().optional(),
 })
 
 // Registro del vehículo — sin datos de pago, eso llega en el cobro (M2 real: se cobra al

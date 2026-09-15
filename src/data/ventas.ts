@@ -190,6 +190,7 @@ export async function anularVenta(id: string, input: AnularVentaInput): Promise<
       p_venta_id: id,
       p_motivo: parsed.motivo,
       p_anulada_por: parsed.anuladaPor,
+      p_se_consumio: parsed.seConsumio,
     })
     .select(VENTA_SELECT)
     .single()

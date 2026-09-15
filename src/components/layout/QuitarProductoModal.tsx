@@ -1,12 +1,14 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { X } from 'lucide-react'
 import { anularVentaInputSchema } from '../../schemas/venta'
 import type { Venta } from '../../schemas/venta'
 import { toast } from '../../lib/toast'
+import { DestinoProductoAnulado } from './DestinoProductoAnulado'
 
 // Quitar un producto ya cargado a un destino pendiente (orden o cuenta abierta) antes de
 // cobrar/cerrar — regla de negocio 13: se anula con motivo, no se borra, queda visible en
-// reportes. Como nunca descontó stock, no hay reverso de inventario.
+// reportes. Desde 0068 se declara si el producto volvió a la nevera o se consumió: si se
+// consumió, sale del inventario aunque no se cobre.
 export function QuitarProductoModal({
   venta,
   productoNombre,
@@ -16,27 +18,32 @@ export function QuitarProductoModal({
   venta: Venta
   productoNombre: string
   onClose: () => void
-  onQuitar: (venta: Venta, motivo: string) => Promise<void>
+  onQuitar: (venta: Venta, motivo: string, seConsumio: boolean) => Promise<void>
 }) {
   const [motivo, setMotivo] = useState('Quitado antes de cobrar')
+  const [seConsumio, setSeConsumio] = useState<boolean | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const enVueloRef = useRef(false)
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    const parsed = anularVentaInputSchema.pick({ motivo: true }).safeParse({ motivo })
+    if (enVueloRef.current) return
+    const parsed = anularVentaInputSchema.pick({ motivo: true, seConsumio: true }).safeParse({ motivo, seConsumio })
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Indica un motivo')
       return
     }
     setError(null)
+    enVueloRef.current = true
     setSaving(true)
     try {
-      await onQuitar(venta, parsed.data.motivo)
-      toast.exito('Producto quitado de la orden')
+      await onQuitar(venta, parsed.data.motivo, parsed.data.seConsumio)
+      toast.exito('Producto quitado')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo quitar el producto')
       toast.desdeError(err, 'No se pudo quitar el producto')
+      enVueloRef.current = false
       setSaving(false)
     }
   }
@@ -57,13 +64,13 @@ export function QuitarProductoModal({
           </button>
         </div>
         <p className="mb-4 text-xs text-neutral-500">
-          Queda anulado con el motivo, visible en reportes (control antifraude). No afecta el stock.
+          Queda anulado con el motivo, visible en reportes (control antifraude).
         </p>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <DestinoProductoAnulado value={seConsumio} onChange={setSeConsumio} />
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-medium text-neutral-700">Motivo</span>
             <textarea
-              autoFocus
               value={motivo}
               onChange={(e) => setMotivo(e.target.value)}
               rows={2}

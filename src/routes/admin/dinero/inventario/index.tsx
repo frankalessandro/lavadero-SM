@@ -9,7 +9,9 @@ import {
 } from '../../../../data/productos'
 import {
   fetchMovimientos,
-  createMovimiento,
+  registrarMovimientoManual,
+  fetchMovimientosManuales,
+  type MovimientoManual,
   fetchStockProductos,
   type StockProducto,
 } from '../../../../data/movimientosInventario'
@@ -54,7 +56,7 @@ function hace30DiasISO(): string {
 }
 
 async function loadInventario() {
-  const [productos, stock, movimientos, ventas, faltantes, compras, turnoJefeZona] = await Promise.all([
+  const [productos, stock, movimientos, ventas, faltantes, compras, turnoJefeZona, manuales] = await Promise.all([
     fetchProductos(),
     fetchStockProductos(),
     fetchMovimientos(),
@@ -62,8 +64,9 @@ async function loadInventario() {
     fetchFaltantesPendientes(),
     fetchComprasRecientes(15),
     fetchTurnoAbierto('jefe_zona'),
+    fetchMovimientosManuales(hace30DiasISO()),
   ])
-  return { productos, stock, movimientos: movimientos.slice(0, 15), ventas, faltantes, compras, turnoJefeZona }
+  return { productos, stock, movimientos: movimientos.slice(0, 15), ventas, faltantes, compras, turnoJefeZona, manuales }
 }
 
 export const Route = createFileRoute('/admin/dinero/inventario/')({
@@ -199,6 +202,8 @@ function InventarioPage() {
       </div>
 
       <FaltantesPendientes faltantes={data.faltantes} />
+
+      <MovimientosManuales movimientos={data.manuales} />
 
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -743,7 +748,6 @@ function MovimientoForm({
   const [valorTotal, setValorTotal] = useState('')
   const [proveedor, setProveedor] = useState('')
   const [motivo, setMotivo] = useState('')
-  const [responsable, setResponsable] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   // `disabled={saving}` no basta: el estado se aplica en el siguiente render, así que un doble
@@ -775,8 +779,7 @@ function MovimientoForm({
       cantidad: cantidadConSigno,
       costoUnitario: costoUnitarioCalculado,
       proveedor: tipo === 'entrada' ? proveedor || undefined : undefined,
-      motivo: motivo || undefined,
-      responsable,
+      motivo,
     })
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Revisa los datos del formulario')
@@ -786,7 +789,7 @@ function MovimientoForm({
     enVueloRef.current = true
     setSaving(true)
     try {
-      await createMovimiento(parsed.data)
+      await registrarMovimientoManual(parsed.data)
       reset()
       await onSaved()
       toast.exito('Movimiento registrado')
@@ -911,24 +914,19 @@ function MovimientoForm({
 
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="font-medium text-neutral-700">
-            Motivo {tipo === 'ajuste' ? <span className="text-danger-600">*</span> : <span className="font-normal text-neutral-400">(opcional)</span>}
+            Justificación <span className="text-danger-600">*</span>
           </span>
-          <input
+          <textarea
             value={motivo}
             onChange={(e) => setMotivo(e.target.value)}
-            placeholder={tipo === 'ajuste' ? 'Obligatorio — ej. conteo físico, daño, vencimiento' : 'Opcional'}
-            className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+            rows={2}
+            placeholder="Qué pasó y por qué cambia el stock (mínimo 10 caracteres)"
+            className="resize-none rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
           />
-        </label>
-
-        <label className="flex flex-col gap-1.5 text-sm">
-          <span className="font-medium text-neutral-700">Responsable</span>
-          <input
-            value={responsable}
-            onChange={(e) => setResponsable(e.target.value)}
-            placeholder="Nombre de quien registra"
-            className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-          />
+          <span className="text-xs text-neutral-400">
+            Queda a nombre de tu cuenta y en el listado de movimientos manuales. Para mercancía comprada usa
+            Registrar compra.
+          </span>
         </label>
 
         {error ? <p className="text-xs text-danger-600">{error}</p> : null}
@@ -1115,6 +1113,68 @@ function ProductoForm({
   )
 }
 
+// Todo lo que movió stock a mano en los últimos 30 días — ni venta, ni compra, ni conteo (0069).
+// Decisión de Alessandro: el jefe de patio puede subir y bajar stock, pero con responsable y
+// justificación, y gerencia lo revisa acá. Un ajuste justo antes de un cierre es la forma de tapar
+// un faltante, así que se muestra la hora.
+function MovimientosManuales({ movimientos }: { movimientos: MovimientoManual[] }) {
+  const [verTodos, setVerTodos] = useState(false)
+  if (movimientos.length === 0) return null
+  const visibles = verTodos ? movimientos : movimientos.slice(0, 8)
+
+  return (
+    <Card className="flex flex-col gap-3 border-l-4 border-l-warning-600 p-5">
+      <div className="flex items-center gap-2.5">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-warning-50 text-warning-700">
+          <PackageSearch size={18} />
+        </span>
+        <div>
+          <h3 className="text-sm font-semibold text-neutral-900">Movimientos manuales por revisar</h3>
+          <p className="text-xs text-neutral-500">
+            {movimientos.length} en los últimos 30 días — entradas, salidas y ajustes que no vienen de venta, compra ni conteo
+          </p>
+        </div>
+      </div>
+
+      <ul className="flex flex-col divide-y divide-neutral-100">
+        {visibles.map((m) => (
+          <li key={m.id} className="flex flex-col gap-0.5 py-2 text-sm sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+            <div className="min-w-0">
+              <p className="text-neutral-800">
+                <span className={`mr-1.5 inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${TIPO_CLASS[m.tipo]}`}>
+                  {TIPO_LABEL[m.tipo]}
+                </span>
+                <span className="font-semibold">
+                  {m.cantidad > 0 ? '+' : ''}
+                  {m.cantidad}
+                </span>{' '}
+                {m.producto}
+              </p>
+              <p className="text-xs text-neutral-500">{m.motivo ?? 'Sin justificación (anterior a 0069)'}</p>
+            </div>
+            <p className="shrink-0 text-xs text-neutral-400 sm:text-right">
+              {m.responsable}
+              {m.registradoPor && m.registradoPor !== m.responsable ? ` · cuenta ${m.registradoPor}` : ''}
+              <br />
+              {new Date(m.creadoEn).toLocaleString('es-CO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+            </p>
+          </li>
+        ))}
+      </ul>
+
+      {movimientos.length > 8 ? (
+        <button
+          type="button"
+          onClick={() => setVerTodos((v) => !v)}
+          className="self-start text-xs font-medium text-primary-600 transition-colors hover:text-primary-700"
+        >
+          {verTodos ? 'Ver menos' : `Ver los ${movimientos.length}`}
+        </button>
+      ) : null}
+    </Card>
+  )
+}
+
 // Faltantes de inventario registrados en el cierre de turno (0048), sin resolver todavía.
 // Agrupados por quién responde. Solo lectura por ahora — cómo se salda (descuento de nómina,
 // efectivo, se perdona) es un feature aparte.
@@ -1136,7 +1196,7 @@ function FaltantesPendientes({ faltantes }: { faltantes: FaltantePendiente[] }) 
   const totalGeneral = faltantes.reduce((s, f) => s + f.linea.valorDiferencia, 0)
 
   return (
-    <Card className="flex flex-col gap-3 border-l-4 border-l-danger-500 p-5">
+    <Card className="flex flex-col gap-3 border-l-4 border-l-danger-600 p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-danger-50 text-danger-700">
@@ -1144,7 +1204,9 @@ function FaltantesPendientes({ faltantes }: { faltantes: FaltantePendiente[] }) 
           </span>
           <div>
             <h3 className="text-sm font-semibold text-neutral-900">Faltantes de inventario por revisar</h3>
-            <p className="text-xs text-neutral-500">Registrados en el cierre de turno, sin saldar</p>
+            <p className="text-xs text-neutral-500">
+              De los conteos de cierre y traspaso (a nombre de quien tenía el turno) y de apertura (entre turnos), sin saldar
+            </p>
           </div>
         </div>
         <p className="font-mono text-lg font-bold text-danger-700">{COP.format(totalGeneral)}</p>

@@ -90,6 +90,8 @@ export const ventaCarritoInputSchema = z.object({
 export const anularVentaInputSchema = z.object({
   motivo: z.string().trim().min(3, 'El motivo de anulación es obligatorio'),
   anuladaPor: z.string().trim().min(1, 'Indica quién anula la venta'),
+  // 0068: ¿el producto se consumió (sale del inventario / no se repone) o volvió a la nevera?
+  seConsumio: z.boolean({ error: 'Indica si el producto se consumió o volvió a la nevera' }),
 })
 
 export type EstadoVenta = z.infer<typeof estadoVentaSchema>

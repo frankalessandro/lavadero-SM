@@ -29,6 +29,7 @@ import { CorregirPagoModal } from '../../../components/layout/CorregirPagoModal'
 import { PagoLineas } from '../../../components/layout/PagoLineas'
 import { AgregarProductoModal } from '../../../components/layout/AgregarProductoModal'
 import { QuitarProductoModal } from '../../../components/layout/QuitarProductoModal'
+import { DestinoProductoAnulado } from '../../../components/layout/DestinoProductoAnulado'
 import { borradorAPagos, nuevaLineaBorrador, pagoLineasCuadra, type PagoLineaBorrador } from '../../../lib/pagoLineas'
 import { agruparPorSeccion } from '../../../lib/seccionProductos'
 import { METODO_PAGO_LABEL } from '../../../lib/metodoPago'
@@ -543,8 +544,8 @@ function VenderPage() {
           venta={quitandoDeCuenta}
           productoNombre={productoNombre(quitandoDeCuenta.productoId)}
           onClose={() => setQuitandoDeCuenta(null)}
-          onQuitar={async (venta, motivo) => {
-            await anularVenta(venta.id, { motivo, anuladaPor: turno?.responsableActual ?? 'jefe de zona' })
+          onQuitar={async (venta, motivo, seConsumio) => {
+            await anularVenta(venta.id, { motivo, anuladaPor: turno?.responsableActual ?? 'jefe de zona', seConsumio })
             setQuitandoDeCuenta(null)
             await refresh()
           }}
@@ -809,6 +810,7 @@ function AnularVentaModal({
 }) {
   const [motivo, setMotivo] = useState('')
   const [anuladaPor, setAnuladaPor] = useState('')
+  const [seConsumio, setSeConsumio] = useState<boolean | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const enVueloRef = useRef(false)
@@ -816,7 +818,7 @@ function AnularVentaModal({
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     if (enVueloRef.current) return
-    const parsed = anularVentaInputSchema.safeParse({ motivo, anuladaPor })
+    const parsed = anularVentaInputSchema.safeParse({ motivo, anuladaPor, seConsumio })
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Datos inválidos')
       return
@@ -854,14 +856,15 @@ function AnularVentaModal({
         </div>
 
         <p className="mb-5 text-xs text-neutral-500">
-          Esta acción no se puede deshacer. El stock se repone automáticamente y la venta queda visible en
-          reportes con el motivo y quién la anuló (control antifraude).
+          Esta acción no se puede deshacer. La venta queda visible en reportes con el motivo y quién la anuló
+          (control antifraude).
           {venta.ventaGrupoId
             ? ' Esta venta se cobró junto con otras en un mismo comprobante: se anulará el comprobante completo.'
             : ''}
         </p>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+          <DestinoProductoAnulado value={seConsumio} onChange={setSeConsumio} plural={Boolean(venta.ventaGrupoId)} />
           <label className="flex flex-col gap-1.5 text-left text-sm">
             <span className="font-medium text-neutral-700">Motivo de anulación</span>
             <textarea
@@ -1191,6 +1194,7 @@ function AnularCuentaModal({
 }) {
   const [motivo, setMotivo] = useState('')
   const [anuladaPor, setAnuladaPor] = useState('')
+  const [seConsumio, setSeConsumio] = useState<boolean | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const enVueloRef = useRef(false)
@@ -1198,7 +1202,7 @@ function AnularCuentaModal({
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     if (enVueloRef.current) return
-    const parsed = anularCuentaInputSchema.safeParse({ motivo, anuladaPor })
+    const parsed = anularCuentaInputSchema.safeParse({ motivo, anuladaPor, seConsumio })
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Datos inválidos')
       return
@@ -1232,10 +1236,11 @@ function AnularCuentaModal({
           </button>
         </div>
         <p className="mb-4 text-xs text-neutral-500">
-          Sus productos pendientes quedan anulados sin afectar el stock (nunca lo descontaron). Queda visible en
-          reportes con el motivo (control antifraude).
+          Sus productos quedan anulados sin cobrar. Si ya se pagó por fuera, no la anules: ciérrala con el método real.
+          Queda visible en reportes con el motivo (control antifraude).
         </p>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <DestinoProductoAnulado value={seConsumio} onChange={setSeConsumio} plural />
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-medium text-neutral-700">Motivo</span>
             <textarea

@@ -16,6 +16,7 @@ export const queryKeys = {
   turnoAbierto: (rol: RolCaja) => ['turnos', 'abierto', rol] as const,
   ventasHoy: ['ventas', 'hoy'] as const,
   ventasPendientes: ['ventas', 'pendientes'] as const,
+  ventasDeOrden: (ordenId: string) => ['ventas', 'orden', ordenId] as const,
   cuentasAbiertas: ['cuentas', 'abiertas'] as const,
   cuentasHoy: ['cuentas', 'hoy'] as const,
   ordenesAbiertas: ['ordenes', 'abiertas'] as const,
