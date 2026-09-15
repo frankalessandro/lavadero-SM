@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet } from '@tanstack/react-router'
-import { Wallet, Receipt, Boxes } from 'lucide-react'
+import { Wallet, Receipt, Boxes, HandCoins } from 'lucide-react'
 import { SectionTabs, type SectionTab } from '../../../components/layout/SectionTabs'
 
 // Dinero = lo que entra, lo que sale y a quién se le paga. Inventario vive acá (y no en
@@ -7,6 +7,7 @@ import { SectionTabs, type SectionTab } from '../../../components/layout/Section
 // ventas de mostrador, que entran al arqueo de caja igual que un lavado cobrado.
 const TABS: SectionTab[] = [
   { to: '/admin/dinero/liquidaciones', label: 'Liquidaciones', icon: Wallet },
+  { to: '/admin/dinero/deudas', label: 'Deudas del personal', icon: HandCoins },
   { to: '/admin/dinero/gastos', label: 'Gastos', icon: Receipt },
   { to: '/admin/dinero/inventario', label: 'Inventario y ventas', icon: Boxes },
 ]

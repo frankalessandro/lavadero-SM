@@ -1205,7 +1205,8 @@ function FaltantesPendientes({ faltantes }: { faltantes: FaltantePendiente[] }) 
           <div>
             <h3 className="text-sm font-semibold text-neutral-900">Faltantes de inventario por revisar</h3>
             <p className="text-xs text-neutral-500">
-              De los conteos de cierre y traspaso (a nombre de quien tenía el turno) y de apertura (entre turnos), sin saldar
+              De los conteos de cierre y traspaso (a nombre de quien tenía el turno) y de apertura (entre turnos). Se cobran
+              o descartan en Dinero › Deudas del personal.
             </p>
           </div>
         </div>
