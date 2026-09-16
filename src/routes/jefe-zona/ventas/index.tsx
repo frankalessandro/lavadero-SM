@@ -77,6 +77,7 @@ function hace(desdeISO: string): string {
 
 function VenderPage() {
   const data = Route.useLoaderData()
+  const { auth } = Route.useRouteContext()
   const queryClient = useQueryClient()
 
   // Fase 4 (2026-09-14): reemplaza el patrón anterior (loader → useState congelado → refresh()
@@ -256,7 +257,7 @@ function VenderPage() {
       </div>
 
       {!turno ? (
-        <AbrirTurnoPrompt onAbierto={refresh} />
+        <AbrirTurnoPrompt miNombre={auth?.perfil.nombre?.trim() || 'tu cuenta'} onAbierto={refresh} />
       ) : (
         <>
           <div className="flex rounded-lg border border-neutral-300 p-1">

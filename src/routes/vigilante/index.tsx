@@ -23,8 +23,6 @@ import { METODO_PAGO_LABEL } from '../../lib/metodoPago'
 import { fetchSuscripcionActivaPorPlaca } from '../../data/suscripcionesParqueadero'
 import { estadoVigencia, ESTADO_VIGENCIA_LABEL, type SuscripcionParqueadero } from '../../schemas/suscripcionParqueadero'
 import { fetchTurnoAbierto, abrirTurno, calcularValorEsperado, cerrarTurno } from '../../data/turnos'
-import { fetchPerfilesElegibles } from '../../data/perfiles'
-import type { Perfil } from '../../schemas/perfil'
 import type { TurnoCaja } from '../../schemas/turnoCaja'
 import { Card } from '../../components/layout/Card'
 import { CustomSelect } from '../../components/layout/CustomSelect'
@@ -250,6 +248,7 @@ function VigilanteHome() {
 
       {modal === 'abrirTurno' ? (
         <AbrirTurnoModal
+          miNombre={auth?.perfil.nombre?.trim() || 'tu cuenta'}
           onClose={() => setModal(null)}
           onSaved={async () => {
             setModal(null)
@@ -273,44 +272,18 @@ function VigilanteHome() {
   )
 }
 
-function AbrirTurnoModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
-  const [personaId, setPersonaId] = useState('')
+// El responsable ya no se elige (0072): siempre es la cuenta con la sesión abierta — `miNombre`
+// es solo para mostrarlo, la RPC `abrir_turno` deriva el dueño real de auth.uid() en el servidor.
+function AbrirTurnoModal({ miNombre, onClose, onSaved }: { miNombre: string; onClose: () => void; onSaved: () => void }) {
   const [baseInicial, setBaseInicial] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const enVueloRef = useRef(false)
-  const [personal, setPersonal] = useState<Perfil[]>([])
-  const [cargando, setCargando] = useState(true)
-
-  // Quién puede quedar a cargo de la caja del parqueadero: las cuentas activas con rol
-  // 'vigilante'. Desde 0056 no hay roster aparte — la cuenta ES la persona, y tener el rol ES el
-  // permiso. Si nadie tiene ese rol no se puede abrir la caja, que es el comportamiento correcto.
-  useEffect(() => {
-    let vivo = true
-    fetchPerfilesElegibles('vigilante')
-      .then((lista) => {
-        if (vivo) setPersonal(lista)
-      })
-      .catch(() => {
-        if (vivo) setPersonal([])
-      })
-      .finally(() => {
-        if (vivo) setCargando(false)
-      })
-    return () => {
-      vivo = false
-    }
-  }, [])
 
   async function handleSubmit() {
     if (enVueloRef.current) return
     setError(null)
     const base = Number(baseInicial)
-    const persona = personal.find((p) => p.id === personaId)
-    if (!persona) {
-      setError('Selecciona quién queda a cargo del turno')
-      return
-    }
     if (!Number.isFinite(base) || base < 0) {
       setError('La base inicial no puede ser negativa')
       return
@@ -318,12 +291,7 @@ function AbrirTurnoModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
     enVueloRef.current = true
     setSaving(true)
     try {
-      await abrirTurno({
-        rol: 'vigilante',
-        responsablePersonaId: persona.id,
-        responsable: persona.nombre?.trim() || 'Sin nombre',
-        baseInicial: Math.round(base),
-      })
+      await abrirTurno({ rol: 'vigilante', baseInicial: Math.round(base) })
       onSaved()
       toast.exito('Turno abierto')
     } catch (err) {
@@ -338,23 +306,9 @@ function AbrirTurnoModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
   return (
     <ModalSheet title="Abrir turno" onClose={onClose}>
       <div className="flex flex-col gap-4">
-        <label className="flex flex-col gap-1.5 text-sm">
-          <span className="font-medium text-neutral-700">Responsable</span>
-          <CustomSelect
-            value={personaId}
-            onChange={setPersonaId}
-            options={personal.map((p) => ({ value: p.id, label: p.nombre?.trim() || 'Sin nombre' }))}
-            placeholder={cargando ? 'Cargando…' : 'Selecciona quién abre el turno'}
-            disabled={cargando || personal.length === 0}
-            emptyLabel="No hay cuentas habilitadas para esta caja"
-          />
-          {!cargando && personal.length === 0 ? (
-            <span className="text-xs text-warning-700">
-              Ninguna cuenta activa tiene el rol de vigilante, así que nadie puede responder por esta caja.
-              Un administrador debe asignarlo en Personal › Usuarios del sistema.
-            </span>
-          ) : null}
-        </label>
+        <p className="text-sm text-neutral-500">
+          Vas a abrirlo como <span className="font-medium text-neutral-700">{miNombre}</span>.
+        </p>
 
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="font-medium text-neutral-700">Base inicial</span>

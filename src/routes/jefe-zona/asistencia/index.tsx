@@ -87,6 +87,7 @@ function formatEncabezadoSemana(inicioSemanaISO: string): string {
 
 function AsistenciaJefeZona() {
   const data = Route.useLoaderData()
+  const { auth } = Route.useRouteContext()
   const router = useRouter()
   const [turno, setTurno] = useState(data.turno)
   const [lavadores] = useState(data.lavadores)
@@ -105,7 +106,7 @@ function AsistenciaJefeZona() {
   }
 
   if (!turno) {
-    return <AbrirTurnoPrompt onAbierto={refresh} />
+    return <AbrirTurnoPrompt miNombre={auth?.perfil.nombre?.trim() || 'tu cuenta'} onAbierto={refresh} />
   }
 
   async function irASemana(deltaSemanas: number) {
@@ -159,7 +160,11 @@ function AsistenciaJefeZona() {
 
   return (
     <div className="flex flex-col gap-6">
-      <TurnoResponsableBanner turno={turno} onTransferido={(t: TurnoCaja) => setTurno(t)} />
+      <TurnoResponsableBanner
+        turno={turno}
+        miPersonaId={auth?.perfil.id ?? ''}
+        onTransferido={(t: TurnoCaja) => setTurno(t)}
+      />
 
       {error ? (
         <p className="text-xs text-danger-600">{error}</p>

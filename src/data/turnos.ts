@@ -13,7 +13,7 @@ import {
 } from '../schemas/turnoCaja'
 
 const TURNO_SELECT =
-  'id, rol, responsable, responsableActual:responsable_actual, responsablePersonaId:responsable_persona_id, responsableActualPersonaId:responsable_actual_persona_id, baseInicial:base_inicial, abiertoEn:abierto_en, cerrado, conteoFisico:conteo_fisico, valorEsperado:valor_esperado, diferencia, justificacionDiferencia:justificacion_diferencia, cerradoPor:cerrado_por, cerradoEn:cerrado_en, recibidoPor:recibido_por'
+  'id, rol, responsable, responsableActual:responsable_actual, responsablePersonaId:responsable_persona_id, responsableActualPersonaId:responsable_actual_persona_id, traspasoPendienteAPersonaId:traspaso_pendiente_a_persona_id, traspasoPendienteANombre:traspaso_pendiente_a_nombre, baseInicial:base_inicial, abiertoEn:abierto_en, cerrado, conteoFisico:conteo_fisico, valorEsperado:valor_esperado, diferencia, justificacionDiferencia:justificacion_diferencia, cerradoPor:cerrado_por, cerradoEn:cerrado_en, recibidoPor:recibido_por'
 
 const TRASPASO_SELECT =
   'id, turnoId:turno_id, de, a, dePersonaId:de_persona_id, aPersonaId:a_persona_id, hechoEn:hecho_en, conteoId:conteo_id'
@@ -37,73 +37,30 @@ export async function fetchTurnos(rol?: RolCaja): Promise<TurnoCaja[]> {
   return turnoCajaSchema.array().parse(data)
 }
 
+// El responsable ya no viaja desde el cliente (0072) — la RPC lo deriva de auth.uid() en el
+// servidor, así que abrir turno "a nombre de otro" ya no es posible.
 export async function abrirTurno(input: AbrirTurnoInput): Promise<TurnoCaja> {
   const parsed = abrirTurnoInputSchema.parse(input)
   const { data, error } = await db
-    .from('turnos_caja')
-    .insert({
-      rol: parsed.rol,
-      responsable: parsed.responsable,
-      responsable_actual: parsed.responsable,
-      // La persona es la que manda para agrupar/liquidar; el texto queda como snapshot del
-      // nombre en el momento de abrir (ver 0043).
-      responsable_persona_id: parsed.responsablePersonaId,
-      responsable_actual_persona_id: parsed.responsablePersonaId,
-      base_inicial: parsed.baseInicial,
-    })
+    .rpc('abrir_turno', { p_rol: parsed.rol, p_base_inicial: parsed.baseInicial })
     .select(TURNO_SELECT)
     .single()
   if (error) throw new Error(error.message)
   return turnoCajaSchema.parse(data)
 }
 
-// Transfiere la responsabilidad del turno a mitad de servicio (ej. el jefe de zona se ausenta)
-// sin cerrar/reabrir turno — `responsable` (quién lo abrió) no cambia, regla de negocio 14 sigue
-// intacta. Se registra primero en el log de traspasos y luego se actualiza el turno (no atómico,
-// mismo criterio que `generarLiquidacion`: si el update fallara después del insert, error
-// explícito para revisión manual — caso excepcional, no falla en silencio).
-export async function transferirResponsable(
-  turnoId: string,
-  actual: string,
-  nuevoResponsable: string,
-  actualPersonaId: string | undefined,
-  nuevoPersonaId: string,
-): Promise<TurnoCaja> {
-  const { error: errorTraspaso } = await db.from('traspasos_turno').insert({
-    turno_id: turnoId,
-    de: actual,
-    a: nuevoResponsable,
-    de_persona_id: actualPersonaId ?? null,
-    a_persona_id: nuevoPersonaId,
-  })
-  if (errorTraspaso) throw new Error(errorTraspaso.message)
-
-  const { data, error } = await db
-    .from('turnos_caja')
-    .update({ responsable_actual: nuevoResponsable, responsable_actual_persona_id: nuevoPersonaId })
-    .eq('id', turnoId)
-    .eq('cerrado', false) // regla de negocio 14: un turno cerrado es inmodificable
-    .select(TURNO_SELECT)
-    .single()
-  if (error) {
-    throw new Error(
-      `El traspaso quedó registrado pero no se pudo actualizar el turno ${turnoId} — revisa manualmente. ${error.message}`,
-    )
-  }
-  return turnoCajaSchema.parse(data)
-}
-
-// Traspaso del turno de jefe de zona (0068): una sola RPC atómica que, si el turno tiene inventario
-// a cargo (apertura contada y sin cierre), registra el conteo de traspaso — lo que falte queda a
-// nombre de quien entrega — y después cambia el responsable. Sin `conteo` solo sirve cuando el turno
-// no tiene inventario a cargo; si lo tiene, la base lo rechaza.
-export async function traspasarTurno(
+// Traspaso en dos pasos (0072): quien tiene el turno "solicita" el traspaso — si es jefe_zona con
+// inventario a cargo (apertura contada, sin cierre), el conteo se registra en este mismo paso,
+// con quien entrega presente — pero el responsable NO cambia todavía. Solo cuando la cuenta
+// destino llama a `aceptarTraspaso` (con su propia sesión) el turno pasa a su nombre. Nadie puede
+// tomar la responsabilidad en nombre de otra persona.
+export async function solicitarTraspaso(
   turnoId: string,
   aPersonaId: string,
   conteo?: { lineas: ConteoLineaInput[]; justificacion: string | undefined; desde: string; confirmados: string[] },
 ): Promise<TurnoCaja> {
   const { data, error } = await db
-    .rpc('traspasar_turno', {
+    .rpc('solicitar_traspaso_turno', {
       p_turno_id: turnoId,
       p_a_persona_id: aPersonaId,
       p_lineas: conteo ? lineasPayload(conteo.lineas) : null,
@@ -113,6 +70,21 @@ export async function traspasarTurno(
     })
     .select(TURNO_SELECT)
     .single()
+  if (error) throw new Error(error.message)
+  return turnoCajaSchema.parse(data)
+}
+
+// Solo puede aceptar la cuenta destino del traspaso pendiente (auth.uid() lo valida server-side).
+export async function aceptarTraspaso(turnoId: string): Promise<TurnoCaja> {
+  const { data, error } = await db.rpc('aceptar_traspaso_turno', { p_turno_id: turnoId }).select(TURNO_SELECT).single()
+  if (error) throw new Error(error.message)
+  return turnoCajaSchema.parse(data)
+}
+
+// Cancela un traspaso pendiente — lo puede hacer quien lo pidió (se arrepiente) o quien iba a
+// recibirlo (lo rechaza).
+export async function cancelarTraspaso(turnoId: string): Promise<TurnoCaja> {
+  const { data, error } = await db.rpc('cancelar_traspaso_turno', { p_turno_id: turnoId }).select(TURNO_SELECT).single()
   if (error) throw new Error(error.message)
   return turnoCajaSchema.parse(data)
 }

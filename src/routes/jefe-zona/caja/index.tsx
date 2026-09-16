@@ -1,7 +1,7 @@
 import { useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { Lock, CheckCircle2, AlertTriangle, Circle, X, Boxes, Wallet } from 'lucide-react'
-import { fetchTurnoAbierto, fetchTurnos, abrirTurno, traspasarTurno } from '../../../data/turnos'
+import { fetchTurnoAbierto, fetchTurnos, abrirTurno, solicitarTraspaso as solicitarTraspasoTurno } from '../../../data/turnos'
 import { fetchCategoriasGasto, fetchGastosDeTurno, type GastoConCategoria } from '../../../data/gastos'
 import { fetchProductosOperativo } from '../../../data/productos'
 import { fetchConteoDeTurno, fetchPendientesPorConfirmar, marcaConteo } from '../../../data/conteosInventario'
@@ -18,14 +18,12 @@ import { toast } from '../../../lib/toast'
 
 import { Card } from '../../../components/layout/Card'
 import { CurrencyInput } from '../../../components/layout/CurrencyInput'
-import { CustomSelect } from '../../../components/layout/CustomSelect'
 import { GastosDeTurno } from '../../../components/layout/GastosDeTurno'
 import { PrestamosDeTurno } from '../../../components/layout/PrestamosDeTurno'
 import { ConteoInventario } from '../../../components/layout/ConteoInventario'
 import { ArqueoCaja } from '../../../components/layout/ArqueoCaja'
 import { IndicadorCuadrado } from '../../../components/layout/PantallaTarea'
 import { TurnoResponsableBanner } from '../../../components/layout/TurnoResponsableBanner'
-import { usePersonalElegible, nombreDe } from '../../../lib/personalElegible'
 
 // Conteo de inventario encadenado (0068): apertura antes de vender (la base bloquea la venta sin
 // ella) y cierre antes del arqueo (trigger `turnos_caja_cierre_requiere_conteo`, sin excepciones).
@@ -93,6 +91,7 @@ type Tarea = 'abrir-caja' | 'arqueo' | null
 
 function CajaJefeZona() {
   const data = Route.useLoaderData()
+  const { auth } = Route.useRouteContext()
   const router = useRouter()
   const [turnoAbierto, setTurnoAbierto] = useState(data.turnoAbierto)
   const [turnosRecientes, setTurnosRecientes] = useState(data.turnosRecientes)
@@ -159,17 +158,18 @@ function CajaJefeZona() {
     }
   }
 
-  // Traspaso (0068): con inventario a cargo (apertura contada y sin cierre) pide conteo; si no,
-  // traspasa directo. La base aplica la misma regla, esto solo evita un error de ida y vuelta.
+  // Traspaso (0068/0072): con inventario a cargo (apertura contada y sin cierre) pide conteo; si
+  // no, solicita directo. En los dos casos queda PENDIENTE — el responsable no cambia hasta que
+  // la cuenta destino inicie sesión y lo acepte (ver TurnoResponsableBanner).
   async function solicitarTraspaso(destino: { id: string; nombre: string }) {
     if (!turnoAbierto) return
     if (conteoApertura && !conteoCierre) {
       await empezarConteo('traspaso', destino)
       return
     }
-    const actualizado = await traspasarTurno(turnoAbierto.id, destino.id)
+    const actualizado = await solicitarTraspasoTurno(turnoAbierto.id, destino.id)
     setTurnoAbierto(actualizado)
-    toast.exito('Responsabilidad transferida')
+    toast.exito(`Traspaso solicitado a ${destino.nombre} — pendiente hasta que acepte.`)
   }
 
   const aperturaCuadro = conteoCuadro(conteoApertura)
@@ -193,7 +193,7 @@ function CajaJefeZona() {
             ? async (conteo) => {
                 const destino = conteoEnCurso.destino
                 if (!destino) return
-                await traspasarTurno(turnoAbierto.id, destino.id, conteo)
+                await solicitarTraspasoTurno(turnoAbierto.id, destino.id, conteo)
               }
             : undefined
         }
@@ -256,6 +256,7 @@ function CajaJefeZona() {
       {turnoAbierto ? (
         <TurnoResponsableBanner
           turno={turnoAbierto}
+          miPersonaId={auth?.perfil.id ?? ''}
           onTransferido={setTurnoAbierto}
           onSolicitarTraspaso={solicitarTraspaso}
           avisoTraspaso={
@@ -416,6 +417,7 @@ function CajaJefeZona() {
 
       {tarea === 'abrir-caja' ? (
         <AbrirCajaModal
+          miNombre={auth?.perfil.nombre?.trim() || 'tu cuenta'}
           onClose={() => setTarea(null)}
           onAbierta={async () => {
             await refresh()
@@ -512,24 +514,27 @@ function BotonItem({ children, onClick }: { children: ReactNode; onClick: () => 
 // cuántos pasos faltaban, porque cada "paso" tenía sub-pantallas adentro).
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 
-function AbrirCajaModal({ onClose, onAbierta }: { onClose: () => void; onAbierta: () => Promise<void> }) {
-  const [personaId, setPersonaId] = useState('')
+// El responsable ya no se elige (0072): siempre es la cuenta con la sesión abierta — `miNombre`
+// es solo para mostrarlo, la RPC `abrir_turno` deriva el dueño real de auth.uid() en el servidor.
+function AbrirCajaModal({
+  miNombre,
+  onClose,
+  onAbierta,
+}: {
+  miNombre: string
+  onClose: () => void
+  onAbierta: () => Promise<void>
+}) {
   const [baseInicial, setBaseInicial] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const enVueloRef = useRef(false)
-  const { elegibles, cargando } = usePersonalElegible('jefe_zona')
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     if (enVueloRef.current) return
     setError(null)
     const base = Number(baseInicial)
-    const persona = elegibles.find((p) => p.id === personaId)
-    if (!persona) {
-      setError('Selecciona quién queda a cargo del turno')
-      return
-    }
     if (!Number.isFinite(base) || base < 0) {
       setError('La base inicial no puede ser negativa')
       return
@@ -537,12 +542,7 @@ function AbrirCajaModal({ onClose, onAbierta }: { onClose: () => void; onAbierta
     enVueloRef.current = true
     setSaving(true)
     try {
-      await abrirTurno({
-        rol: 'jefe_zona',
-        responsablePersonaId: persona.id,
-        responsable: nombreDe(persona),
-        baseInicial: Math.round(base),
-      })
+      await abrirTurno({ rol: 'jefe_zona', baseInicial: Math.round(base) })
       toast.exito('Caja abierta')
       await onAbierta()
     } catch (err) {
@@ -560,7 +560,9 @@ function AbrirCajaModal({ onClose, onAbierta }: { onClose: () => void; onAbierta
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <h3 className="text-base font-semibold text-neutral-900">Abrir caja</h3>
-            <p className="text-xs text-neutral-500">Responsable y base inicial.</p>
+            <p className="text-xs text-neutral-500">
+              Vas a abrirla como <span className="font-medium text-neutral-700">{miNombre}</span>.
+            </p>
           </div>
           <button
             type="button"
@@ -573,25 +575,6 @@ function AbrirCajaModal({ onClose, onAbierta }: { onClose: () => void; onAbierta
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium text-neutral-700">Responsable</span>
-            <CustomSelect
-              size="md"
-              value={personaId}
-              onChange={setPersonaId}
-              options={elegibles.map((p) => ({ value: p.id, label: nombreDe(p) }))}
-              placeholder={cargando ? 'Cargando…' : 'Selecciona quién abre el turno'}
-              disabled={cargando || elegibles.length === 0}
-              emptyLabel="No hay cuentas habilitadas para esta caja"
-            />
-            {!cargando && elegibles.length === 0 ? (
-              <span className="text-xs text-warning-700">
-                Ninguna cuenta activa tiene este rol. Un administrador debe asignarlo en Personal › Usuarios del
-                sistema.
-              </span>
-            ) : null}
-          </label>
-
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-medium text-neutral-700">Base inicial</span>
             <CurrencyInput size="md" prefix="$" value={baseInicial} onChange={setBaseInicial} />

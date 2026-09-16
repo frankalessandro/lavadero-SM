@@ -24,7 +24,8 @@ export const turnoCajaSchema = z.object({
   rol: rolCajaSchema,
   responsable: z.string(),
   // Quién abrió el turno (inmutable). `responsableActual` es quién está a cargo AHORA — igual
-  // al abrir, pero se puede transferir a mitad de turno sin cerrar/reabrir (ver transferirResponsable).
+  // al abrir, pero se puede transferir a mitad de turno sin cerrar/reabrir (traspaso en dos pasos,
+  // ver solicitarTraspaso/aceptarTraspaso en src/data/turnos.ts, 0072).
   responsableActual: z.string(),
   // La persona de verdad: FK a `perfiles` — la cuenta ES la persona desde 0056 (antes era el
   // roster `personal_operativo` de 0043). El texto de arriba queda como evidencia de lo que se
@@ -32,6 +33,10 @@ export const turnoCajaSchema = z.object({
   // porque los turnos anteriores a 0043 que no mapearon quedan sin persona.
   responsablePersonaId: nullableTrimmedString,
   responsableActualPersonaId: nullableTrimmedString,
+  // Traspaso en dos pasos (0072): mientras esto tenga valor, el turno sigue a nombre de
+  // `responsableActual*` — solo cambia cuando la cuenta destino acepta con su propia sesión.
+  traspasoPendienteAPersonaId: nullableTrimmedString,
+  traspasoPendienteANombre: nullableTrimmedString,
   baseInicial: z.number().int().nonnegative(),
   abiertoEn: z.string(),
   cerrado: z.boolean(),
@@ -44,13 +49,11 @@ export const turnoCajaSchema = z.object({
   recibidoPor: nullableTrimmedString,
 })
 
-// El responsable se elige entre las cuentas activas que tengan el rol de esa caja, ya no se
-// teclea — el nombre viaja igual (snapshot para el histórico) pero derivado de la cuenta
-// seleccionada, no del teclado.
+// El responsable ya NO se elige — es siempre la cuenta autenticada que abre el turno (0072, RPC
+// `abrir_turno` la deriva de auth.uid() en el servidor). El input del cliente solo trae lo que de
+// verdad se decide en pantalla.
 export const abrirTurnoInputSchema = z.object({
   rol: rolCajaSchema,
-  responsablePersonaId: z.string().min(1, 'Selecciona quién queda a cargo del turno'),
-  responsable: z.string().trim().min(1, 'El responsable es obligatorio'),
   baseInicial: z.number().int().nonnegative('La base inicial no puede ser negativa'),
 })
 

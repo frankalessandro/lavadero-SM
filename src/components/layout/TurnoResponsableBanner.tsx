@@ -1,6 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
-import { LockOpen, Lock, ArrowLeftRight, History, X } from 'lucide-react'
-import { abrirTurno, fetchTraspasos, transferirResponsable } from '../../data/turnos'
+import { LockOpen, Lock, ArrowLeftRight, History, X, UserCheck } from 'lucide-react'
+import { abrirTurno, aceptarTraspaso, cancelarTraspaso, fetchTraspasos, solicitarTraspaso } from '../../data/turnos'
 import type { RolCaja, TurnoCaja, TraspasoTurno } from '../../schemas/turnoCaja'
 import { usePersonalElegible, nombreDe } from '../../lib/personalElegible'
 import { Card } from './Card'
@@ -18,34 +18,34 @@ function formatFecha(iso: string | undefined) {
 // Compartido entre /jefe-zona/caja y /jefe-zona/asistencia: un solo turno de jefe_zona es la
 // fuente de "quién es responsable ahora" para las dos pantallas — abrirlo desde cualquiera de
 // las dos habilita ambas, y transferir la responsabilidad se refleja igual en las dos.
-export function AbrirTurnoPrompt({ rol = 'jefe_zona', onAbierto }: { rol?: RolCaja; onAbierto: () => Promise<void> }) {
-  const [personaId, setPersonaId] = useState('')
+//
+// El responsable ya NO se elige (0072): siempre es la cuenta con la que se inició sesión — la RPC
+// `abrir_turno` lo deriva de auth.uid() en el servidor, así que ni hay dropdown que mostrar acá.
+// `miNombre` es solo para mostrar "vas a abrir como...", no viaja al servidor.
+export function AbrirTurnoPrompt({
+  rol = 'jefe_zona',
+  miNombre,
+  onAbierto,
+}: {
+  rol?: RolCaja
+  miNombre: string
+  onAbierto: () => Promise<void>
+}) {
   const [baseInicial, setBaseInicial] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const { elegibles, cargando } = usePersonalElegible(rol)
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     setError(null)
     const base = Number(baseInicial)
-    const persona = elegibles.find((p) => p.id === personaId)
-    if (!persona) {
-      setError('Selecciona quién queda a cargo del turno')
-      return
-    }
     if (!Number.isFinite(base) || base < 0) {
       setError('La base inicial no puede ser negativa')
       return
     }
     setSaving(true)
     try {
-      await abrirTurno({
-        rol,
-        responsablePersonaId: persona.id,
-        responsable: nombreDe(persona),
-        baseInicial: Math.round(base),
-      })
+      await abrirTurno({ rol, baseInicial: Math.round(base) })
       await onAbierto()
       toast.exito('Turno abierto')
     } catch (err) {
@@ -65,30 +65,13 @@ export function AbrirTurnoPrompt({ rol = 'jefe_zona', onAbierto }: { rol?: RolCa
         <div>
           <h2 className="text-base font-semibold text-neutral-900">No hay turno abierto</h2>
           <p className="text-xs text-neutral-500">
-            Ábrelo para empezar — caja y asistencia quedan a cargo de quien lo abra hasta que se cierre o se transfiera.
+            Vas a abrirlo como <span className="font-medium text-neutral-700">{miNombre}</span> — queda a tu cargo
+            hasta que se cierre o lo transfieras.
           </p>
         </div>
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <label className="flex flex-col gap-1.5 text-sm">
-          <span className="font-medium text-neutral-700">Responsable</span>
-          <CustomSelect
-            value={personaId}
-            onChange={setPersonaId}
-            options={elegibles.map((p) => ({ value: p.id, label: nombreDe(p) }))}
-            placeholder={cargando ? 'Cargando…' : 'Selecciona quién abre el turno'}
-            disabled={cargando || elegibles.length === 0}
-            emptyLabel="No hay cuentas habilitadas para esta caja"
-          />
-          {!cargando && elegibles.length === 0 ? (
-            <span className="text-xs text-warning-700">
-              Ninguna cuenta activa tiene este rol, así que nadie puede responder por esta caja. Un
-              administrador debe asignárselo en Personal › Usuarios del sistema.
-            </span>
-          ) : null}
-        </label>
-
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="font-medium text-neutral-700">Base inicial</span>
           <CurrencyInput size="sm" prefix="$" value={baseInicial} onChange={setBaseInicial} />
@@ -110,21 +93,28 @@ export function AbrirTurnoPrompt({ rol = 'jefe_zona', onAbierto }: { rol?: RolCa
 
 export function TurnoResponsableBanner({
   turno,
+  miPersonaId,
   onTransferido,
   onSolicitarTraspaso,
   avisoTraspaso,
   children,
 }: {
   turno: TurnoCaja
+  // Cuenta con la sesión abierta (0072) — decide qué botones se muestran: solo quien está a
+  // cargo puede iniciar un traspaso, y solo la cuenta destino puede aceptar/rechazar el pendiente.
+  miPersonaId: string
   onTransferido: (turno: TurnoCaja) => void
-  /** Turno de jefe de zona (0068): el traspaso va por `traspasar_turno`, con conteo de inventario
-   *  si el turno lo tiene a cargo. Quien lo pasa decide el flujo (Caja). Sin esto, en un turno de
-   *  jefe de zona el banner no ofrece transferir y manda a hacerlo desde Caja. */
+  /** Turno de jefe de zona (0068): el traspaso va por `solicitar_traspaso_turno`, con conteo de
+   *  inventario si el turno lo tiene a cargo. Quien lo pasa decide el flujo (Caja). Sin esto, en
+   *  un turno de jefe de zona el banner no ofrece transferir y manda a hacerlo desde Caja. */
   onSolicitarTraspaso?: (destino: { id: string; nombre: string }) => Promise<void>
   avisoTraspaso?: string
   children?: ReactNode
 }) {
   const traspasoDesdeCaja = turno.rol === 'jefe_zona' && !onSolicitarTraspaso
+  const soyResponsable = turno.responsableActualPersonaId === miPersonaId
+  const traspasoPendiente = Boolean(turno.traspasoPendienteAPersonaId)
+  const traspasoPendienteParaMi = turno.traspasoPendienteAPersonaId === miPersonaId
   const [transfiriendo, setTransfiriendo] = useState(false)
   const [nuevoPersonaId, setNuevoPersonaId] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -161,21 +151,41 @@ export function TurnoResponsableBanner({
       return
     }
     try {
-      const actualizado = await transferirResponsable(
-        turno.id,
-        turno.responsableActual,
-        nombreDe(persona),
-        turno.responsableActualPersonaId,
-        persona.id,
-      )
+      const actualizado = await solicitarTraspaso(turno.id, persona.id)
       onTransferido(actualizado)
       setTransfiriendo(false)
       setNuevoPersonaId('')
       setHistorial(null)
-      toast.exito('Responsabilidad transferida')
+      toast.exito(`Traspaso solicitado a ${nombreDe(persona)} — queda pendiente hasta que inicie sesión y lo acepte.`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo transferir la responsabilidad')
-      toast.desdeError(err, 'No se pudo transferir la responsabilidad')
+      setError(err instanceof Error ? err.message : 'No se pudo solicitar el traspaso')
+      toast.desdeError(err, 'No se pudo solicitar el traspaso')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleAceptar() {
+    setSaving(true)
+    try {
+      const actualizado = await aceptarTraspaso(turno.id)
+      onTransferido(actualizado)
+      toast.exito('Aceptaste la responsabilidad del turno')
+    } catch (err) {
+      toast.desdeError(err, 'No se pudo aceptar el traspaso')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleCancelar() {
+    setSaving(true)
+    try {
+      const actualizado = await cancelarTraspaso(turno.id)
+      onTransferido(actualizado)
+      toast.exito('Traspaso cancelado')
+    } catch (err) {
+      toast.desdeError(err, 'No se pudo cancelar el traspaso')
     } finally {
       setSaving(false)
     }
@@ -227,7 +237,52 @@ export function TurnoResponsableBanner({
         </div>
       </div>
 
-      {transfiriendo ? (
+      {traspasoPendienteParaMi ? (
+        // Candado de identidad (0072): solo la cuenta destino, con su propia sesión, puede
+        // aceptar — nadie puede tomar la responsabilidad en nombre de otra persona.
+        <div className="flex flex-col gap-2 rounded-lg border border-primary-200 bg-primary-50 p-3">
+          <p className="flex items-center gap-2 text-sm font-medium text-primary-800">
+            <UserCheck size={16} className="shrink-0" />
+            {turno.responsableActual} te transfirió el turno
+          </p>
+          <p className="text-xs text-primary-700">Acéptalo para quedar a cargo — hasta entonces sigue siendo de {turno.responsableActual}.</p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleAceptar}
+              disabled={saving}
+              className="flex-1 rounded-lg bg-primary-600 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-700 disabled:opacity-60"
+            >
+              {saving ? 'Aceptando…' : 'Aceptar responsabilidad'}
+            </button>
+            <button
+              type="button"
+              onClick={handleCancelar}
+              disabled={saving}
+              className="rounded-lg border border-neutral-200 px-3 text-sm text-neutral-500 transition-colors hover:bg-neutral-100"
+            >
+              Rechazar
+            </button>
+          </div>
+        </div>
+      ) : traspasoPendiente ? (
+        <div className="flex flex-col gap-2 rounded-lg border border-warning-600/25 bg-warning-50 p-3">
+          <p className="text-xs text-warning-700">
+            Traspaso pendiente hacia <span className="font-medium">{turno.traspasoPendienteANombre}</span> — sigue a
+            tu nombre hasta que esa cuenta inicie sesión y lo acepte.
+          </p>
+          {soyResponsable ? (
+            <button
+              type="button"
+              onClick={handleCancelar}
+              disabled={saving}
+              className="self-start rounded-lg border border-neutral-200 px-3 py-1.5 text-xs text-neutral-600 transition-colors hover:bg-neutral-100"
+            >
+              Cancelar traspaso
+            </button>
+          ) : null}
+        </div>
+      ) : transfiriendo ? (
         <form onSubmit={handleTransferir} className="flex flex-col gap-2 rounded-lg border border-primary-100 bg-primary-50/40 p-3">
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-medium text-neutral-700">Transferir responsabilidad a</span>
@@ -241,6 +296,9 @@ export function TurnoResponsableBanner({
               emptyLabel="No hay otra cuenta habilitada para esta caja"
             />
           </label>
+          <p className="text-xs text-neutral-500">
+            Queda pendiente hasta que esa cuenta inicie sesión y acepte — no cambia de responsable todavía.
+          </p>
           {avisoTraspaso ? <p className="text-xs text-primary-800">{avisoTraspaso}</p> : null}
           {error ? <p className="text-xs text-danger-600">{error}</p> : null}
           <div className="flex gap-2">
@@ -249,7 +307,7 @@ export function TurnoResponsableBanner({
               disabled={saving}
               className="flex-1 rounded-lg bg-primary-600 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-700 disabled:opacity-60"
             >
-              {saving ? 'Transfiriendo…' : avisoTraspaso ? 'Contar y traspasar' : 'Confirmar traspaso'}
+              {saving ? 'Solicitando…' : avisoTraspaso ? 'Contar y solicitar traspaso' : 'Solicitar traspaso'}
             </button>
             <button
               type="button"
@@ -263,6 +321,10 @@ export function TurnoResponsableBanner({
             </button>
           </div>
         </form>
+      ) : !soyResponsable ? (
+        <p className="rounded-lg bg-neutral-50 px-3 py-2.5 text-xs text-neutral-500">
+          Solo {turno.responsableActual} puede transferir este turno.
+        </p>
       ) : traspasoDesdeCaja ? (
         <p className="flex items-center gap-2 rounded-lg bg-neutral-50 px-3 py-2.5 text-xs text-neutral-500">
           <ArrowLeftRight size={14} className="shrink-0" />

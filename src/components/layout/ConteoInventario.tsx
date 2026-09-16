@@ -259,7 +259,13 @@ export function ConteoInventario({
       }
       onResultado?.({ cuadrado: !hayDiferencia, totalFaltante })
       await onConfirmado()
-      toast.exito(esApertura ? 'Conteo de apertura registrado' : esTraspaso ? 'Turno traspasado' : 'Conteo de cierre registrado')
+      toast.exito(
+        esApertura
+          ? 'Conteo de apertura registrado'
+          : esTraspaso
+            ? 'Traspaso solicitado — pendiente hasta que la otra cuenta lo acepte'
+            : 'Conteo de cierre registrado',
+      )
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo registrar el conteo')
       toast.desdeError(err, 'No se pudo registrar el conteo')
@@ -495,7 +501,7 @@ export function ConteoInventario({
           {error ? <p className="text-center text-xs text-danger-600">{error}</p> : null}
           <BotonPrincipal onClick={handleConfirmar} disabled={loading}>
             <PackageCheck size={16} />
-            {loading ? 'Registrando…' : esTraspaso ? `Registrar y entregar a ${entregaA ?? 'quien recibe'}` : 'Registrar conteo'}
+            {loading ? 'Registrando…' : esTraspaso ? `Registrar y solicitar traspaso a ${entregaA ?? 'quien recibe'}` : 'Registrar conteo'}
           </BotonPrincipal>
           <button
             type="button"
