@@ -928,9 +928,10 @@ function LiquidacionesPage() {
         <section className="flex flex-col gap-3">
           <h3 className="text-sm font-semibold text-neutral-900">Comisiones pendientes</h3>
           <p className="-mt-1 text-xs text-neutral-500">
-            {(configuracion.comisionJefeZonaPorcentaje * 100).toFixed(0)}% de cada orden para quien estuvo a cargo del
-            turno de recepción al registrarla — identificado por el nombre del responsable del turno, no por un usuario
-            con id propio todavía.
+            {(configuracion.comisionJefeZonaCombo1Porcentaje * 100).toFixed(1)}% (Combo 1) /{' '}
+            {(configuracion.comisionJefeZonaCombo2Porcentaje * 100).toFixed(1)}% (Combo 2 en adelante) de cada orden
+            para quien estuvo a cargo del turno de recepción al registrarla — identificado por el nombre del
+            responsable del turno, no por un usuario con id propio todavía.
           </p>
           {pendientesJefeZona.length === 0 ? (
             <Card className="py-8 text-center text-sm text-neutral-400">

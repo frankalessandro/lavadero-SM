@@ -50,8 +50,14 @@ const PERIODICIDAD_OPCIONES: { value: Configuracion['periodicidadLiquidacion']; 
 function ConfiguracionPage() {
   const { configuracion: initial, historial } = Route.useLoaderData()
   const [comisionPorcentaje, setComisionPorcentaje] = useState(String(initial.comisionLavadorPorcentaje * 100))
-  const [comisionJefeZonaPorcentaje, setComisionJefeZonaPorcentaje] = useState(
-    String(initial.comisionJefeZonaPorcentaje * 100),
+  const [comisionJefeZonaCombo1Porcentaje, setComisionJefeZonaCombo1Porcentaje] = useState(
+    String(initial.comisionJefeZonaCombo1Porcentaje * 100),
+  )
+  const [comisionJefeZonaCombo2Porcentaje, setComisionJefeZonaCombo2Porcentaje] = useState(
+    String(initial.comisionJefeZonaCombo2Porcentaje * 100),
+  )
+  const [comisionJefeZonaServiciosPorcentaje, setComisionJefeZonaServiciosPorcentaje] = useState(
+    String(initial.comisionJefeZonaServiciosPorcentaje * 100),
   )
   const [comisionBase, setComisionBase] = useState<Configuracion['comisionBase']>(initial.comisionBase)
   const [periodicidadLiquidacion, setPeriodicidadLiquidacion] = useState<Configuracion['periodicidadLiquidacion']>(
@@ -69,14 +75,26 @@ function ConfiguracionPage() {
       setError('Ingresa un porcentaje válido entre 0 y 100')
       return
     }
-    const numeroJefeZona = Number(comisionJefeZonaPorcentaje)
-    if (!Number.isFinite(numeroJefeZona) || numeroJefeZona < 0 || numeroJefeZona >= 100) {
-      setError('Ingresa un porcentaje de jefe de patio válido entre 0 y 100')
+    const numeroCombo1 = Number(comisionJefeZonaCombo1Porcentaje)
+    if (!Number.isFinite(numeroCombo1) || numeroCombo1 < 0 || numeroCombo1 >= 100) {
+      setError('Ingresa un porcentaje de jefe de patio (Combo 1) válido entre 0 y 100')
+      return
+    }
+    const numeroCombo2 = Number(comisionJefeZonaCombo2Porcentaje)
+    if (!Number.isFinite(numeroCombo2) || numeroCombo2 < 0 || numeroCombo2 >= 100) {
+      setError('Ingresa un porcentaje de jefe de patio (Combo 2 en adelante) válido entre 0 y 100')
+      return
+    }
+    const numeroServicios = Number(comisionJefeZonaServiciosPorcentaje)
+    if (!Number.isFinite(numeroServicios) || numeroServicios < 0 || numeroServicios >= 100) {
+      setError('Ingresa un porcentaje de jefe de patio (servicios sueltos) válido entre 0 y 100')
       return
     }
     const parsed = configuracionSchema.safeParse({
       comisionLavadorPorcentaje: numero / 100,
-      comisionJefeZonaPorcentaje: numeroJefeZona / 100,
+      comisionJefeZonaCombo1Porcentaje: numeroCombo1 / 100,
+      comisionJefeZonaCombo2Porcentaje: numeroCombo2 / 100,
+      comisionJefeZonaServiciosPorcentaje: numeroServicios / 100,
       comisionBase,
       periodicidadLiquidacion,
       recargoAltoCilindraje: Number(recargoAltoCilindraje) || 0,
@@ -129,23 +147,60 @@ function ConfiguracionPage() {
             />
           </label>
 
-          <label className="flex flex-col gap-1.5 text-left text-sm">
-            <span className="font-medium text-neutral-700">Comisión del jefe de patio en turno (%)</span>
+          <div className="flex flex-col gap-4 text-left text-sm">
+            <div>
+              <span className="font-medium text-neutral-700">Comisión del jefe de patio en turno (%)</span>
+              <p className="text-xs text-neutral-500">
+                Por tramo de combo, para quien esté a cargo del turno de recepción al registrar el vehículo — el
+                negocio se lleva lo que queda después de esta y la del lavador. "Combo 1" de cada categoría paga la
+                tarifa básica; cualquier otro combo (Combo 2 en adelante), la superior.
+              </p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <label className="flex flex-col gap-1.5 text-left text-sm">
+                <span className="font-medium text-neutral-700">Combo 1</span>
+                <input
+                  inputMode="decimal"
+                  value={comisionJefeZonaCombo1Porcentaje}
+                  onChange={(event) => {
+                    setComisionJefeZonaCombo1Porcentaje(event.target.value)
+                    setSaved(false)
+                  }}
+                  placeholder="p. ej. 2.5"
+                  className="w-full rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                />
+              </label>
+              <label className="flex flex-col gap-1.5 text-left text-sm">
+                <span className="font-medium text-neutral-700">Combo 2 en adelante</span>
+                <input
+                  inputMode="decimal"
+                  value={comisionJefeZonaCombo2Porcentaje}
+                  onChange={(event) => {
+                    setComisionJefeZonaCombo2Porcentaje(event.target.value)
+                    setSaved(false)
+                  }}
+                  placeholder="p. ej. 3.5"
+                  className="w-full rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                />
+              </label>
+              <label className="flex flex-col gap-1.5 text-left text-sm">
+                <span className="font-medium text-neutral-700">Servicios sueltos</span>
+                <input
+                  inputMode="decimal"
+                  value={comisionJefeZonaServiciosPorcentaje}
+                  onChange={(event) => {
+                    setComisionJefeZonaServiciosPorcentaje(event.target.value)
+                    setSaved(false)
+                  }}
+                  placeholder="p. ej. 0"
+                  className="w-full rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                />
+              </label>
+            </div>
             <p className="text-xs text-neutral-500">
-              Porcentaje de cada orden para quien esté a cargo del turno de recepción al registrar el vehículo —
-              el negocio se lleva lo que queda después de esta y la del lavador.
+              Servicios sueltos: sin combo, o agregados encima de uno (ej. "Combo 2 + lavado de motor extra").
             </p>
-            <input
-              inputMode="decimal"
-              value={comisionJefeZonaPorcentaje}
-              onChange={(event) => {
-                setComisionJefeZonaPorcentaje(event.target.value)
-                setSaved(false)
-              }}
-              placeholder="p. ej. 3"
-              className="mt-1 w-32 rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-            />
-          </label>
+          </div>
 
           <div className="flex flex-col gap-2 text-left text-sm">
             <span className="font-medium text-neutral-700">Base de cálculo de la comisión</span>
@@ -283,7 +338,12 @@ function HistorialConfiguracion({ historial }: { historial: ConfiguracionHistori
             </div>
             <p className="mt-1 text-xs text-neutral-600">
               Lavador {(h.comisionLavadorPorcentaje * 100).toFixed(1)}% · Jefe de patio{' '}
-              {(h.comisionJefeZonaPorcentaje * 100).toFixed(1)}% · Base{' '}
+              {h.comisionJefeZonaCombo1Porcentaje === undefined
+                ? '(esquema anterior, % único no conservado)'
+                : `Combo 1 ${(h.comisionJefeZonaCombo1Porcentaje * 100).toFixed(1)}% / Combo 2+ ${(
+                    (h.comisionJefeZonaCombo2Porcentaje ?? 0) * 100
+                  ).toFixed(1)}% / Servicios ${((h.comisionJefeZonaServiciosPorcentaje ?? 0) * 100).toFixed(1)}%`}
+              {' · Base '}
               {h.comisionBase === 'lista' ? 'precio de lista' : 'valor cobrado'} · Liquidación{' '}
               {h.periodicidadLiquidacion} · Recargo alto cilindraje{' '}
               {h.recargoAltoCilindraje.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })}

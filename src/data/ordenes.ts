@@ -260,6 +260,16 @@ async function precioComboVigente(comboId: string, tipoVehiculoId: string): Prom
   return filas.reduce((suma, fila) => suma + fila.precio, 0)
 }
 
+// Nombre del combo — solo para decidir el tramo de comisión del jefe de patio (0071): "Combo 1"
+// de cada categoría es la tarifa básica, cualquier otro nombre es la tarifa superior. Se
+// identifica por nombre (no por una columna nueva) porque esa es la convención ya vigente desde
+// 0010 y la que usa el resto del sistema para hablar del combo base.
+async function nombreDeCombo(comboId: string): Promise<string> {
+  const { data, error } = await db.from('combos').select('nombre').eq('id', comboId).single()
+  if (error) throw new Error(error.message)
+  return (data as { nombre: string }).nombre
+}
+
 interface ServicioIndividual {
   servicioId: string
   precio: number
@@ -293,8 +303,9 @@ async function preciosIndividuales(servicioIds: string[], tipoVehiculoId: string
 // individuales elegidos (sea que acompañen al combo o que sean todo lo que lleva la orden).
 export async function createOrden(input: OrdenInput): Promise<Orden> {
   const parsed = ordenInputSchema.parse(input)
-  const [precioCombo, addons, configuracion, turno] = await Promise.all([
+  const [precioCombo, nombreCombo, addons, configuracion, turno] = await Promise.all([
     parsed.comboId ? precioComboVigente(parsed.comboId, parsed.tipoVehiculoId) : Promise.resolve(0),
+    parsed.comboId ? nombreDeCombo(parsed.comboId) : Promise.resolve(undefined),
     preciosIndividuales(parsed.serviciosAdicionales, parsed.tipoVehiculoId),
     fetchConfiguracion(),
     fetchTurnoAbierto('jefe_zona'),
@@ -307,12 +318,25 @@ export async function createOrden(input: OrdenInput): Promise<Orden> {
   }
 
   const recargo = parsed.altoCilindraje ? configuracion.recargoAltoCilindraje : 0
-  const total = (precioCombo ?? 0) + addons.reduce((suma, addon) => suma + addon.precio, 0) + recargo
+  const precioAddons = addons.reduce((suma, addon) => suma + addon.precio, 0)
+  const total = (precioCombo ?? 0) + precioAddons + recargo
   const comisionLavador = Math.round(total * configuracion.comisionLavadorPorcentaje)
   // Comisión del jefe de patio EN TURNO al registrar el vehículo — turno ya se exige arriba
   // (turno abierto de jefe_zona), así que responsableActual siempre existe acá. El negocio se
   // lleva lo que quede de las dos comisiones, no un porcentaje fijo aparte.
-  const comisionJefeZona = Math.round(total * configuracion.comisionJefeZonaPorcentaje)
+  //
+  // Desde 0071, ya no es un único % sobre el total: el combo paga su propio % según el tramo
+  // ("Combo 1" de cada categoría = tarifa básica, cualquier otro combo = tarifa superior — se
+  // identifica por nombre, la misma convención que usa el resto del sistema desde 0010) y los
+  // servicios sueltos (con o sin combo) pagan la tarifa de servicios aparte. El recargo de alto
+  // cilindraje sigue la tarifa del combo si la orden lleva uno.
+  const tasaComboJefeZona =
+    nombreCombo === 'Combo 1' ? configuracion.comisionJefeZonaCombo1Porcentaje : configuracion.comisionJefeZonaCombo2Porcentaje
+  const comisionJefeZonaCombo = parsed.comboId
+    ? Math.round(((precioCombo ?? 0) + recargo) * tasaComboJefeZona)
+    : Math.round(recargo * configuracion.comisionJefeZonaServiciosPorcentaje)
+  const comisionJefeZonaServicios = Math.round(precioAddons * configuracion.comisionJefeZonaServiciosPorcentaje)
+  const comisionJefeZona = comisionJefeZonaCombo + comisionJefeZonaServicios
   const comisionNegocio = total - comisionLavador - comisionJefeZona
 
   const { data, error } = await db
