@@ -122,10 +122,10 @@ export function CompraForm({
     <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
       <div
         className={`custom-scroll flex max-h-[90vh] w-full flex-col overflow-y-auto rounded-t-2xl bg-white p-5 shadow-card-hover sm:rounded-2xl ${
-          size === 'sm' ? 'max-w-xl sm:p-7' : 'max-w-md'
+          size === 'sm' ? 'max-w-2xl sm:p-7' : 'max-w-xl sm:p-7'
         }`}
       >
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-5 flex items-center justify-between">
           <div>
             <h3 className="text-base font-semibold text-neutral-900">Registrar compra</h3>
             <p className="text-xs text-neutral-500">Proveedor, factura y los productos que llegaron.</p>
@@ -133,13 +133,13 @@ export function CompraForm({
           <button
             type="button"
             onClick={onClose}
-            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
+            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
           >
             <X size={18} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-6">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <label className={labelCls}>
               <span className={spanCls}>Proveedor</span>
@@ -160,9 +160,6 @@ export function CompraForm({
                 className={inputCls}
               />
             </label>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <label className={labelCls}>
               <span className={spanCls}>Fecha</span>
               <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className={inputCls} />
@@ -178,7 +175,7 @@ export function CompraForm({
             </label>
           </div>
 
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5 rounded-lg border border-neutral-200 p-4">
             <span className={`text-sm ${spanCls}`}>¿Con qué se pagó?</span>
             <div className="grid grid-cols-2 gap-2">
               <button
@@ -216,51 +213,78 @@ export function CompraForm({
             </p>
           </div>
 
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-3">
             <span className={`text-sm ${spanCls}`}>Productos</span>
-            {lineas.map((linea, i) => (
-              <div key={i} className="flex flex-col gap-2 rounded-lg border border-neutral-200 p-3 sm:flex-row sm:items-end">
-                <div className="flex-1">
-                  <CustomSelect
-                    value={linea.productoId}
-                    onChange={(v) => setLinea(i, { productoId: v })}
-                    options={productos.map((p) => ({ value: p.id, label: p.nombre }))}
-                    placeholder="Producto"
-                    size={size}
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    type="number"
-                    min="1"
-                    value={linea.cantidad}
-                    onChange={(e) => setLinea(i, { cantidad: e.target.value })}
-                    placeholder="Cant."
-                    className={`w-20 ${inputCls}`}
-                  />
-                  <div className="w-32">
-                    <CurrencyInput
+
+            {/* Encabezados de columna — solo tienen sentido cuando la fila es una sola línea (sm+);
+                en mobile cada campo lleva su propia etiqueta arriba (ver abajo). */}
+            <div className="hidden gap-3 px-1 text-xs font-medium text-neutral-400 sm:grid sm:grid-cols-[1fr_5.5rem_9rem_2.25rem]">
+              <span>Producto</span>
+              <span>Cant.</span>
+              <span>Costo unit.</span>
+              <span />
+            </div>
+
+            <div className="flex flex-col gap-3">
+              {lineas.map((linea, i) => (
+                <div
+                  key={i}
+                  className="flex flex-col gap-2 rounded-lg border border-neutral-200 p-3 sm:grid sm:grid-cols-[1fr_5.5rem_9rem_2.25rem] sm:items-center sm:gap-3"
+                >
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs font-medium text-neutral-500 sm:hidden">Producto</span>
+                    <CustomSelect
+                      value={linea.productoId}
+                      onChange={(v) => setLinea(i, { productoId: v })}
+                      options={productos.map((p) => ({ value: p.id, label: p.nombre }))}
+                      placeholder="Buscar producto…"
+                      searchable
                       size={size}
-                      prefix="$"
-                      value={linea.costoUnitario}
-                      onChange={(v) => setLinea(i, { costoUnitario: v })}
                     />
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => quitarLinea(i)}
-                    disabled={lineas.length === 1}
-                    className="flex size-9 shrink-0 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-danger-50 hover:text-danger-600 disabled:cursor-not-allowed disabled:opacity-30"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  {/* `sm:contents` deja de generar caja propia en sm+: sus 3 hijos pasan a ser
+                      celdas directas del grid (columnas 2, 3 y 4) sin repetir el breakpoint en cada uno. */}
+                  <div className="flex gap-2 sm:contents">
+                    <div className="flex flex-1 flex-col gap-1 sm:flex-none">
+                      <span className="text-xs font-medium text-neutral-500 sm:hidden">Cantidad</span>
+                      <input
+                        type="number"
+                        min="1"
+                        value={linea.cantidad}
+                        onChange={(e) => setLinea(i, { cantidad: e.target.value })}
+                        placeholder="Cant."
+                        className={`w-full ${inputCls}`}
+                      />
+                    </div>
+                    <div className="flex flex-1 flex-col gap-1 sm:flex-none">
+                      <span className="text-xs font-medium text-neutral-500 sm:hidden">Costo unit.</span>
+                      <CurrencyInput
+                        size={size}
+                        prefix="$"
+                        value={linea.costoUnitario}
+                        onChange={(v) => setLinea(i, { costoUnitario: v })}
+                      />
+                    </div>
+                    <div className="flex items-end sm:items-center">
+                      <button
+                        type="button"
+                        onClick={() => quitarLinea(i)}
+                        disabled={lineas.length === 1}
+                        aria-label="Quitar producto"
+                        className="flex size-9 shrink-0 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-danger-50 hover:text-danger-600 disabled:cursor-not-allowed disabled:opacity-30"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+
             <button
               type="button"
               onClick={agregarLinea}
-              className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-neutral-300 py-2 text-xs font-medium text-neutral-500 transition-colors hover:border-primary-300 hover:text-primary-600"
+              className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-neutral-300 py-2.5 text-xs font-medium text-neutral-500 transition-colors hover:border-primary-300 hover:text-primary-600"
             >
               <Plus size={14} />
               Agregar otro producto
