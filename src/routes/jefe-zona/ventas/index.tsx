@@ -572,7 +572,9 @@ function VenderPage() {
           onCargarALavador={async (deudor, cerradaPor) => {
             await cargarCuentaAPersonal(cerrandoCuenta.id, deudor, cerradaPor)
             setCerrandoCuenta(null)
-            toast.exito('Cuenta cargada como deuda del trabajador')
+            toast.exito(
+              cerrandoCuenta.aCosto ? 'Retiro a costo cargado como deuda de gerencia' : 'Cuenta cargada como deuda del trabajador',
+            )
             await refresh()
           }}
         />
@@ -914,6 +916,10 @@ function AnularVentaModal({
   )
 }
 
+// Abrir cuenta normal (a precio de venta) o, desde 0073, una cuenta A COSTO para gerencia: cada
+// producto que se le cargue después se valora al costo del producto, no al precio de venta, desde
+// que se agrega — el modo queda fijo al abrir, junto con el motivo y quién autoriza (sin PIN,
+// control posterior por bitácora). Solo una cuenta de gerencia puede ser el destinatario.
 function AbrirCuentaModal({
   responsableSugerido,
   onClose,
@@ -926,14 +932,30 @@ function AbrirCuentaModal({
   const [titular, setTitular] = useState('')
   const [nota, setNota] = useState('')
   const [abiertaPor, setAbiertaPor] = useState(responsableSugerido)
+  const [aCosto, setACosto] = useState(false)
+  const [destinatarioId, setDestinatarioId] = useState('')
+  const [motivo, setMotivo] = useState('')
+  const [autorizadoPor, setAutorizadoPor] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const enVueloRef = useRef(false)
+  const personasQuery = useQuery({ queryKey: ['perfiles', 'deudores'], queryFn: fetchPersonasDeudoras })
+  const opcionesGerencia = (personasQuery.data ?? [])
+    .filter((p) => p.roles.includes('admin'))
+    .map((p) => ({ value: p.id, label: p.nombre?.trim() || 'Sin nombre' }))
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     if (enVueloRef.current) return
-    const parsed = abrirCuentaInputSchema.safeParse({ titular, nota: nota || undefined, abiertaPor })
+    const parsed = abrirCuentaInputSchema.safeParse({
+      titular,
+      nota: nota || undefined,
+      abiertaPor,
+      aCosto,
+      destinatarioId: destinatarioId || undefined,
+      motivo: motivo || undefined,
+      autorizadoPor: autorizadoPor || undefined,
+    })
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Datos inválidos')
       return
@@ -944,7 +966,7 @@ function AbrirCuentaModal({
     try {
       await abrirCuenta(parsed.data)
       await onAbierta()
-      toast.exito('Cuenta abierta')
+      toast.exito(aCosto ? 'Cuenta a costo abierta' : 'Cuenta abierta')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo abrir la cuenta')
       toast.desdeError(err, 'No se pudo abrir la cuenta')
@@ -955,7 +977,7 @@ function AbrirCuentaModal({
 
   return (
     <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="w-full max-w-sm rounded-t-2xl bg-white p-5 shadow-card-hover sm:rounded-2xl sm:p-6">
+      <div className="custom-scroll flex max-h-[90vh] w-full max-w-sm flex-col overflow-y-auto rounded-t-2xl bg-white p-5 shadow-card-hover sm:rounded-2xl sm:p-6">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-base font-semibold text-neutral-900">Abrir cuenta</h3>
           <button
@@ -996,13 +1018,64 @@ function AbrirCuentaModal({
               className="rounded-lg border border-neutral-300 px-3 py-3 text-base outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
             />
           </label>
+
+          <label className="flex items-start gap-2.5 rounded-lg border border-neutral-200 px-3 py-2.5 text-sm">
+            <input
+              type="checkbox"
+              checked={aCosto}
+              onChange={(e) => {
+                setACosto(e.target.checked)
+                setError(null)
+              }}
+              className="mt-0.5 size-4 accent-primary-600"
+            />
+            <span className="flex flex-col gap-0.5">
+              <span className="font-medium text-neutral-700">Cuenta a costo — retiro de gerencia</span>
+              <span className="text-xs text-neutral-500">
+                Todo lo que se cargue a esta cuenta se valora al costo del producto, no al precio de venta.
+              </span>
+            </span>
+          </label>
+
+          {aCosto ? (
+            <>
+              <label className="flex flex-col gap-1.5 text-sm">
+                <span className="font-medium text-neutral-700">¿A qué gerente se le entrega?</span>
+                <CustomSelect
+                  value={destinatarioId}
+                  onChange={setDestinatarioId}
+                  placeholder={personasQuery.isPending ? 'Cargando…' : 'Cuenta de gerencia'}
+                  options={opcionesGerencia}
+                />
+              </label>
+              <label className="flex flex-col gap-1.5 text-sm">
+                <span className="font-medium text-neutral-700">Motivo</span>
+                <input
+                  value={motivo}
+                  onChange={(e) => setMotivo(e.target.value)}
+                  placeholder="p. ej. consumo propio del gerente en turno"
+                  className="rounded-lg border border-neutral-300 px-3 py-3 text-base outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                />
+              </label>
+              <label className="flex flex-col gap-1.5 text-sm">
+                <span className="font-medium text-neutral-700">Quién autoriza</span>
+                <input
+                  value={autorizadoPor}
+                  onChange={(e) => setAutorizadoPor(e.target.value)}
+                  placeholder="p. ej. Alessandro (llamada)"
+                  className="rounded-lg border border-neutral-300 px-3 py-3 text-base outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                />
+              </label>
+            </>
+          ) : null}
+
           {error ? <p className="text-xs text-danger-600">{error}</p> : null}
           <button
             type="submit"
             disabled={saving}
             className="rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
           >
-            {saving ? 'Abriendo…' : 'Abrir cuenta'}
+            {saving ? 'Abriendo…' : aCosto ? 'Abrir cuenta a costo' : 'Abrir cuenta'}
           </button>
         </form>
       </div>
@@ -1014,6 +1087,11 @@ function AbrirCuentaModal({
 // sumar exacto) — mismo componente `PagoLineas` que ya usa `CobroModal`/`VentaCarrito`. Desde
 // 0065 también se puede cerrar SIN cobrar plata: "Cargar a un lavador" descuenta stock/costo
 // igual que siempre pero deja el total como deuda de ese lavador, a saldar en su liquidación.
+//
+// Si la cuenta es a costo (0073, decidido al ABRIRLA), cada item ya llegó valorado al costo del
+// producto — el total de acá abajo ya es el correcto, no hay nada que recalcular al cerrar. En ese
+// caso "Cargar a un trabajador" oculta el selector de deudor: el servidor siempre carga al gerente
+// con el que se abrió la cuenta, no a quien se elija acá.
 function CerrarCuentaModal({
   cuenta,
   items,
@@ -1063,18 +1141,18 @@ function CerrarCuentaModal({
       return
     }
     if (modo === 'lavador') {
-      if (!lavadorId) {
+      if (!cuenta.aCosto && !lavadorId) {
         setError('Selecciona a quién se le carga')
         return
       }
+      const deudor: Deudor = cuenta.aCosto
+        ? { tipo: 'persona', id: cuenta.destinatarioId ?? '' }
+        : { tipo: lavadorId.startsWith('l:') ? 'lavador' : 'persona', id: lavadorId.slice(2) }
       setError(null)
       enVueloRef.current = true
       setSaving(true)
       try {
-        await onCargarALavador(
-          { tipo: lavadorId.startsWith('l:') ? 'lavador' : 'persona', id: lavadorId.slice(2) },
-          cerradaPor.trim(),
-        )
+        await onCargarALavador(deudor, cerradaPor.trim())
       } catch (err) {
         setError(err instanceof Error ? err.message : 'No se pudo cargar la cuenta')
         toast.desdeError(err, 'No se pudo cargar la cuenta')
@@ -1117,6 +1195,10 @@ function CerrarCuentaModal({
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {cuenta.aCosto ? (
+            <p className="rounded-lg bg-primary-50 px-3 py-2 text-xs text-primary-700">Cuenta a costo — {cuenta.motivo}</p>
+          ) : null}
+
           <div className="flex flex-col gap-1.5 rounded-lg bg-neutral-50 px-3 py-2.5 text-sm">
             {items.map((v) => (
               <div key={v.id} className="flex items-center justify-between gap-2">
@@ -1127,7 +1209,7 @@ function CerrarCuentaModal({
               </div>
             ))}
             <div className="mt-1 flex items-center justify-between border-t border-neutral-200 pt-1.5 text-sm font-semibold text-neutral-900">
-              <span>Total</span>
+              <span>{cuenta.aCosto ? 'Total a costo' : 'Total'}</span>
               <span>{COP.format(total)}</span>
             </div>
           </div>
@@ -1160,13 +1242,17 @@ function CerrarCuentaModal({
             </div>
           ) : (
             <div className="flex flex-col gap-1.5 text-sm">
-              <span className="font-medium text-neutral-700">¿A quién se le carga?</span>
-              <CustomSelect
-                value={lavadorId}
-                onChange={setLavadorId}
-                placeholder={personasQuery.isPending ? 'Cargando…' : 'Lavador, jefe de patio o gerencia'}
-                options={opcionesDeudor}
-              />
+              {cuenta.aCosto ? null : (
+                <>
+                  <span className="font-medium text-neutral-700">¿A quién se le carga?</span>
+                  <CustomSelect
+                    value={lavadorId}
+                    onChange={setLavadorId}
+                    placeholder={personasQuery.isPending ? 'Cargando…' : 'Lavador, jefe de patio o gerencia'}
+                    options={opcionesDeudor}
+                  />
+                </>
+              )}
               <p className="rounded-lg bg-warning-50 px-3 py-2 text-xs text-warning-700">
                 No entra plata hoy — el total ({COP.format(total)}) queda como deuda de esa persona: la paga con abonos o
                 se le descuenta al liquidar.
@@ -1187,7 +1273,7 @@ function CerrarCuentaModal({
 
           <button
             type="submit"
-            disabled={saving || (modo === 'cobrar' && !cuadra) || (modo === 'lavador' && !lavadorId)}
+            disabled={saving || (modo === 'cobrar' && !cuadra) || (modo === 'lavador' && !cuenta.aCosto && !lavadorId)}
             className="flex items-center justify-center gap-2 rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
           >
             <Wallet size={16} />

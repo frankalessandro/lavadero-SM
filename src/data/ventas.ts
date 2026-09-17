@@ -12,7 +12,7 @@ import {
 import type { PagoLineaInput } from '../schemas/pago'
 
 const VENTA_SELECT =
-  'id, consecutivo, productoId:producto_id, cantidad, precioUnitario:precio_unitario, total, metodoPago:metodo_pago, referenciaPago:referencia_pago, turnoId:turno_id, ordenId:orden_id, cuentaId:cuenta_id, ventaGrupoId:venta_grupo_id, vendidoPor:vendido_por, estado, motivoAnulacion:motivo_anulacion, anuladaPor:anulada_por, anuladaEn:anulada_en, creadoEn:creado_en, cobradaEn:cobrada_en'
+  'id, consecutivo, productoId:producto_id, cantidad, precioUnitario:precio_unitario, total, metodoPago:metodo_pago, referenciaPago:referencia_pago, turnoId:turno_id, ordenId:orden_id, cuentaId:cuenta_id, ventaGrupoId:venta_grupo_id, vendidoPor:vendido_por, estado, motivoAnulacion:motivo_anulacion, anuladaPor:anulada_por, anuladaEn:anulada_en, creadoEn:creado_en, cobradaEn:cobrada_en, aCosto:a_costo, destinatarioId:destinatario_id'
 
 function inicioDeHoyISO(): string {
   const ahora = new Date()

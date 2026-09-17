@@ -26,14 +26,39 @@ export const cuentaSchema = z.object({
   cerradaEn: nullableTimestamp,
   cerradaPor: nullableTrimmedString,
   turnoId: nullableTrimmedString,
+  // Cuenta a costo para gerencia (0073): cada producto que se le carga se valora al costo del
+  // producto en vez del precio de venta, desde que se agrega — no al cerrar. `destinatarioId` es
+  // el gerente que la recibe, `motivo`/`autorizadoPor` quedan fijos desde que se abre.
+  aCosto: z.boolean(),
+  destinatarioId: nullableTrimmedString,
+  motivo: nullableTrimmedString,
+  autorizadoPor: nullableTrimmedString,
   creadoEn: z.string(),
 })
 
-export const abrirCuentaInputSchema = z.object({
-  titular: z.string().trim().min(2, 'El nombre de la cuenta es obligatorio'),
-  nota: z.string().trim().optional(),
-  abiertaPor: z.string().trim().min(1, 'Indica quién abre la cuenta'),
-})
+export const abrirCuentaInputSchema = z
+  .object({
+    titular: z.string().trim().min(2, 'El nombre de la cuenta es obligatorio'),
+    nota: z.string().trim().optional(),
+    abiertaPor: z.string().trim().min(1, 'Indica quién abre la cuenta'),
+    // A costo (0073): solo para una cuenta de gerencia, con motivo y quién autoriza obligatorios.
+    aCosto: z.boolean().default(false),
+    destinatarioId: z.string().optional(),
+    motivo: z.string().trim().optional(),
+    autorizadoPor: z.string().trim().optional(),
+  })
+  .refine((d) => !d.aCosto || Boolean(d.destinatarioId), {
+    message: 'Selecciona a qué gerente se le entrega',
+    path: ['destinatarioId'],
+  })
+  .refine((d) => !d.aCosto || (d.motivo ?? '').length >= 5, {
+    message: 'Indica el motivo de la cuenta a costo',
+    path: ['motivo'],
+  })
+  .refine((d) => !d.aCosto || (d.autorizadoPor ?? '').length >= 1, {
+    message: 'Indica quién autoriza la cuenta a costo',
+    path: ['autorizadoPor'],
+  })
 
 export const anularCuentaInputSchema = z.object({
   motivo: z.string().trim().min(3, 'El motivo de anulación es obligatorio'),

@@ -50,6 +50,11 @@ export const ventaSchema = z.object({
   anuladaPor: nullableTrimmedString,
   anuladaEn: nullableTimestamp,
   creadoEn: z.string(),
+  // Retiro a costo de gerencia (0073): la venta se valoró al costo del producto en vez del precio
+  // de venta, así que su margen es 0. `destinatarioId` es el gerente que la recibió — solo
+  // lavadores/jefes de patio quedan fuera: a ellos se les carga a precio de venta (regla 4).
+  aCosto: z.boolean(),
+  destinatarioId: nullableTrimmedString,
   // Momento en que el dinero realmente entró — distinto de `creadoEn` cuando el producto se cargó
   // a una orden/cuenta y se cobró después (posiblemente al día siguiente). NULL mientras sigue
   // `pendiente`. Ver 0062_ventas_cobrada_en.sql — es la fecha que usan los reportes de ingresos,
