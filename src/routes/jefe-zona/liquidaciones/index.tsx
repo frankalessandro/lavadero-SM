@@ -11,15 +11,18 @@ import { fetchDeudaPendientePorLavador } from '../../../data/deudasPersonal'
 import type { Orden } from '../../../schemas/orden'
 import { Card } from '../../../components/layout/Card'
 import { CustomSelect } from '../../../components/layout/CustomSelect'
-import { DiaSelector } from '../../../components/layout/DiaSelector'
+import { PeriodoSelector } from '../../../components/layout/PeriodoSelector'
 import { ReciboModal, type ReciboData } from '../../../components/layout/ReciboModal'
 import { ColillaLiquidacionModal, type ColillaLiquidacionData } from '../../../components/layout/ColillaLiquidacionModal'
-import { fechaLocalISO, limitesLocalesISO } from '../../../lib/periodo'
+import { calcularRango, rangoAISO, type ModoPeriodo } from '../../../lib/periodo'
 import { queryKeys } from '../../../lib/queryKeys'
 import { toast } from '../../../lib/toast'
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
-const FECHA = new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium' })
+const FECHA_HORA = new Intl.DateTimeFormat('es-CO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+
+// Texto del botón de colilla según el filtro de periodo: "Colilla del día", etc.
+const COLILLA_DE: Record<ModoPeriodo, string> = { dia: 'del día', semana: 'de la semana', mes: 'del mes' }
 
 const ESTADO_LABEL: Record<Orden['estado'], string> = {
   en_proceso: 'En proceso',
@@ -56,24 +59,26 @@ function LiquidacionesJefeZona() {
   const [combos] = useState(data.combos)
   const [tiposVehiculo] = useState(data.tiposVehiculo)
   const [deudaPorLavador] = useState(data.deudaPorLavador)
-  const [dia, setDia] = useState(() => fechaLocalISO(new Date()))
+  const [modo, setModo] = useState<ModoPeriodo>('dia')
+  const [ancla, setAncla] = useState(() => new Date())
+  const rango = calcularRango(modo, ancla)
   const [lavadorFiltro, setLavadorFiltro] = useState<string>('todos')
   const [recibo, setRecibo] = useState<ReciboData | null>(null)
-  // "Colilla del día": corte informativo del día elegido — no marca ninguna orden ni crea
-  // liquidación. El pago real sigue siendo semanal desde Admin (regla de negocio 4); esto es solo
-  // para que el jefe de patio le muestre a un lavador cómo va, hoy o cualquier día pasado.
+  // Colilla informativa del periodo que muestra el filtro de arriba (día, semana o mes) — no marca
+  // ninguna orden ni crea liquidación. El pago real sigue siendo semanal desde Admin (regla de
+  // negocio 4); esto es solo para que el jefe de patio le muestre a un lavador cómo va.
   const [colilla, setColilla] = useState<ColillaLiquidacionData | null>(null)
   const [cargandoColilla, setCargandoColilla] = useState<string | null>(null)
 
   const ordenesQuery = useQuery({
-    queryKey: queryKeys.ordenesDia(dia),
+    queryKey: queryKeys.ordenesRango(rango.periodoInicio, rango.periodoFin),
     queryFn: () => {
-      const { desdeISO, hastaISO } = limitesLocalesISO(dia, dia)
+      const { desdeISO, hastaISO } = rangoAISO(rango)
       return fetchOrdenesEnRango(desdeISO, hastaISO)
     },
     staleTime: 30_000,
   })
-  const ordenesDia = ordenesQuery.data
+  const ordenesRango = ordenesQuery.data
 
   const lavadorNombre = (id: string | undefined) => (id ? lavadores.find((l) => l.id === id)?.nombre : undefined) ?? 'Sin asignar'
   const comboNombre = (id: string | undefined) => (id ? combos.find((c) => c.id === id)?.nombre : undefined) ?? 'Sin combo'
@@ -82,7 +87,7 @@ function LiquidacionesJefeZona() {
   // Cuenta cada vehículo DESDE QUE SE ASIGNA al lavador — en proceso, listo o entregado, cobrado o
   // no (la comisión ya queda fija al crear la orden, no depende de que el cliente pague). Solo las
   // anuladas quedan fuera. Es el mismo criterio de la colilla de gerencia y de fetchMontoPeriodo.
-  const vigentes = useMemo(() => (ordenesDia ?? []).filter((o) => o.estado !== 'anulada'), [ordenesDia])
+  const vigentes = useMemo(() => (ordenesRango ?? []).filter((o) => o.estado !== 'anulada'), [ordenesRango])
 
   const filtradas = useMemo(
     () =>
@@ -121,30 +126,29 @@ function LiquidacionesJefeZona() {
 
   const ordenadas = [...filtradas].sort((a, b) => b.consecutivo - a.consecutivo)
   const sinAsignar = vigentes.filter((o) => !o.lavadorId).length
-  const diaLabel = FECHA.format(new Date(`${dia}T00:00:00`))
-  const esHoy = dia === fechaLocalISO(new Date())
 
   async function handleVerColilla(lavadorId: string) {
     setCargandoColilla(lavadorId)
     try {
-      const preview = await fetchMontoPeriodo(lavadorId, dia, dia, tiposVehiculo, combos)
+      const preview = await fetchMontoPeriodo(lavadorId, rango.periodoInicio, rango.periodoFin, tiposVehiculo, combos)
       if (preview.cantidadOrdenes === 0) {
-        toast.advertencia(`${lavadorNombre(lavadorId)} no tiene órdenes sin liquidar el ${diaLabel}.`)
+        toast.advertencia(`${lavadorNombre(lavadorId)} no tiene órdenes sin liquidar en ${rango.label}.`)
         return
       }
       setColilla({
         lavadorNombre: lavadorNombre(lavadorId),
-        periodoInicio: dia,
-        periodoFin: dia,
+        periodoInicio: rango.periodoInicio,
+        periodoFin: rango.periodoFin,
         desglose: preview.desglose,
         monto: preview.monto,
         generadaEn: new Date().toISOString(),
         tipo: 'informativo',
+        alcance: modo,
         deudaPendiente: preview.deudaPendiente,
         montoNeto: preview.montoNeto,
       })
     } catch (err) {
-      toast.desdeError(err, 'No se pudo calcular la colilla del día')
+      toast.desdeError(err, 'No se pudo calcular la colilla')
     } finally {
       setCargandoColilla(null)
     }
@@ -178,7 +182,7 @@ function LiquidacionesJefeZona() {
       </div>
 
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-        <DiaSelector dia={dia} onChange={setDia} />
+        <PeriodoSelector modo={modo} onModoChange={setModo} ancla={ancla} onAnclaChange={setAncla} rango={rango} />
         <div className="w-full sm:w-64">
           <CustomSelect
             size="sm"
@@ -191,16 +195,14 @@ function LiquidacionesJefeZona() {
       </div>
 
       <section className="flex flex-col gap-3">
-        <h3 className="text-sm font-semibold text-neutral-900">
-          Ganado {esHoy ? 'hoy' : `el ${diaLabel}`} por lavador
-        </h3>
+        <h3 className="text-sm font-semibold text-neutral-900">Ganado por lavador · {rango.label}</h3>
         {ordenesQuery.isPending ? (
           <Card className="py-8 text-center text-sm text-neutral-400">Cargando…</Card>
         ) : ordenesQuery.isError ? (
-          <Card className="py-8 text-center text-sm text-danger-700">No se pudieron cargar las órdenes de este día.</Card>
+          <Card className="py-8 text-center text-sm text-danger-700">No se pudieron cargar las órdenes de este periodo.</Card>
         ) : porLavador.length === 0 ? (
           <Card className="py-8 text-center text-sm text-neutral-400">
-            No hay vehículos asignados a lavadores {esHoy ? 'hoy' : `el ${diaLabel}`} sin liquidar.
+            No hay vehículos asignados a lavadores sin liquidar en {rango.label}.
           </Card>
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -237,10 +239,10 @@ function LiquidacionesJefeZona() {
                   disabled={cargandoColilla === p.lavadorId}
                   onClick={() => handleVerColilla(p.lavadorId)}
                   className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-neutral-300 py-2 text-xs font-medium text-neutral-600 transition-colors hover:border-warning-300 hover:text-warning-700 disabled:opacity-50"
-                  title="Corte informativo del día elegido — no es un pago, se liquida semanal desde Admin"
+                  title="Corte informativo de este periodo — no es un pago, se liquida semanal desde Admin"
                 >
                   <Receipt size={13} />
-                  {cargandoColilla === p.lavadorId ? 'Calculando…' : 'Colilla del día'}
+                  {cargandoColilla === p.lavadorId ? 'Calculando…' : `Colilla ${COLILLA_DE[modo]}`}
                 </button>
               </Card>
             ))}
@@ -248,20 +250,21 @@ function LiquidacionesJefeZona() {
         )}
         {sinAsignar > 0 ? (
           <p className="text-xs text-neutral-500">
-            {sinAsignar} vehículo{sinAsignar === 1 ? '' : 's'} de este día sin lavador asignado: no cuenta{sinAsignar === 1 ? '' : 'n'} para
+            {sinAsignar} vehículo{sinAsignar === 1 ? '' : 's'} de este periodo sin lavador asignado: no cuenta{sinAsignar === 1 ? '' : 'n'} para
             ninguna colilla hasta que se asigne.
           </p>
         ) : null}
       </section>
 
       <section className="flex flex-col gap-3">
-        <h3 className="text-sm font-semibold text-neutral-900">Vehículos del día ({ordenadas.length})</h3>
+        <h3 className="text-sm font-semibold text-neutral-900">Vehículos del periodo ({ordenadas.length})</h3>
         <Card className="p-0">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
                   <th className="px-5 py-3">#</th>
+                  <th className="px-5 py-3">Creada</th>
                   <th className="px-5 py-3">Placa</th>
                   <th className="px-5 py-3">Cliente</th>
                   <th className="px-5 py-3">Tipo</th>
@@ -278,6 +281,7 @@ function LiquidacionesJefeZona() {
                 {ordenadas.map((orden) => (
                   <tr key={orden.id} className="border-b border-neutral-100 transition-colors last:border-0 hover:bg-primary-50/40">
                     <td className="px-5 py-3 text-neutral-500">#{orden.consecutivo}</td>
+                    <td className="whitespace-nowrap px-5 py-3 text-neutral-500">{FECHA_HORA.format(new Date(orden.creadoEn))}</td>
                     <td className="px-5 py-3 font-mono font-medium text-neutral-900">{orden.placa}</td>
                     <td className="px-5 py-3 text-neutral-700">{orden.clienteNombre}</td>
                     <td className="px-5 py-3 text-neutral-700">{tipoNombre(orden.tipoVehiculoId)}</td>
@@ -313,8 +317,8 @@ function LiquidacionesJefeZona() {
                 ))}
                 {ordenadas.length === 0 ? (
                   <tr>
-                    <td className="px-5 py-8 text-center text-neutral-400" colSpan={11}>
-                      {ordenesQuery.isPending ? 'Cargando…' : 'No hay vehículos en este día.'}
+                    <td className="px-5 py-8 text-center text-neutral-400" colSpan={12}>
+                      {ordenesQuery.isPending ? 'Cargando…' : 'No hay vehículos en este periodo.'}
                     </td>
                   </tr>
                 ) : null}

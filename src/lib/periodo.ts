@@ -70,12 +70,6 @@ export function rangoAISO(rango: RangoPeriodo): { desdeISO: string; hastaISO: st
   return limitesLocalesISO(rango.periodoInicio, rango.periodoFin)
 }
 
-// Suma días a una fecha YYYY-MM-DD sin pasar por UTC (que en Colombia corre el día).
-export function sumarDiasISO(fecha: string, dias: number): string {
-  const [y, m, d] = fecha.split('-').map(Number)
-  return fechaLocalISO(new Date(y, m - 1, d + dias))
-}
-
 export function moverAncla(modo: ModoPeriodo, ancla: Date, direccion: 1 | -1): Date {
   if (modo === 'dia') return sumarDias(ancla, direccion)
   if (modo === 'semana') return sumarDias(ancla, 7 * direccion)

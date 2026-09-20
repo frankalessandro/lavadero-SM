@@ -28,7 +28,6 @@ import {
   type ResumenPeriodoJefeZona,
 } from '../../../../data/liquidacionesJefeZona'
 import { PeriodoSelector } from '../../../../components/layout/PeriodoSelector'
-import { DiaSelector } from '../../../../components/layout/DiaSelector'
 import { calcularRango, fechaLocalISO, type ModoPeriodo } from '../../../../lib/periodo'
 import { fetchLavadores } from '../../../../data/lavadores'
 import { fetchTurnoAbierto } from '../../../../data/turnos'
@@ -56,6 +55,9 @@ import {
   type DetalleOrdenJefeZonaFila,
 } from '../../../../components/layout/DetalleOrdenesJefeZonaModal'
 import { toast } from '../../../../lib/toast'
+
+// Texto del botón de colilla informativa según el filtro de periodo: "Colilla del día", etc.
+const COLILLA_DE: Record<ModoPeriodo, string> = { dia: 'del día', semana: 'de la semana', mes: 'del mes' }
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 const FECHA = new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium' })
@@ -138,9 +140,6 @@ function LiquidacionesPage() {
   // patio desde su propia vista) le muestre a un lavador cómo va, mientras el pago real es
   // semanal. Comparte el mismo estado `colilla`/modal que la colilla real, distinguido por `tipo`.
   const [cargandoColillaHoy, setCargandoColillaHoy] = useState<string | null>(null)
-  // Día de esa colilla informativa (por defecto hoy): se puede elegir cualquier día pasado, p. ej.
-  // para ver lo que un lavador ganó ayer.
-  const [diaColilla, setDiaColilla] = useState(() => hoyISO())
   const [error, setError] = useState<string | null>(null)
   const [confirmandoGenerar, setConfirmandoGenerar] = useState<{
     comision: ComisionPendiente
@@ -398,35 +397,37 @@ function LiquidacionesPage() {
     }
   }
 
-  // Mismo cálculo que se usaría para generar la diaria de ese día (fetchMontoPeriodo), pero no se
-  // genera nada — no marca órdenes ni crea fila en `liquidaciones`. Es la "colilla del día" que
-  // Alessandro pidió para mostrarle a un lavador cómo va, mientras el pago real es semanal. Cuenta
-  // cada vehículo desde que se le asigna, esté cobrado o no. Solo cuenta lo que sigue SIN liquidar:
-  // si ese día ya se liquidó, su colilla está en el histórico.
-  async function handleVerColillaDia(comision: ComisionPendiente) {
-    setCargandoColillaHoy(comision.lavadorId)
+  // Colilla informativa del periodo que muestra el filtro de arriba (día, semana o mes): mismo
+  // cálculo que se usaría para generar esa liquidación (fetchMontoPeriodo), pero no se genera nada
+  // — no marca órdenes ni crea fila en `liquidaciones`. Es la "colilla del día" que Alessandro pidió
+  // para mostrarle a un lavador cómo va, mientras el pago real es semanal. Cuenta cada vehículo
+  // desde que se le asigna, esté cobrado o no. Solo cuenta lo que sigue SIN liquidar: si ese
+  // periodo ya se liquidó, su colilla está en el histórico.
+  async function handleVerColillaPeriodo(resumen: ResumenPeriodoLavador) {
+    setCargandoColillaHoy(resumen.lavadorId)
     try {
-      const dia = diaColilla
-      const preview = await fetchMontoPeriodo(comision.lavadorId, dia, dia, tiposVehiculo, combos)
+      const { periodoInicio, periodoFin, label } = rangoPeriodo
+      const preview = await fetchMontoPeriodo(resumen.lavadorId, periodoInicio, periodoFin, tiposVehiculo, combos)
       if (preview.cantidadOrdenes === 0) {
         toast.advertencia(
-          `${comision.lavadorNombre} no tiene órdenes sin liquidar el ${FECHA.format(new Date(`${dia}T00:00:00`))} (si ya se liquidó, su colilla está en el histórico).`,
+          `${resumen.lavadorNombre} no tiene órdenes sin liquidar en ${label} (si ya se liquidó, su colilla está en el histórico).`,
         )
         return
       }
       setColilla({
-        lavadorNombre: comision.lavadorNombre,
-        periodoInicio: dia,
-        periodoFin: dia,
+        lavadorNombre: resumen.lavadorNombre,
+        periodoInicio,
+        periodoFin,
         desglose: preview.desglose,
         monto: preview.monto,
         generadaEn: new Date().toISOString(),
         tipo: 'informativo',
+        alcance: modoPeriodo,
         deudaPendiente: preview.deudaPendiente,
         montoNeto: preview.montoNeto,
       })
     } catch (err) {
-      toast.desdeError(err, 'No se pudo calcular la colilla del día')
+      toast.desdeError(err, 'No se pudo calcular la colilla')
     } finally {
       setCargandoColillaHoy(null)
     }
@@ -715,14 +716,26 @@ function LiquidacionesPage() {
                       <td className="px-5 py-3 text-neutral-700">{COP.format(r.montoPendiente)}</td>
                       <td className="px-5 py-3 text-right">
                         {r.montoPendiente > 0 ? (
-                          <button
-                            type="button"
-                            disabled={calculando === `${r.lavadorId}:reporte` || generando === r.lavadorId}
-                            onClick={() => handleGenerarDesdeReporte(r)}
-                            className="rounded-lg px-3 py-1.5 text-xs font-medium text-primary-700 transition-colors hover:bg-primary-100 disabled:opacity-50"
-                          >
-                            {calculando === `${r.lavadorId}:reporte` ? 'Calculando…' : 'Generar de este periodo'}
-                          </button>
+                          <div className="flex flex-wrap justify-end gap-1">
+                            <button
+                              type="button"
+                              disabled={cargandoColillaHoy === r.lavadorId}
+                              onClick={() => handleVerColillaPeriodo(r)}
+                              title="Corte informativo de este periodo — no genera ni marca nada, el pago sigue siendo semanal"
+                              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-warning-50 hover:text-warning-700 disabled:opacity-50"
+                            >
+                              <Receipt size={13} />
+                              {cargandoColillaHoy === r.lavadorId ? 'Calculando…' : `Colilla ${COLILLA_DE[modoPeriodo]}`}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={calculando === `${r.lavadorId}:reporte` || generando === r.lavadorId}
+                              onClick={() => handleGenerarDesdeReporte(r)}
+                              className="rounded-lg px-3 py-1.5 text-xs font-medium text-primary-700 transition-colors hover:bg-primary-100 disabled:opacity-50"
+                            >
+                              {calculando === `${r.lavadorId}:reporte` ? 'Calculando…' : 'Generar de este periodo'}
+                            </button>
+                          </div>
                         ) : (
                           <span className="text-xs text-neutral-400">Al día</span>
                         )}
@@ -768,10 +781,6 @@ function LiquidacionesPage() {
         <>
         <section className="flex flex-col gap-3">
           <h3 className="text-sm font-semibold text-neutral-900">Comisiones pendientes</h3>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <span className="text-sm font-medium text-neutral-700">Día de la colilla informativa</span>
-            <DiaSelector dia={diaColilla} onChange={setDiaColilla} />
-          </div>
           {pendientes.length === 0 ? (
             <Card className="py-8 text-center text-sm text-neutral-400">
               No hay lavadores activos con comisiones pendientes por liquidar.
@@ -834,16 +843,6 @@ function LiquidacionesPage() {
                       )
                     })}
                   </div>
-                  <button
-                    type="button"
-                    disabled={cargandoColillaHoy === comision.lavadorId}
-                    onClick={() => handleVerColillaDia(comision)}
-                    className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-neutral-300 py-2 text-xs font-medium text-neutral-600 transition-colors hover:border-warning-300 hover:text-warning-700 disabled:opacity-50"
-                    title="Corte informativo del día elegido arriba — no genera ni marca nada, el pago sigue siendo semanal"
-                  >
-                    <Receipt size={13} />
-                    {cargandoColillaHoy === comision.lavadorId ? 'Calculando…' : 'Colilla del día (informativa)'}
-                  </button>
                 </Card>
               ))}
             </div>

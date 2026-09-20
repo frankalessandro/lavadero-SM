@@ -30,6 +30,9 @@ export interface ColillaLiquidacionData {
   // se muestra la línea extra.
   comisionBruta?: number
   deudaDescontada?: number
+  // Solo en modo 'informativo': el corte sigue el filtro de periodo de la pantalla (día, semana o
+  // mes) — cambia el título y los textos. Ausente = 'dia'.
+  alcance?: 'dia' | 'semana' | 'mes'
 }
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
@@ -45,10 +48,23 @@ function periodoLabel(inicio: string, fin: string): string {
   return `Semanal · ${FECHA.format(new Date(`${inicio}T00:00:00`))} → ${FECHA.format(new Date(`${fin}T00:00:00`))}`
 }
 
-// "hoy" o "el 19 sept 2026": la colilla informativa ya no es solo la de hoy (se elige el día), y
-// "Ganado hoy" en la de ayer sería mentira.
-function cuandoInformativo(dia: string): string {
-  return dia === fechaLocalISO(new Date()) ? 'hoy' : `el ${FECHA.format(new Date(`${dia}T00:00:00`))}`
+const TITULO_INFORMATIVO = { dia: 'Colilla del día', semana: 'Colilla de la semana', mes: 'Colilla del mes' } as const
+const TOTAL_IMPRESO = { semana: 'GANADO EN LA SEMANA', mes: 'GANADO EN EL MES' } as const
+
+const fechaDe = (dia: string) => FECHA.format(new Date(`${dia}T00:00:00`))
+
+// La colilla informativa sigue el filtro de la pantalla, así que puede ser de hoy, de otro día, de
+// una semana o de un mes: "Ganado hoy" en la de ayer o en la de una semana sería mentira.
+// "hoy" / "el 19 sept 2026" / "del 14 sept 2026 al 20 sept 2026".
+function cuandoInformativo(colilla: ColillaLiquidacionData): string {
+  if ((colilla.alcance ?? 'dia') !== 'dia') return `del ${fechaDe(colilla.periodoInicio)} al ${fechaDe(colilla.periodoFin)}`
+  return colilla.periodoInicio === fechaLocalISO(new Date()) ? 'hoy' : `el ${fechaDe(colilla.periodoInicio)}`
+}
+
+// "19 sept 2026" o "14 sept 2026 → 20 sept 2026" — el corte, para el subtítulo y el tiquete.
+function corteInformativo(colilla: ColillaLiquidacionData): string {
+  if ((colilla.alcance ?? 'dia') === 'dia') return fechaDe(colilla.periodoInicio)
+  return `${fechaDe(colilla.periodoInicio)} → ${fechaDe(colilla.periodoFin)}`
 }
 
 // Colilla de liquidación para el lavador — mismo patrón que ReciboModal/TiquetePrint (pantalla +
@@ -65,10 +81,10 @@ export function ColillaLiquidacionModal({ colilla, onClose }: { colilla: Colilla
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h3 className="text-base font-semibold text-neutral-900">
-              {informativo ? 'Colilla del día' : 'Colilla de liquidación'}
+              {informativo ? TITULO_INFORMATIVO[colilla.alcance ?? 'dia'] : 'Colilla de liquidación'}
             </h3>
             <p className="text-xs text-neutral-500">
-              {colilla.lavadorNombre} · {informativo ? `Corte informativo del ${FECHA.format(new Date(`${colilla.periodoInicio}T00:00:00`))}` : periodoLabel(colilla.periodoInicio, colilla.periodoFin)}
+              {colilla.lavadorNombre} · {informativo ? `Corte informativo · ${corteInformativo(colilla)}` : periodoLabel(colilla.periodoInicio, colilla.periodoFin)}
             </p>
             <p className="text-[11px] text-neutral-400">Generada {FECHA_HORA.format(new Date(colilla.generadaEn))}</p>
           </div>
@@ -83,8 +99,7 @@ export function ColillaLiquidacionModal({ colilla, onClose }: { colilla: Colilla
 
         {informativo ? (
           <p className="mb-4 rounded-lg bg-warning-50 px-3 py-2 text-xs text-warning-700">
-            No es un pago — es solo para ver cómo va {cuandoInformativo(colilla.periodoInicio)}. El pago real se liquida
-            semanal.
+            No es un pago — es solo para ver cómo va {cuandoInformativo(colilla)}. El pago real se liquida semanal.
           </p>
         ) : null}
 
@@ -110,7 +125,7 @@ export function ColillaLiquidacionModal({ colilla, onClose }: { colilla: Colilla
           className={`mt-3 flex items-center justify-between rounded-lg px-3 py-2.5 text-sm ${informativo ? 'bg-warning-50' : 'bg-primary-50'}`}
         >
           <span className={`font-medium ${informativo ? 'text-warning-900' : 'text-primary-900'}`}>
-            {informativo ? `Ganado ${cuandoInformativo(colilla.periodoInicio)} (sin liquidar aún)` : 'Total liquidado'}
+            {informativo ? `Ganado ${cuandoInformativo(colilla)} (sin liquidar aún)` : 'Total liquidado'}
           </span>
           <span className={`text-lg font-bold ${informativo ? 'text-warning-700' : 'text-primary-700'}`}>
             {COP.format(colilla.monto)}
@@ -184,7 +199,7 @@ function ColillaPrint({ colilla }: { colilla: ColillaLiquidacionData }) {
     <div className="tiquete-58">
       <p className="tiquete-58__marca">Carwash SM</p>
       <p className="tiquete-58__tagline">Lavadero · Parqueadero</p>
-      <p className="tiquete-58__titulo">{informativo ? 'Colilla del día (informativo)' : 'Colilla de liquidación'}</p>
+      <p className="tiquete-58__titulo">{informativo ? `${TITULO_INFORMATIVO[colilla.alcance ?? 'dia']} (informativo)` : 'Colilla de liquidación'}</p>
       {informativo ? <p className="tiquete-58__tagline">*** NO ES UN PAGO — pago semanal ***</p> : null}
 
       <div className="tiquete-58__linea-solida" />
@@ -196,7 +211,7 @@ function ColillaPrint({ colilla }: { colilla: ColillaLiquidacionData }) {
       <div className="tiquete-58__fila">
         <span className="tiquete-58__fila-label">{informativo ? 'Corte' : 'Periodo'}</span>
         <span className="tiquete-58__fila-valor">
-          {informativo ? FECHA.format(new Date(`${colilla.periodoInicio}T00:00:00`)) : periodoLabel(colilla.periodoInicio, colilla.periodoFin)}
+          {informativo ? corteInformativo(colilla) : periodoLabel(colilla.periodoInicio, colilla.periodoFin)}
         </span>
       </div>
       <div className="tiquete-58__fila">
@@ -227,7 +242,7 @@ function ColillaPrint({ colilla }: { colilla: ColillaLiquidacionData }) {
       ) : null}
 
       <div className="tiquete-58__total">
-        <span>{informativo ? `GANADO ${cuandoInformativo(colilla.periodoInicio).toUpperCase()}` : 'TOTAL'}</span>
+        <span>{informativo ? (colilla.alcance && colilla.alcance !== 'dia' ? TOTAL_IMPRESO[colilla.alcance] : `GANADO ${cuandoInformativo(colilla).toUpperCase()}`) : 'TOTAL'}</span>
         <span>{COP.format(colilla.monto)}</span>
       </div>
 
