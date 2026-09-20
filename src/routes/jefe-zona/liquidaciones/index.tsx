@@ -1,34 +1,48 @@
 import { useMemo, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
+import { useQuery } from '@tanstack/react-query'
 import { Coins, Receipt } from 'lucide-react'
-import { fetchOrdenesHoy } from '../../../data/ordenes'
+import { fetchOrdenesEnRango } from '../../../data/ordenes'
 import { fetchLavadores } from '../../../data/lavadores'
 import { fetchCombos } from '../../../data/combos'
 import { fetchTiposVehiculo } from '../../../data/tiposVehiculo'
-import { fetchMontoPeriodo } from '../../../data/liquidaciones'
+import { comisionParaLavador, fetchMontoPeriodo } from '../../../data/liquidaciones'
 import { fetchDeudaPendientePorLavador } from '../../../data/deudasPersonal'
 import type { Orden } from '../../../schemas/orden'
 import { Card } from '../../../components/layout/Card'
 import { CustomSelect } from '../../../components/layout/CustomSelect'
+import { DiaSelector } from '../../../components/layout/DiaSelector'
 import { ReciboModal, type ReciboData } from '../../../components/layout/ReciboModal'
 import { ColillaLiquidacionModal, type ColillaLiquidacionData } from '../../../components/layout/ColillaLiquidacionModal'
+import { fechaLocalISO, limitesLocalesISO } from '../../../lib/periodo'
+import { queryKeys } from '../../../lib/queryKeys'
 import { toast } from '../../../lib/toast'
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
+const FECHA = new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium' })
 
-function hoyISO(): string {
-  return new Date().toISOString().slice(0, 10)
+const ESTADO_LABEL: Record<Orden['estado'], string> = {
+  en_proceso: 'En proceso',
+  listo: 'Listo',
+  entregado: 'Entregado',
+  anulada: 'Anulada',
+}
+
+const ESTADO_CLASSNAME: Record<Orden['estado'], string> = {
+  en_proceso: 'bg-warning-50 text-warning-700',
+  listo: 'bg-primary-50 text-primary-700',
+  entregado: 'bg-success-50 text-success-700',
+  anulada: 'bg-danger-50 text-danger-700',
 }
 
 async function loadLiquidaciones() {
-  const [ordenesHoy, lavadores, combos, tiposVehiculo, deudaPorLavador] = await Promise.all([
-    fetchOrdenesHoy(),
+  const [lavadores, combos, tiposVehiculo, deudaPorLavador] = await Promise.all([
     fetchLavadores(),
     fetchCombos(),
     fetchTiposVehiculo(),
     fetchDeudaPendientePorLavador(),
   ])
-  return { ordenesHoy, lavadores, combos, tiposVehiculo, deudaPorLavador }
+  return { lavadores, combos, tiposVehiculo, deudaPorLavador }
 }
 
 export const Route = createFileRoute('/jefe-zona/liquidaciones/')({
@@ -41,75 +55,87 @@ function LiquidacionesJefeZona() {
   const [lavadores] = useState(data.lavadores)
   const [combos] = useState(data.combos)
   const [tiposVehiculo] = useState(data.tiposVehiculo)
-  const [ordenesHoy] = useState(data.ordenesHoy)
   const [deudaPorLavador] = useState(data.deudaPorLavador)
+  const [dia, setDia] = useState(() => fechaLocalISO(new Date()))
   const [lavadorFiltro, setLavadorFiltro] = useState<string>('todos')
   const [recibo, setRecibo] = useState<ReciboData | null>(null)
-  // "Colilla del día" (2026-09-14): mismo cálculo que generar la diaria de HOY, pero informativo —
-  // no marca ninguna orden ni crea liquidación. El pago real sigue siendo semanal desde Admin
-  // (regla de negocio 4); esto es solo para que el jefe de patio le muestre a un lavador cómo va.
+  // "Colilla del día": corte informativo del día elegido — no marca ninguna orden ni crea
+  // liquidación. El pago real sigue siendo semanal desde Admin (regla de negocio 4); esto es solo
+  // para que el jefe de patio le muestre a un lavador cómo va, hoy o cualquier día pasado.
   const [colilla, setColilla] = useState<ColillaLiquidacionData | null>(null)
-  const [cargandoColillaHoy, setCargandoColillaHoy] = useState<string | null>(null)
+  const [cargandoColilla, setCargandoColilla] = useState<string | null>(null)
+
+  const ordenesQuery = useQuery({
+    queryKey: queryKeys.ordenesDia(dia),
+    queryFn: () => {
+      const { desdeISO, hastaISO } = limitesLocalesISO(dia, dia)
+      return fetchOrdenesEnRango(desdeISO, hastaISO)
+    },
+    staleTime: 30_000,
+  })
+  const ordenesDia = ordenesQuery.data
 
   const lavadorNombre = (id: string | undefined) => (id ? lavadores.find((l) => l.id === id)?.nombre : undefined) ?? 'Sin asignar'
   const comboNombre = (id: string | undefined) => (id ? combos.find((c) => c.id === id)?.nombre : undefined) ?? 'Sin combo'
   const tipoNombre = (id: string) => tiposVehiculo.find((t) => t.id === id)?.nombre ?? '—'
 
-  // Solo suma a la liquidación lo pagado Y despachado — es decir, estado 'entregado' (M3:
-  // cobrarYEntregarOrden marca ambas cosas en el mismo paso). Un vehículo listo pero sin cobrar
-  // todavía NO cuenta, aunque el lavado ya esté terminado.
-  const entregadasHoy = useMemo(() => ordenesHoy.filter((o) => o.estado === 'entregado'), [ordenesHoy])
+  // Cuenta cada vehículo DESDE QUE SE ASIGNA al lavador — en proceso, listo o entregado, cobrado o
+  // no (la comisión ya queda fija al crear la orden, no depende de que el cliente pague). Solo las
+  // anuladas quedan fuera. Es el mismo criterio de la colilla de gerencia y de fetchMontoPeriodo.
+  const vigentes = useMemo(() => (ordenesDia ?? []).filter((o) => o.estado !== 'anulada'), [ordenesDia])
 
   const filtradas = useMemo(
     () =>
-      entregadasHoy.filter(
+      vigentes.filter(
         (o) => lavadorFiltro === 'todos' || o.lavadorId === lavadorFiltro || o.lavadorId2 === lavadorFiltro,
       ),
-    [entregadasHoy, lavadorFiltro],
+    [vigentes, lavadorFiltro],
   )
 
-  // El resumen "por lavador" siempre se calcula sobre todo el día (sin aplicar el filtro) — si
-  // no, al filtrar por un lavador el resto de tarjetas desaparecería sin sentido; en vez de eso
-  // se atenúan las que no coinciden con el filtro (ver className abajo).
+  // El resumen "por lavador" siempre se calcula sobre todo el día (sin aplicar el filtro) — si no,
+  // al filtrar por un lavador el resto de tarjetas desaparecería sin sentido; en vez de eso se
+  // atenúan las que no coinciden con el filtro. Solo suma lo que sigue SIN liquidar, que es lo que
+  // también muestra la colilla; lo ya liquidado se cuenta aparte.
   const porLavador = useMemo(() => {
-    const mapa = new Map<string, { cantidad: number; monto: number }>()
-    for (const orden of entregadasHoy) {
-      // Una orden entregada siempre tiene lavador asignado (no se puede cobrar/entregar sin
-      // asignar primero) — el guard es solo para que TS acepte `lavadorId` opcional en el tipo.
-      if (!orden.lavadorId) continue
-      // "Lavar entre 2": cada uno se lleva la mitad de la comisión, no el total cada uno —
-      // mismo criterio 50/50 que la liquidación real de Admin (src/data/liquidaciones.ts).
-      const tieneSegundo = !!orden.lavadorId2
-      const mitadPrincipal = tieneSegundo ? Math.ceil(orden.comisionLavador / 2) : orden.comisionLavador
-      const actual = mapa.get(orden.lavadorId) ?? { cantidad: 0, monto: 0 }
-      actual.cantidad += 1
-      actual.monto += mitadPrincipal
-      mapa.set(orden.lavadorId, actual)
-      if (tieneSegundo && orden.lavadorId2) {
-        const mitadSegundo = orden.comisionLavador - mitadPrincipal
-        const actualSegundo = mapa.get(orden.lavadorId2) ?? { cantidad: 0, monto: 0 }
-        actualSegundo.cantidad += 1
-        actualSegundo.monto += mitadSegundo
-        mapa.set(orden.lavadorId2, actualSegundo)
+    const mapa = new Map<string, { cantidad: number; monto: number; sinCobrar: number; yaLiquidadas: number }>()
+    function sumar(lavadorId: string, orden: Orden, liquidada: boolean) {
+      const actual = mapa.get(lavadorId) ?? { cantidad: 0, monto: 0, sinCobrar: 0, yaLiquidadas: 0 }
+      if (liquidada) {
+        actual.yaLiquidadas += 1
+      } else {
+        actual.cantidad += 1
+        actual.monto += comisionParaLavador(orden, lavadorId)
+        if (orden.estado !== 'entregado') actual.sinCobrar += 1
       }
+      mapa.set(lavadorId, actual)
+    }
+    for (const orden of vigentes) {
+      if (orden.lavadorId) sumar(orden.lavadorId, orden, orden.liquidacionId !== undefined)
+      if (orden.lavadorId2) sumar(orden.lavadorId2, orden, orden.liquidacionId2 !== undefined)
     }
     return Array.from(mapa.entries())
-      .map(([lavadorId, v]) => ({ lavadorId, lavadorNombre: lavadorNombre(lavadorId), ...v }))
+      .map(([lavadorId, v]) => ({ lavadorId, nombre: lavadores.find((l) => l.id === lavadorId)?.nombre ?? '—', ...v }))
+      .filter((p) => p.cantidad > 0)
       .sort((a, b) => b.monto - a.monto)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entregadasHoy])
+  }, [vigentes, lavadores])
 
   const ordenadas = [...filtradas].sort((a, b) => b.consecutivo - a.consecutivo)
+  const sinAsignar = vigentes.filter((o) => !o.lavadorId).length
+  const diaLabel = FECHA.format(new Date(`${dia}T00:00:00`))
+  const esHoy = dia === fechaLocalISO(new Date())
 
-  async function handleVerColillaHoy(lavadorId: string) {
-    setCargandoColillaHoy(lavadorId)
+  async function handleVerColilla(lavadorId: string) {
+    setCargandoColilla(lavadorId)
     try {
-      const hoy = hoyISO()
-      const preview = await fetchMontoPeriodo(lavadorId, hoy, hoy, tiposVehiculo, combos)
+      const preview = await fetchMontoPeriodo(lavadorId, dia, dia, tiposVehiculo, combos)
+      if (preview.cantidadOrdenes === 0) {
+        toast.advertencia(`${lavadorNombre(lavadorId)} no tiene órdenes sin liquidar el ${diaLabel}.`)
+        return
+      }
       setColilla({
         lavadorNombre: lavadorNombre(lavadorId),
-        periodoInicio: hoy,
-        periodoFin: hoy,
+        periodoInicio: dia,
+        periodoFin: dia,
         desglose: preview.desglose,
         monto: preview.monto,
         generadaEn: new Date().toISOString(),
@@ -120,7 +146,7 @@ function LiquidacionesJefeZona() {
     } catch (err) {
       toast.desdeError(err, 'No se pudo calcular la colilla del día')
     } finally {
-      setCargandoColillaHoy(null)
+      setCargandoColilla(null)
     }
   }
 
@@ -146,27 +172,35 @@ function LiquidacionesJefeZona() {
       <div>
         <h2 className="text-base font-semibold text-neutral-900">Liquidaciones</h2>
         <p className="text-sm text-neutral-500">
-          Vista informativa de hoy — no es la liquidación real (esa sigue siendo semanal desde Admin, regla de
-          negocio 4). Solo suma un vehículo cuando ya fue pagado y despachado (entregado); listo pero sin cobrar
-          todavía no cuenta.
+          Colilla informativa por día — no es la liquidación real (esa sigue siendo semanal desde Admin, regla de
+          negocio 4). Cada vehículo cuenta desde que se le asigna al lavador, aunque todavía no se haya cobrado.
         </p>
       </div>
 
-      <div className="w-full sm:w-64">
-        <CustomSelect
-          size="sm"
-          value={lavadorFiltro}
-          onChange={setLavadorFiltro}
-          placeholder="Todos los lavadores"
-          options={[{ value: 'todos', label: 'Todos los lavadores' }, ...lavadores.map((l) => ({ value: l.id, label: l.nombre }))]}
-        />
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+        <DiaSelector dia={dia} onChange={setDia} />
+        <div className="w-full sm:w-64">
+          <CustomSelect
+            size="sm"
+            value={lavadorFiltro}
+            onChange={setLavadorFiltro}
+            placeholder="Todos los lavadores"
+            options={[{ value: 'todos', label: 'Todos los lavadores' }, ...lavadores.map((l) => ({ value: l.id, label: l.nombre }))]}
+          />
+        </div>
       </div>
 
       <section className="flex flex-col gap-3">
-        <h3 className="text-sm font-semibold text-neutral-900">Ganado hoy por lavador</h3>
-        {porLavador.length === 0 ? (
+        <h3 className="text-sm font-semibold text-neutral-900">
+          Ganado {esHoy ? 'hoy' : `el ${diaLabel}`} por lavador
+        </h3>
+        {ordenesQuery.isPending ? (
+          <Card className="py-8 text-center text-sm text-neutral-400">Cargando…</Card>
+        ) : ordenesQuery.isError ? (
+          <Card className="py-8 text-center text-sm text-danger-700">No se pudieron cargar las órdenes de este día.</Card>
+        ) : porLavador.length === 0 ? (
           <Card className="py-8 text-center text-sm text-neutral-400">
-            Todavía no hay vehículos pagados y despachados hoy.
+            No hay vehículos asignados a lavadores {esHoy ? 'hoy' : `el ${diaLabel}`} sin liquidar.
           </Card>
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -180,13 +214,19 @@ function LiquidacionesJefeZona() {
                     <Coins size={18} strokeWidth={2} />
                   </span>
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-neutral-900">{p.lavadorNombre}</p>
+                    <p className="truncate text-sm font-semibold text-neutral-900">{p.nombre}</p>
                     <p className="text-xs text-neutral-500">
                       {p.cantidad} vehículo{p.cantidad === 1 ? '' : 's'}
+                      {p.sinCobrar > 0 ? ` · ${p.sinCobrar} sin cobrar aún` : ''}
                     </p>
                   </div>
                 </div>
                 <p className="text-xl font-semibold text-neutral-900">{COP.format(p.monto)}</p>
+                {p.yaLiquidadas > 0 ? (
+                  <p className="-mt-1 text-xs text-neutral-400">
+                    +{p.yaLiquidadas} ya liquidada{p.yaLiquidadas === 1 ? '' : 's'} (no se cuenta{p.yaLiquidadas === 1 ? '' : 'n'} acá)
+                  </p>
+                ) : null}
                 {(deudaPorLavador.get(p.lavadorId) ?? 0) > 0 ? (
                   <p className="-mt-1 text-xs text-warning-700">
                     Debe {COP.format(deudaPorLavador.get(p.lavadorId) ?? 0)} (préstamos/nevera)
@@ -194,22 +234,28 @@ function LiquidacionesJefeZona() {
                 ) : null}
                 <button
                   type="button"
-                  disabled={cargandoColillaHoy === p.lavadorId}
-                  onClick={() => handleVerColillaHoy(p.lavadorId)}
+                  disabled={cargandoColilla === p.lavadorId}
+                  onClick={() => handleVerColilla(p.lavadorId)}
                   className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-neutral-300 py-2 text-xs font-medium text-neutral-600 transition-colors hover:border-warning-300 hover:text-warning-700 disabled:opacity-50"
-                  title="Corte informativo de hoy — no es un pago, se liquida semanal desde Admin"
+                  title="Corte informativo del día elegido — no es un pago, se liquida semanal desde Admin"
                 >
                   <Receipt size={13} />
-                  {cargandoColillaHoy === p.lavadorId ? 'Calculando…' : 'Colilla del día'}
+                  {cargandoColilla === p.lavadorId ? 'Calculando…' : 'Colilla del día'}
                 </button>
               </Card>
             ))}
           </div>
         )}
+        {sinAsignar > 0 ? (
+          <p className="text-xs text-neutral-500">
+            {sinAsignar} vehículo{sinAsignar === 1 ? '' : 's'} de este día sin lavador asignado: no cuenta{sinAsignar === 1 ? '' : 'n'} para
+            ninguna colilla hasta que se asigne.
+          </p>
+        ) : null}
       </section>
 
       <section className="flex flex-col gap-3">
-        <h3 className="text-sm font-semibold text-neutral-900">Vehículos atendidos hoy ({ordenadas.length})</h3>
+        <h3 className="text-sm font-semibold text-neutral-900">Vehículos del día ({ordenadas.length})</h3>
         <Card className="p-0">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -221,6 +267,7 @@ function LiquidacionesJefeZona() {
                   <th className="px-5 py-3">Tipo</th>
                   <th className="px-5 py-3">Combo</th>
                   <th className="px-5 py-3">Lavador</th>
+                  <th className="px-5 py-3">Estado</th>
                   <th className="px-5 py-3">Precio</th>
                   <th className="px-5 py-3">Comisión lavador</th>
                   <th className="px-5 py-3">Pago</th>
@@ -239,9 +286,14 @@ function LiquidacionesJefeZona() {
                       {lavadorNombre(orden.lavadorId)}
                       {orden.lavadorId2 ? ` + ${lavadorNombre(orden.lavadorId2)}` : ''}
                     </td>
+                    <td className="px-5 py-3">
+                      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${ESTADO_CLASSNAME[orden.estado]}`}>
+                        {ESTADO_LABEL[orden.estado]}
+                      </span>
+                    </td>
                     <td className="px-5 py-3 font-medium text-neutral-900">{COP.format(orden.precio)}</td>
                     <td className="px-5 py-3 text-success-700">
-                      {COP.format(orden.comisionLavador)}
+                      {orden.lavadorId ? COP.format(orden.comisionLavador) : '—'}
                       {orden.lavadorId2 ? <span className="ml-1 text-xs text-neutral-400">(entre 2)</span> : null}
                     </td>
                     <td className="px-5 py-3 capitalize text-neutral-700">{orden.metodoPago ?? '—'}</td>
@@ -261,8 +313,8 @@ function LiquidacionesJefeZona() {
                 ))}
                 {ordenadas.length === 0 ? (
                   <tr>
-                    <td className="px-5 py-8 text-center text-neutral-400" colSpan={10}>
-                      Todavía no hay vehículos pagados y despachados hoy.
+                    <td className="px-5 py-8 text-center text-neutral-400" colSpan={11}>
+                      {ordenesQuery.isPending ? 'Cargando…' : 'No hay vehículos en este día.'}
                     </td>
                   </tr>
                 ) : null}

@@ -1,4 +1,5 @@
 import { db } from '../lib/db'
+import { limitesLocalesISO } from '../lib/periodo'
 import { liquidacionJefeZonaSchema, type LiquidacionJefeZona } from '../schemas/liquidacionJefeZona'
 import { fetchOrdenesEnRango } from './ordenes'
 import { fetchPerfiles } from './perfiles'
@@ -130,9 +131,8 @@ export interface ResumenPeriodoJefeZona {
 // el selector día/semana/mes de /admin/dinero/liquidaciones — agrupa por responsable todo lo
 // generado en el rango, liquidado o no.
 export async function fetchResumenPeriodoJefeZona(periodoInicio: string, periodoFin: string): Promise<ResumenPeriodoJefeZona[]> {
-  const hastaExclusivoISO = new Date(`${periodoFin}T00:00:00.000Z`)
-  hastaExclusivoISO.setUTCDate(hastaExclusivoISO.getUTCDate() + 1)
-  const ordenes = await fetchOrdenesEnRango(new Date(`${periodoInicio}T00:00:00.000Z`).toISOString(), hastaExclusivoISO.toISOString())
+  const { desdeISO, hastaISO } = limitesLocalesISO(periodoInicio, periodoFin)
+  const ordenes = await fetchOrdenesEnRango(desdeISO, hastaISO)
 
   const nombrePorId = new Map((await fetchPerfiles()).map((p) => [p.id, p.nombre?.trim() || 'Sin nombre']))
   const acumulado = new Map<string, { cantidad: number; total: number; pendiente: number }>()
@@ -157,12 +157,9 @@ export async function fetchResumenPeriodoJefeZona(periodoInicio: string, periodo
 }
 
 async function ordenesElegiblesJefeZona(personaId: string, periodoInicio: string, periodoFin: string) {
-  const hastaExclusivoISO = new Date(`${periodoFin}T00:00:00.000Z`)
-  hastaExclusivoISO.setUTCDate(hastaExclusivoISO.getUTCDate() + 1)
+  const { desdeISO, hastaISO } = limitesLocalesISO(periodoInicio, periodoFin)
 
-  return (
-    await fetchOrdenesEnRango(new Date(`${periodoInicio}T00:00:00.000Z`).toISOString(), hastaExclusivoISO.toISOString())
-  ).filter(
+  return (await fetchOrdenesEnRango(desdeISO, hastaISO)).filter(
     (orden) =>
       orden.jefeZonaPersonaId === personaId && orden.liquidacionJefeZonaId === undefined && orden.estado !== 'anulada',
   )

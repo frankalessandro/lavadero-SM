@@ -1,4 +1,5 @@
 import { db } from '../lib/db'
+import { limitesLocalesISO } from '../lib/periodo'
 import { liquidacionSchema, type Liquidacion } from '../schemas/liquidacion'
 import { fetchLavadores } from './lavadores'
 import { fetchOrdenesEnRango } from './ordenes'
@@ -132,13 +133,9 @@ export interface ResumenPeriodoLavador {
 // a diferencia de fetchComisionesPendientes (acumulado TOTAL histórico sin liquidar, sin fecha),
 // esto agrupa por lavador todo lo generado dentro de un rango específico, liquidado o no.
 export async function fetchResumenPeriodoLavadores(periodoInicio: string, periodoFin: string): Promise<ResumenPeriodoLavador[]> {
-  const hastaExclusivoISO = new Date(`${periodoFin}T00:00:00.000Z`)
-  hastaExclusivoISO.setUTCDate(hastaExclusivoISO.getUTCDate() + 1)
+  const { desdeISO, hastaISO } = limitesLocalesISO(periodoInicio, periodoFin)
 
-  const [lavadores, ordenes] = await Promise.all([
-    fetchLavadores(),
-    fetchOrdenesEnRango(new Date(`${periodoInicio}T00:00:00.000Z`).toISOString(), hastaExclusivoISO.toISOString()),
-  ])
+  const [lavadores, ordenes] = await Promise.all([fetchLavadores(), fetchOrdenesEnRango(desdeISO, hastaISO)])
 
   const acumulado = new Map<string, { cantidad: number; total: number; pendiente: number }>()
   function sumar(lavadorId: string, monto: number, liquidado: boolean) {
@@ -176,13 +173,12 @@ export async function fetchResumenPeriodoLavadores(periodoInicio: string, period
 // dos lavadores puede seguir "elegible" para uno aunque ya se haya liquidado para el otro.
 async function ordenesElegibles(lavadorId: string, periodoInicio: string, periodoFin: string) {
   // periodoFin es una fecha (YYYY-MM-DD) inclusiva para el usuario; fetchOrdenesEnRango usa
-  // límite superior exclusivo, así que se extiende un día para incluir todo el día de cierre.
-  const hastaExclusivoISO = new Date(`${periodoFin}T00:00:00.000Z`)
-  hastaExclusivoISO.setUTCDate(hastaExclusivoISO.getUTCDate() + 1)
+  // límite superior exclusivo, así que se extiende un día para incluir todo el día de cierre. Los
+  // límites son medianoche LOCAL, no UTC: en Colombia (UTC−5) el "día" en UTC corta a las 7 p. m.
+  // y mandaba las órdenes de la noche al día siguiente.
+  const { desdeISO, hastaISO } = limitesLocalesISO(periodoInicio, periodoFin)
 
-  return (
-    await fetchOrdenesEnRango(new Date(`${periodoInicio}T00:00:00.000Z`).toISOString(), hastaExclusivoISO.toISOString())
-  ).filter((orden) => {
+  return (await fetchOrdenesEnRango(desdeISO, hastaISO)).filter((orden) => {
     if (orden.estado === 'anulada') return false
     if (orden.lavadorId === lavadorId && orden.liquidacionId === undefined) return true
     if (orden.lavadorId2 === lavadorId && orden.liquidacionId2 === undefined) return true

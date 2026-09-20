@@ -1,6 +1,7 @@
 import { X } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import type { DesgloseCategoria, DesgloseVehiculos } from '../../data/liquidaciones'
+import { fechaLocalISO } from '../../lib/periodo'
 
 export interface ColillaLiquidacionData {
   lavadorNombre: string
@@ -44,6 +45,12 @@ function periodoLabel(inicio: string, fin: string): string {
   return `Semanal · ${FECHA.format(new Date(`${inicio}T00:00:00`))} → ${FECHA.format(new Date(`${fin}T00:00:00`))}`
 }
 
+// "hoy" o "el 19 sept 2026": la colilla informativa ya no es solo la de hoy (se elige el día), y
+// "Ganado hoy" en la de ayer sería mentira.
+function cuandoInformativo(dia: string): string {
+  return dia === fechaLocalISO(new Date()) ? 'hoy' : `el ${FECHA.format(new Date(`${dia}T00:00:00`))}`
+}
+
 // Colilla de liquidación para el lavador — mismo patrón que ReciboModal/TiquetePrint (pantalla +
 // portal a document.body para la impresora térmica de 58mm, ver src/styles/tiquete-print.css):
 // desglosa cuántos carros y cuántas motos hizo en el periodo, y DENTRO de cada uno cuántos fueron
@@ -76,7 +83,8 @@ export function ColillaLiquidacionModal({ colilla, onClose }: { colilla: Colilla
 
         {informativo ? (
           <p className="mb-4 rounded-lg bg-warning-50 px-3 py-2 text-xs text-warning-700">
-            No es un pago — es solo para ver cómo va hoy. El pago real se liquida semanal.
+            No es un pago — es solo para ver cómo va {cuandoInformativo(colilla.periodoInicio)}. El pago real se liquida
+            semanal.
           </p>
         ) : null}
 
@@ -102,7 +110,7 @@ export function ColillaLiquidacionModal({ colilla, onClose }: { colilla: Colilla
           className={`mt-3 flex items-center justify-between rounded-lg px-3 py-2.5 text-sm ${informativo ? 'bg-warning-50' : 'bg-primary-50'}`}
         >
           <span className={`font-medium ${informativo ? 'text-warning-900' : 'text-primary-900'}`}>
-            {informativo ? 'Ganado hoy (sin liquidar aún)' : 'Total liquidado'}
+            {informativo ? `Ganado ${cuandoInformativo(colilla.periodoInicio)} (sin liquidar aún)` : 'Total liquidado'}
           </span>
           <span className={`text-lg font-bold ${informativo ? 'text-warning-700' : 'text-primary-700'}`}>
             {COP.format(colilla.monto)}
@@ -219,7 +227,7 @@ function ColillaPrint({ colilla }: { colilla: ColillaLiquidacionData }) {
       ) : null}
 
       <div className="tiquete-58__total">
-        <span>{informativo ? 'GANADO HOY' : 'TOTAL'}</span>
+        <span>{informativo ? `GANADO ${cuandoInformativo(colilla.periodoInicio).toUpperCase()}` : 'TOTAL'}</span>
         <span>{COP.format(colilla.monto)}</span>
       </div>
 

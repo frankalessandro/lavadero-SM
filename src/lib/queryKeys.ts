@@ -23,5 +23,6 @@ export const queryKeys = {
   ordenesHoy: ['ordenes', 'hoy'] as const,
   ordenesEntregadasHoy: ['ordenes', 'entregadas-hoy'] as const,
   pagosHoy: ['pagos', 'hoy'] as const,
+  ordenesDia: (dia: string) => ['ordenes', 'dia', dia] as const,
   reporte: (key: string, desde: string, hasta: string) => ['reportes', key, desde, hasta] as const,
 }
