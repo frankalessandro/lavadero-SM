@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { ScrollText, ShieldCheck, User, X } from 'lucide-react'
 import { fetchBitacora, type FiltroBitacora } from '../../../../data/bitacora'
@@ -14,25 +14,11 @@ import { Card } from '../../../../components/layout/Card'
 import { StatCard } from '../../../../components/layout/StatCard'
 import { CustomSelect } from '../../../../components/layout/CustomSelect'
 import { toast } from '../../../../lib/toast'
-
-type RangoKey = 'hoy' | '7dias' | '30dias'
-
-const RANGOS: { key: RangoKey; label: string; dias: number }[] = [
-  { key: 'hoy', label: 'Hoy', dias: 0 },
-  { key: '7dias', label: 'Últimos 7 días', dias: 6 },
-  { key: '30dias', label: 'Últimos 30 días', dias: 29 },
-]
-
-// Límites en medianoche local, mismo criterio que /admin/rentabilidad (src/lib/periodo.ts).
-function rangoISO(dias: number): { desdeISO: string; hastaISO: string } {
-  const ahora = new Date()
-  const desde = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate() - dias)
-  const hasta = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate() + 1)
-  return { desdeISO: desde.toISOString(), hastaISO: hasta.toISOString() }
-}
+import { PeriodoSelector } from '../../../../components/layout/PeriodoSelector'
+import { calcularRango, rangoAISO, type ModoPeriodo } from '../../../../lib/periodo'
 
 async function loadAuditoria() {
-  const { desdeISO, hastaISO } = rangoISO(6)
+  const { desdeISO, hastaISO } = rangoAISO(calcularRango('dia', new Date()))
   // El filtro incluye las cuentas inactivas a propósito: la bitácora es histórica y hay que poder
   // filtrar por alguien que ya no opera.
   const [entradas, personal] = await Promise.all([
@@ -63,35 +49,44 @@ function formatFecha(iso: string) {
 function Auditoria() {
   const data = Route.useLoaderData()
   const [entradas, setEntradas] = useState<BitacoraEntrada[]>(data.entradas)
-  const [rango, setRango] = useState<RangoKey>('7dias')
+  const [modoPeriodo, setModoPeriodo] = useState<ModoPeriodo>('dia')
+  const [anclaPeriodo, setAnclaPeriodo] = useState(() => new Date())
+  const rango = calcularRango(modoPeriodo, anclaPeriodo)
+  // Navegar de día en día rápido dispara varias cargas seguidas: solo la última puede pintar.
+  const cargaRef = useRef(0)
   const [accion, setAccion] = useState('')
   const [entidad, setEntidad] = useState('')
   const [personaId, setPersonaId] = useState('')
   const [cargando, setCargando] = useState(false)
   const [detalle, setDetalle] = useState<BitacoraEntrada | null>(null)
 
-  async function recargar(next: Partial<{ rango: RangoKey; accion: string; entidad: string; personaId: string }>) {
-    const r = next.rango ?? rango
+  async function recargar(
+    next: Partial<{ modo: ModoPeriodo; ancla: Date; accion: string; entidad: string; personaId: string }>,
+  ) {
+    const m = next.modo ?? modoPeriodo
+    const n = next.ancla ?? anclaPeriodo
     const a = next.accion ?? accion
     const e = next.entidad ?? entidad
     const p = next.personaId ?? personaId
-    setRango(r)
+    setModoPeriodo(m)
+    setAnclaPeriodo(n)
     setAccion(a)
     setEntidad(e)
     setPersonaId(p)
 
+    const carga = ++cargaRef.current
     setCargando(true)
     try {
-      const dias = RANGOS.find((x) => x.key === r)?.dias ?? 6
-      const filtro: FiltroBitacora = { ...rangoISO(dias) }
+      const filtro: FiltroBitacora = { ...rangoAISO(calcularRango(m, n)) }
       if (a) filtro.accion = a
       if (e) filtro.entidad = e
       if (p) filtro.personaId = p
-      setEntradas(await fetchBitacora(filtro))
+      const nuevas = await fetchBitacora(filtro)
+      if (carga === cargaRef.current) setEntradas(nuevas)
     } catch (err) {
-      toast.desdeError(err, 'No se pudo cargar la bitácora')
+      if (carga === cargaRef.current) toast.desdeError(err, 'No se pudo cargar la bitácora')
     } finally {
-      setCargando(false)
+      if (carga === cargaRef.current) setCargando(false)
     }
   }
 
@@ -125,20 +120,13 @@ function Auditoria() {
       </div>
 
       <Card className="flex flex-col gap-4 p-5">
-        <div className="flex flex-wrap items-center gap-1 rounded-lg border border-neutral-200 p-1">
-          {RANGOS.map((r) => (
-            <button
-              key={r.key}
-              type="button"
-              onClick={() => recargar({ rango: r.key })}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                rango === r.key ? 'bg-primary-600 text-white shadow-nav-active' : 'text-neutral-600 hover:bg-neutral-50'
-              }`}
-            >
-              {r.label}
-            </button>
-          ))}
-        </div>
+        <PeriodoSelector
+          modo={modoPeriodo}
+          onModoChange={(modo) => recargar({ modo })}
+          ancla={anclaPeriodo}
+          onAnclaChange={(ancla) => recargar({ ancla })}
+          rango={rango}
+        />
 
         <div className="grid gap-3 sm:grid-cols-3">
           <label className="flex flex-col gap-1.5 text-sm">

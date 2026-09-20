@@ -20,24 +20,8 @@ import { duracion } from '../../../../lib/ordenFormato'
 import { FilaFiltros, FiltroTexto, FiltroSelect, FiltroVacio } from '../../../../components/layout/TableHeadFilter'
 import { coincide } from '../../../../lib/tableFilters'
 import { toast } from '../../../../lib/toast'
-
-type RangoKey = 'hoy' | '7d' | '30d'
-
-const RANGOS: { key: RangoKey; label: string; dias: number }[] = [
-  { key: 'hoy', label: 'Hoy', dias: 1 },
-  { key: '7d', label: 'Últimos 7 días', dias: 7 },
-  { key: '30d', label: 'Últimos 30 días', dias: 30 },
-]
-
-function rangoFechas(dias: number): { desdeISO: string; hastaISO: string } {
-  const ahora = new Date()
-  const hoyMedianoche = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate())
-  const desde = new Date(hoyMedianoche)
-  desde.setDate(desde.getDate() - (dias - 1))
-  const hasta = new Date(hoyMedianoche)
-  hasta.setDate(hasta.getDate() + 1)
-  return { desdeISO: desde.toISOString(), hastaISO: hasta.toISOString() }
-}
+import { PeriodoSelector } from '../../../../components/layout/PeriodoSelector'
+import { calcularRango, rangoAISO, type ModoPeriodo } from '../../../../lib/periodo'
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 
@@ -56,7 +40,7 @@ const ESTADO_CLASSNAME: Record<Orden['estado'], string> = {
 }
 
 async function loadOrdenesPage() {
-  const { desdeISO, hastaISO } = rangoFechas(1)
+  const { desdeISO, hastaISO } = rangoAISO(calcularRango('dia', new Date()))
   const [ordenes, lavadores, combos, productos] = await Promise.all([
     fetchOrdenesEnRango(desdeISO, hastaISO),
     fetchLavadores(),
@@ -73,7 +57,11 @@ export const Route = createFileRoute('/admin/operacion/ordenes/')({
 
 function OrdenesPage() {
   const initial = Route.useLoaderData()
-  const [rango, setRango] = useState<RangoKey>('hoy')
+  const [modoPeriodo, setModoPeriodo] = useState<ModoPeriodo>('dia')
+  const [anclaPeriodo, setAnclaPeriodo] = useState(() => new Date())
+  const rango = calcularRango(modoPeriodo, anclaPeriodo)
+  // Navegar de día en día rápido dispara varias cargas seguidas: solo la última puede pintar.
+  const cargaRef = useRef(0)
   const [ordenes, setOrdenes] = useState(initial.ordenes)
   const [loading, setLoading] = useState(false)
   const lavadoresPorId = useMemo(() => new Map(initial.lavadores.map((l) => [l.id, l.nombre])), [initial.lavadores])
@@ -89,23 +77,24 @@ function OrdenesPage() {
   const [filtroEstado, setFiltroEstado] = useState('')
   const [filtroPago, setFiltroPago] = useState('')
 
-  async function cambiarRango(key: RangoKey) {
-    setRango(key)
+  async function cambiarPeriodo(modo: ModoPeriodo, ancla: Date) {
+    setModoPeriodo(modo)
+    setAnclaPeriodo(ancla)
+    const carga = ++cargaRef.current
     setLoading(true)
     try {
-      const dias = RANGOS.find((r) => r.key === key)?.dias ?? 1
-      const { desdeISO, hastaISO } = rangoFechas(dias)
-      setOrdenes(await fetchOrdenesEnRango(desdeISO, hastaISO))
+      const { desdeISO, hastaISO } = rangoAISO(calcularRango(modo, ancla))
+      const nuevas = await fetchOrdenesEnRango(desdeISO, hastaISO)
+      if (carga === cargaRef.current) setOrdenes(nuevas)
     } catch (err) {
-      toast.desdeError(err, 'No se pudieron cargar las órdenes')
+      if (carga === cargaRef.current) toast.desdeError(err, 'No se pudieron cargar las órdenes')
     } finally {
-      setLoading(false)
+      if (carga === cargaRef.current) setLoading(false)
     }
   }
 
   async function refrescar() {
-    const dias = RANGOS.find((r) => r.key === rango)?.dias ?? 1
-    const { desdeISO, hastaISO } = rangoFechas(dias)
+    const { desdeISO, hastaISO } = rangoAISO(rango)
     setOrdenes(await fetchOrdenesEnRango(desdeISO, hastaISO))
   }
 
@@ -168,20 +157,13 @@ function OrdenesPage() {
       {mixPago ? <p className="-mt-3 text-xs text-neutral-500">Mix de pago (entregadas): {mixPago}</p> : null}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap rounded-lg border border-neutral-300 p-1">
-          {RANGOS.map((r) => (
-            <button
-              key={r.key}
-              type="button"
-              onClick={() => cambiarRango(r.key)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                rango === r.key ? 'bg-primary-600 text-white shadow-nav-active' : 'text-neutral-600 hover:bg-neutral-50'
-              }`}
-            >
-              {r.label}
-            </button>
-          ))}
-        </div>
+        <PeriodoSelector
+          modo={modoPeriodo}
+          onModoChange={(modo) => cambiarPeriodo(modo, anclaPeriodo)}
+          ancla={anclaPeriodo}
+          onAnclaChange={(ancla) => cambiarPeriodo(modoPeriodo, ancla)}
+          rango={rango}
+        />
         <p className="text-sm text-neutral-500">
           Total ingresos del rango (solo entregadas/cobradas):{' '}
           <span className="font-semibold text-neutral-900">{COP.format(totalIngresos)}</span>

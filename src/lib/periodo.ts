@@ -54,6 +54,18 @@ export function calcularRango(modo: ModoPeriodo, ancla: Date): RangoPeriodo {
   return { periodoInicio: fechaLocalISO(inicio), periodoFin: fechaLocalISO(fin), label: MES_COMPLETO_LABEL.format(inicio) }
 }
 
+// Límites del rango en medianoche local, como [desde, hasta) en ISO — la forma que esperan las
+// consultas por timestamp (`gte` desde / `lt` hasta). `periodoFin` es inclusivo, así que `hasta` es
+// la medianoche del día siguiente.
+export function rangoAISO(rango: RangoPeriodo): { desdeISO: string; hastaISO: string } {
+  const [yi, mi, di] = rango.periodoInicio.split('-').map(Number)
+  const [yf, mf, df] = rango.periodoFin.split('-').map(Number)
+  return {
+    desdeISO: new Date(yi, mi - 1, di).toISOString(),
+    hastaISO: new Date(yf, mf - 1, df + 1).toISOString(),
+  }
+}
+
 export function moverAncla(modo: ModoPeriodo, ancla: Date, direccion: 1 | -1): Date {
   if (modo === 'dia') return sumarDias(ancla, direccion)
   if (modo === 'semana') return sumarDias(ancla, 7 * direccion)

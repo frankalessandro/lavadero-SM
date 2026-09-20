@@ -74,7 +74,7 @@ El menú de admin estaba organizado por *tabla de base de datos* (un ítem por C
 | Sección (ítem del sidebar) | Pestañas (`SectionTabs`) |
 |---|---|
 | Dashboard (`/admin`) | — |
-| Operación (`/admin/operacion`) | Órdenes · Clientes · Turnos y arqueos · Auditoría |
+| Operación (`/admin/operacion`) | Órdenes · Clientes · Turnos y arqueos · Auditoría · Reportes |
 | Dinero (`/admin/dinero`) | Liquidaciones · Gastos · Inventario y ventas |
 | Catálogo y precios (`/admin/catalogo`) | Combos y precios · Servicios · Tipos de vehículo · Parqueadero |
 | Personal (`/admin/personal`) | Lavadores · Usuarios del sistema |
@@ -258,6 +258,7 @@ Cada punto abajo es el estado actual de una pieza del sistema ya construida; el 
 - **Compras de inventario** (`/admin/dinero/inventario`, `/jefe-zona/inventario`): entidad propia con proveedor/factura/origen del pago (`caja` o `gerencia`), distinta de un ajuste de conteo.
 - **TanStack Query**: migración en curso del patrón `useState` + `refresh()` + `router.invalidate()` a `useQuery`/`queryClient.invalidateQueries`. Ya migradas: `/jefe-zona/ventas`, `/jefe-zona/index.tsx`. El resto sigue con el patrón viejo — no asumir que ya están en Query.
 - **M7 — Inventario** (`/admin/dinero/inventario`): productos + movimientos con signo (entrada/salida/ajuste), valorización a costo promedio ponderado. Productos agotados se ocultan de las grillas de venta pero **nunca se auto-inactivan** (ver "Agotado ≠ inactivo" en el historial — conflarlos rompe el conteo ciego). `productos.costo` es el costo oficial editable; `costo` nunca es visible para jefe de zona (RLS por fila vía la vista `productos_operativo`).
+- **Reportes** (`/admin/operacion/reportes`): histórico por día/semana/mes/rango de fechas de 11 conjuntos de datos (órdenes, pagos, ventas, gastos, compras, movimientos de inventario, turnos, liquidaciones, deudas, asistencia, parqueadero), exportable a Excel y PDF (todo el periodo o un reporte). Lecturas paginadas (Supabase corta a 1.000 filas), librerías de exportación cargadas solo al exportar. Órdenes y Auditoría usan el mismo `PeriodoSelector`. Detalle y trampas (hora en Excel, regla de fecha de ventas) en `docs/historial-tecnico.md` §Reportes.
 - **M11 — Dashboard administrativo** (`/admin`): pulso de HOY (KPIs vs. ayer, flujo del día, dinero de hoy, 7 días de tendencia). **No duplica con `/admin/rentabilidad`**, que es el análisis navegable por periodo con desgloses profundos — si una cifra necesita explorarse fila a fila va en rentabilidad, el dashboard enlaza allá.
 - **M11 — Histórico de turnos y arqueos** (`/admin/operacion/turnos`): solo lectura, un turno cerrado es inmodificable.
 - **M11 — Panel de rentabilidad** (`/admin/rentabilidad`): cascada "De ingresos a utilidad" como P&L por línea de negocio (Lavadero / Productos / Parqueadero / Consolidado, no un embudo único) — ver "Rentabilidad por línea de negocio" abajo.
