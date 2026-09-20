@@ -22,6 +22,13 @@ export interface ColillaLiquidacionData {
   // línea extra.
   deudaPendiente?: number
   montoNeto?: number
+  // Solo en modo 'liquidacion' (corte real): lo acumulado en el periodo ANTES de descontar deuda
+  // y cuánto se descontó en ESTE corte puntual (liquidaciones.comision_bruta/deuda_descontada) —
+  // a diferencia de deudaPendiente/montoNeto arriba, que en modo informativo reflejan la deuda
+  // total pendiente HOY, no lo descontado en un corte ya generado. Ausente/0 = sin descuento, no
+  // se muestra la línea extra.
+  comisionBruta?: number
+  deudaDescontada?: number
 }
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
@@ -77,6 +84,19 @@ export function ColillaLiquidacionModal({ colilla, onClose }: { colilla: Colilla
           <DesgloseCategoriaBloque label="Carros" categoria={colilla.desglose.autos} />
           <DesgloseCategoriaBloque label="Motos" categoria={colilla.desglose.motos} />
         </div>
+
+        {!informativo && colilla.deudaDescontada ? (
+          <div className="flex flex-col gap-1 rounded-lg bg-neutral-50 px-3 py-2.5 text-xs text-neutral-600">
+            <div className="flex items-center justify-between">
+              <span>Acumulado del periodo</span>
+              <span className="font-medium text-neutral-800">{COP.format(colilla.comisionBruta ?? 0)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>Descuento (préstamos/nevera)</span>
+              <span className="font-medium text-neutral-800">−{COP.format(colilla.deudaDescontada)}</span>
+            </div>
+          </div>
+        ) : null}
 
         <div
           className={`mt-3 flex items-center justify-between rounded-lg px-3 py-2.5 text-sm ${informativo ? 'bg-warning-50' : 'bg-primary-50'}`}
@@ -183,6 +203,20 @@ function ColillaPrint({ colilla }: { colilla: ColillaLiquidacionData }) {
       <ColillaPrintCategoria label="Motos" categoria={colilla.desglose.motos} />
 
       <div className="tiquete-58__linea-solida" />
+
+      {!informativo && colilla.deudaDescontada ? (
+        <>
+          <div className="tiquete-58__fila">
+            <span className="tiquete-58__fila-label">Acumulado del periodo</span>
+            <span className="tiquete-58__fila-valor">{COP.format(colilla.comisionBruta ?? 0)}</span>
+          </div>
+          <div className="tiquete-58__fila">
+            <span className="tiquete-58__fila-label">Descuento (préstamos/nevera)</span>
+            <span className="tiquete-58__fila-valor">−{COP.format(colilla.deudaDescontada)}</span>
+          </div>
+          <div className="tiquete-58__linea" />
+        </>
+      ) : null}
 
       <div className="tiquete-58__total">
         <span>{informativo ? 'GANADO HOY' : 'TOTAL'}</span>

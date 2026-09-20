@@ -376,6 +376,8 @@ function LiquidacionesPage() {
       desglose,
       monto: liquidacion.monto,
       generadaEn: liquidacion.creadoEn,
+      comisionBruta: liquidacion.comisionBruta,
+      deudaDescontada: liquidacion.deudaDescontada,
     })
   }
 
