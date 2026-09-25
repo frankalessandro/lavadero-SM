@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-// Liquidación de la comisión del jefe de patio (3% configurable, ver Configuración) — mismo
+// Liquidación de la comisión del jefe de patio (2,5% Combo 1 / 3,5% Combo 2 en adelante, ver Configuración) — mismo
 // shape que liquidacionSchema (src/schemas/liquidacion.ts). El sujeto es una FK (`personaId`):
 // desde 0043 apuntaba al roster `personal_operativo`, y desde 0056 apunta a `perfiles`, porque la
 // cuenta pasó a ser la persona. `responsable` quedó como snapshot del nombre al momento del

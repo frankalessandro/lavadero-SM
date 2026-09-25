@@ -51,7 +51,7 @@ import {
   cambiarTipoOrden,
   marcarNotificado,
 } from '../../data/ordenes'
-import { fetchLavadores } from '../../data/lavadores'
+import { asignacionDeHoy, fetchLavadores } from '../../data/lavadores'
 import { fetchAsistenciasDelDia, fetchDiasDescanso, ensureDiasDescansoGenerados } from '../../data/asistenciaLavadores'
 import { fetchCombos } from '../../data/combos'
 import { fetchTiposVehiculo } from '../../data/tiposVehiculo'
@@ -415,9 +415,9 @@ function JefeZonaDashboard() {
   const ordenRotacion = [...lavadores]
     .filter((l) => l.activo)
     .sort((a, b) => {
-      const asigA = a.ultimaAsignacion ? new Date(a.ultimaAsignacion).getTime() : -Infinity
-      const asigB = b.ultimaAsignacion ? new Date(b.ultimaAsignacion).getTime() : -Infinity
-      if (asigA !== asigB) return asigA - asigB
+      const asigA = asignacionDeHoy(a.ultimaAsignacion)
+      const asigB = asignacionDeHoy(b.ultimaAsignacion)
+      if (asigA !== asigB) return asigA === -Infinity ? -1 : asigB === -Infinity ? 1 : asigA - asigB
       const horaA = horaEntradaPorId.get(a.id)
       const horaB = horaEntradaPorId.get(b.id)
       if (!horaA || !horaB) return 0
@@ -435,6 +435,8 @@ function JefeZonaDashboard() {
   const proximoEnRotacion = ordenRotacion.find(
     (l) => presentesHoyIds.has(l.id) && l.id !== descansaHoyId && !ocupadosIds.has(l.id),
   )
+  // Quien sigue en la cola aunque todos estén ocupados: mismo orden, sin el filtro de ocupados.
+  const siguienteAunOcupado = ordenRotacion.find((l) => presentesHoyIds.has(l.id) && l.id !== descansaHoyId)
   // Desglose de "Lavadores en turno": mismos Sets ya calculados arriba para la cola de rotación,
   // sin ningún fetch nuevo. "Disponible" = mismo criterio de elegibilidad de suggestNextLavador.
   const lavadoresDisponibles = lavadores.filter(
@@ -690,6 +692,9 @@ function JefeZonaDashboard() {
             <p className="truncate text-sm font-semibold text-neutral-900">
               {proximoEnRotacion ? proximoEnRotacion.nombre : 'Nadie disponible'}
             </p>
+            {!proximoEnRotacion && siguienteAunOcupado && (
+              <p className="truncate text-xs text-neutral-500">Sigue: {siguienteAunOcupado.nombre}</p>
+            )}
           </div>
         </Card>
       </div>

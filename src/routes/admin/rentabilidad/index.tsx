@@ -165,7 +165,7 @@ function RentabilidadPage() {
             <h2 className="text-xl font-semibold text-neutral-900">Rentabilidad del negocio</h2>
             <p className="mt-1 max-w-2xl text-sm text-neutral-500">
               Cada línea de negocio con su propio resultado: el <strong className="font-medium">lavadero</strong> menos
-              sus comisiones (40 % lavador + 3 % jefe de patio), los <strong className="font-medium">productos</strong>{' '}
+              sus comisiones (40 % lavador + 2,5–3,5 % jefe de patio según el combo), los <strong className="font-medium">productos</strong>{' '}
               menos el costo de la mercancía, y el <strong className="font-medium">parqueadero</strong>, que no paga
               ninguno de los dos. Los tres márgenes se suman y de ahí salen los gastos generales. Así el 40 % del lavador
               se mide sobre el lavado y no se diluye con lo que se venda en la nevera. Aún no descuenta el consumo de
@@ -231,7 +231,7 @@ function RentabilidadPage() {
             icon={Droplets}
             resultado={linea.lavadero}
             previo={lineaPrev.lavadero}
-            nota={`comisiones 40% + 3% · ${reporte.cantidadLavados} lavado${reporte.cantidadLavados === 1 ? '' : 's'}`}
+            nota={`comisiones 40% + 2,5–3,5% · ${reporte.cantidadLavados} lavado${reporte.cantidadLavados === 1 ? '' : 's'}`}
           />
           <MargenLinea
             label="Productos"
@@ -302,7 +302,7 @@ function RentabilidadPage() {
           <CascadaFila
             label="Comisión de jefe de patio"
             icon={ShieldCheck}
-            badge="3%"
+            badge="2,5–3,5%"
             sub="para quien estaba a cargo del turno de recepción"
             valor={-totales.comisionJefeZona}
             pct={porcentaje(totales.comisionJefeZona, linea.lavadero.ingresos)}
@@ -988,7 +988,7 @@ function CascadaFila({
   label: string
   icon: ComponentType<{ size?: number; strokeWidth?: number }>
   sub?: string
-  /** Chip con la tasa de la regla de negocio (40% / 3%), junto al nombre. */
+  /** Chip con la tasa de la regla de negocio (40% / 2,5–3,5%), junto al nombre. */
   badge?: string
   /** Nota en ámbar cuando la cifra está incompleta o no se está descontando algo. */
   alerta?: string
@@ -1236,7 +1236,7 @@ function DetalleModal({
       { concepto: 'Ingresos parqueadero', detalle: '—', valor: COP.format(dia.ingresosParqueadero) },
       { concepto: 'Ingresos productos', detalle: `${ventasDia.length} venta(s)`, valor: COP.format(dia.ingresosVentas) },
       { concepto: '− Comisión lavadores', detalle: '40%', valor: <span className="text-danger-600">− {COP.format(dia.comisionLavadores)}</span> },
-      { concepto: '− Comisión jefe de patio', detalle: '3%', valor: <span className="text-danger-600">− {COP.format(dia.comisionJefeZona)}</span> },
+      { concepto: '− Comisión jefe de patio', detalle: '2,5–3,5%', valor: <span className="text-danger-600">− {COP.format(dia.comisionJefeZona)}</span> },
       { concepto: '− Costo productos', detalle: '—', valor: <span className="text-danger-600">− {COP.format(dia.costoMercancia)}</span> },
       { concepto: '− Gastos', detalle: `${gastosDia.length} movimiento(s)`, valor: <span className="text-danger-600">− {COP.format(dia.gastos)}</span> },
     ]
@@ -1414,7 +1414,7 @@ function DetalleModal({
     return (
       <TablaDetalleModal
         titulo="Comisión de jefe de patio"
-        subtitulo="3% del precio de lista, para quien estaba a cargo del turno de recepción"
+        subtitulo="2,5% (Combo 1) o 3,5% (Combo 2 en adelante) del precio de lista, para quien estaba a cargo del turno de recepción"
         icono={ShieldCheck}
         resumen={[
           { label: 'Responsables', valor: `${porResponsable.size}` },

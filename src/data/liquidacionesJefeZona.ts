@@ -81,7 +81,7 @@ export interface OrdenPendienteJefeZona {
 // Detalle línea por línea de lo que este responsable tiene sin liquidar — para el modal que se
 // abre desde su tarjeta de "Comisiones pendientes". Mismo filtro que fetchComisionesPendientesJefeZona
 // (responsable + sin liquidacion_jefe_zona_id + no anulada), pero trayendo el desglose de cada orden
-// en vez del acumulado. La comisión es por orden (3% del precio de lista), no por cada servicio suelto.
+// en vez del acumulado. La comisión es por orden (2,5% o 3,5% del precio de lista según el combo), no por cada servicio suelto.
 export async function fetchOrdenesPendientesJefeZona(personaId: string): Promise<OrdenPendienteJefeZona[]> {
   const { data, error } = await db
     .from('ordenes')

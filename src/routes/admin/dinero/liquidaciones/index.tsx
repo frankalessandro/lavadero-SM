@@ -155,7 +155,7 @@ function LiquidacionesPage() {
   const [confirmandoPago, setConfirmandoPago] = useState<Liquidacion | null>(null)
   const [colilla, setColilla] = useState<ColillaLiquidacionData | null>(null)
 
-  // Jefe de patio (comisión nueva, 3% configurable) — mismo flujo que lavadores arriba, pero
+  // Jefe de patio (comisión por combo, ver Configuración) — mismo flujo que lavadores arriba, pero
   // keyed por `responsable` (texto libre, ver src/data/liquidacionesJefeZona.ts) en vez de un id.
   const [pendientesJefeZona, setPendientesJefeZona] = useState(initial.pendientesJefeZona)
   const [historicoJefeZona, setHistoricoJefeZona] = useState(initial.historicoJefeZona)

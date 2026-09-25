@@ -22,7 +22,7 @@ interface Props {
 
 // Modal de solo lectura que se abre desde la tarjeta de "Comisiones pendientes" del jefe de patio:
 // cada orden sin liquidar de ese responsable, con fecha, vehículo, servicio y cuánto le toca de
-// comisión (3% del precio de lista de la orden — es por orden, no por cada servicio suelto).
+// comisión (2,5% o 3,5% del precio de lista según el combo — es por orden, no por cada servicio suelto).
 export function DetalleOrdenesJefeZonaModal({ responsable, filas, onClose }: Props) {
   const totalComision = filas.reduce((s, f) => s + f.comisionJefeZona, 0)
   const totalPrecio = filas.reduce((s, f) => s + f.precio, 0)
@@ -60,7 +60,7 @@ export function DetalleOrdenesJefeZonaModal({ responsable, filas, onClose }: Pro
                 <th className="px-3 py-2.5">Vehículo</th>
                 <th className="px-3 py-2.5">Servicio</th>
                 <th className="px-3 py-2.5 text-right">Precio</th>
-                <th className="px-3 py-2.5 text-right">Le toca (3%)</th>
+                <th className="px-3 py-2.5 text-right">Le toca (2,5% / 3,5%)</th>
               </tr>
             </thead>
             <tbody>

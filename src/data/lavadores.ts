@@ -69,6 +69,17 @@ export async function setLavadorActivo(id: string, activo: boolean): Promise<Lav
 // Desempate por `hora_entrada` (confirmado con Alessandro): cuando `ultima_asignacion` empata
 // —típicamente todos en NULL al abrir un día nuevo, antes del primer lavado— la primera oleada
 // del día se ordena por orden de llegada real (asistencia), no alfabético ni arbitrario.
+// Cada día arranca la rotación de cero: una asignación de un día anterior no cuenta (se trata
+// como NULL), así la primera ronda del día se ordena por hora de llegada y luego rota. Si no,
+// mandaría el orden en que terminó la noche anterior y no el de llegada.
+export function asignacionDeHoy(ultimaAsignacion: string | null | undefined): number {
+  if (!ultimaAsignacion) return -Infinity
+  const inicioHoy = new Date()
+  inicioHoy.setHours(0, 0, 0, 0)
+  const t = new Date(ultimaAsignacion).getTime()
+  return t >= inicioHoy.getTime() ? t : -Infinity
+}
+
 export async function suggestNextLavador(): Promise<string | undefined> {
   const hoy = new Date().toISOString().slice(0, 10)
   const [asistenciasHoy, descansosHoy, { data: ocupados, error: errorOcupados }, { data, error }] = await Promise.all([
@@ -93,9 +104,9 @@ export async function suggestNextLavador(): Promise<string | undefined> {
     (l) => presentesIds.has(l.id) && l.id !== descansaHoyId && !ocupadosIds.has(l.id),
   )
   elegibles.sort((a, b) => {
-    const asigA = a.ultimaAsignacion ? new Date(a.ultimaAsignacion).getTime() : -Infinity
-    const asigB = b.ultimaAsignacion ? new Date(b.ultimaAsignacion).getTime() : -Infinity
-    if (asigA !== asigB) return asigA - asigB
+    const asigA = asignacionDeHoy(a.ultimaAsignacion)
+    const asigB = asignacionDeHoy(b.ultimaAsignacion)
+    if (asigA !== asigB) return asigA === -Infinity ? -1 : asigB === -Infinity ? 1 : asigA - asigB
     const horaA = horaEntradaPorId.get(a.id)
     const horaB = horaEntradaPorId.get(b.id)
     if (!horaA || !horaB) return 0
