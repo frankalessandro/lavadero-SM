@@ -105,6 +105,8 @@ function OrdenesPage() {
     .filter((o) => o.estado === 'entregado')
     .reduce((total, o) => total + o.precio - o.descuento, 0)
   const anuladasEnRango = ordenes.filter((o) => o.estado === 'anulada')
+  // Control (Plan M11): cada rebaja con su motivo y quién la autorizó — no hay PIN, el control es posterior.
+  const conDescuento = ordenes.filter((o) => o.estado !== 'anulada' && o.descuento > 0)
   // Antifraude (Plan §Control antifraude): un tiquete que nunca se confirmó. Se calcula sobre los
   // consecutivos presentes en el rango cargado — las anuladas conservan su número y NO son hueco.
   const huecos = huecosEntre(ordenes.map((o) => o.consecutivo))
@@ -353,6 +355,37 @@ function OrdenesPage() {
                   Motivo: {o.motivoAnulacion ?? '—'} · Anuló: {o.anuladaPor ?? '—'}
                   {o.anuladaEn ? ` · ${new Date(o.anuladaEn).toLocaleString('es-CO')}` : ''}
                 </p>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
+
+      {conDescuento.length > 0 ? (
+        <Card className="text-left">
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-sm font-semibold text-neutral-900">Descuentos aplicados en el rango</h2>
+            <span className="text-xs text-neutral-500">
+              {conDescuento.length} orden{conDescuento.length === 1 ? '' : 'es'} ·{' '}
+              <span className="font-semibold text-danger-600">{COP.format(conDescuento.reduce((s, o) => s + o.descuento, 0))}</span>{' '}
+              absorbidos por el negocio
+            </span>
+          </div>
+          <ul className="flex flex-col gap-3 text-sm">
+            {conDescuento.map((o) => (
+              <li key={o.id} className="flex flex-wrap items-baseline justify-between gap-2 border-b border-neutral-100 pb-2 last:border-0 last:pb-0">
+                <div className="min-w-0">
+                  <p className="font-medium text-neutral-900">
+                    #{o.consecutivo} · <span className="font-mono">{o.placa}</span>
+                  </p>
+                  <p className="text-neutral-500">
+                    Motivo: {o.descuentoMotivo ?? '—'} · Autorizó: {o.descuentoAutorizadoPor ?? '—'}
+                  </p>
+                </div>
+                <span className="shrink-0 tabular-nums text-danger-600">
+                  −{COP.format(o.descuento)}
+                  <span className="ml-1 text-xs text-neutral-400">de {COP.format(o.precio)}</span>
+                </span>
               </li>
             ))}
           </ul>

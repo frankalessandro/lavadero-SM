@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { ScrollText, ShieldCheck, User, X } from 'lucide-react'
+import { Moon, ScrollText, ShieldCheck, User, X } from 'lucide-react'
 import { fetchBitacora, type FiltroBitacora } from '../../../../data/bitacora'
 import { fetchPerfiles } from '../../../../data/perfiles'
 import {
@@ -43,6 +43,18 @@ const ACCION_TONO: Record<string, string> = {
   cambiar_configuracion: 'bg-danger-50 text-danger-700',
 }
 
+// Registros fuera del horario habitual (Plan M11 · control). El horario sale del Plan §1: el
+// lavadero atiende de 7:00 am a 6:00 pm y cierra caja hasta las 7:00 pm; el parqueadero opera de
+// 7:00 pm a 7:00 am con retiro hasta las 8:00 am. Se evalúa por el rol de la cuenta que hizo el
+// registro; gerencia no tiene horario y no se marca.
+function esFueraDeHorario(entrada: BitacoraEntrada): boolean {
+  const d = new Date(entrada.ocurridoEn)
+  const hora = d.getHours() + d.getMinutes() / 60
+  if (entrada.usuarioRol === 'jefe_zona') return hora < 7 || hora >= 19
+  if (entrada.usuarioRol === 'vigilante') return hora >= 8 && hora < 19
+  return false
+}
+
 function formatFecha(iso: string) {
   return new Date(iso).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'medium' })
 }
@@ -60,6 +72,7 @@ function Auditoria() {
   const [personaId, setPersonaId] = useState('')
   const [cargando, setCargando] = useState(false)
   const [detalle, setDetalle] = useState<BitacoraEntrada | null>(null)
+  const [soloFueraDeHorario, setSoloFueraDeHorario] = useState(false)
 
   async function recargar(
     next: Partial<{ modo: ModoPeriodo; ancla: Date; accion: string; entidad: string; personaId: string }>,
@@ -90,6 +103,9 @@ function Auditoria() {
       if (carga === cargaRef.current) setCargando(false)
     }
   }
+
+  const fueraDeHorarioCount = entradas.filter(esFueraDeHorario).length
+  const entradasVisibles = soloFueraDeHorario ? entradas.filter(esFueraDeHorario) : entradas
 
   const resumen = useMemo(() => {
     const porAccion = new Map<string, number>()
@@ -170,11 +186,30 @@ function Auditoria() {
             />
           </label>
         </div>
+        <div className="flex flex-col gap-2 border-t border-neutral-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-neutral-500">
+            Fuera de horario: jefe de patio fuera de 7:00 am – 7:00 pm, vigilante fuera de 7:00 pm – 8:00 am. Gerencia no se
+            marca.
+          </p>
+          <button
+            type="button"
+            onClick={() => setSoloFueraDeHorario((v) => !v)}
+            className={`flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${
+              soloFueraDeHorario
+                ? 'border-warning-600/40 bg-warning-50 text-warning-700'
+                : 'border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50'
+            }`}
+          >
+            <Moon size={15} />
+            {soloFueraDeHorario ? 'Viendo solo fuera de horario' : 'Ver solo fuera de horario'}
+            <span className="rounded-full bg-white/80 px-1.5 text-[11px] font-semibold tabular-nums">{fueraDeHorarioCount}</span>
+          </button>
+        </div>
       </Card>
 
       {cargando ? (
         <Card className="py-14 text-center text-sm text-neutral-400">Cargando…</Card>
-      ) : entradas.length === 0 ? (
+      ) : entradasVisibles.length === 0 ? (
         <Card className="flex flex-col items-center gap-2 py-14 text-center">
           <ScrollText size={28} className="text-neutral-300" />
           <p className="text-sm text-neutral-400">No hay eventos con estos filtros.</p>
@@ -193,10 +228,15 @@ function Auditoria() {
               </tr>
             </thead>
             <tbody>
-              {entradas.map((entrada) => (
+              {entradasVisibles.map((entrada) => (
                 <tr key={entrada.id} className="border-b border-neutral-50 last:border-0 hover:bg-primary-50/40">
                   <td className="whitespace-nowrap px-5 py-3 font-mono text-xs text-neutral-600">
                     {formatFecha(entrada.ocurridoEn)}
+                    {esFueraDeHorario(entrada) ? (
+                      <span className="ml-1.5 inline-flex items-center gap-0.5 rounded bg-warning-50 px-1 py-0.5 font-sans text-[10px] font-semibold text-warning-700">
+                        <Moon size={10} /> fuera de horario
+                      </span>
+                    ) : null}
                   </td>
                   <td className="px-5 py-3">
                     <span

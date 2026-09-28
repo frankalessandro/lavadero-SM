@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { Coins, Mail, MessageCircle, Phone, Repeat, Search, UserPlus } from 'lucide-react'
+import { Coins, Mail, MessageCircle, Phone, Repeat, Search, UserPlus, UserX } from 'lucide-react'
 import { fetchClientes, type ClienteResumen } from '../../../../data/clientes'
 import { fetchTiposVehiculo } from '../../../../data/tiposVehiculo'
 import { fetchCombos } from '../../../../data/combos'
@@ -41,6 +41,10 @@ function ClientesPage() {
   const [filtroCliente, setFiltroCliente] = useState('')
   const [filtroPlaca, setFiltroPlaca] = useState('')
   const [orden, setOrden] = useState<'recientes' | 'gastado' | 'frecuencia'>('recientes')
+  // Clientes inactivos (Plan M11): placas que no vuelven hace más de N días. '' = todos.
+  const [inactividad, setInactividad] = useState('')
+  // Hora de referencia fija al abrir la pantalla (leer el reloj durante el render no es puro).
+  const [ahora] = useState(() => Date.now())
   const [expedienteDe, setExpedienteDe] = useState<{ placa: string; nombre: string } | null>(null)
 
   const tipoNombrePorId = new Map(tiposVehiculo.map((t) => [t.id, t.nombre]))
@@ -49,8 +53,12 @@ function ClientesPage() {
   const productoNombrePorId = new Map(productos.map((p) => [p.id, p.nombre]))
 
   const filtrados = useMemo(() => {
+    const limite = inactividad ? ahora - Number(inactividad) * 86_400_000 : null
     const base = clientes.filter(
-      (c) => coincide(c.clienteNombre, filtroCliente) && coincide(c.placa, filtroPlaca),
+      (c) =>
+        coincide(c.clienteNombre, filtroCliente) &&
+        coincide(c.placa, filtroPlaca) &&
+        (limite === null || new Date(c.ultimoServicioEn).getTime() < limite),
     )
     const cmp: Record<typeof orden, (a: ClienteResumen, b: ClienteResumen) => number> = {
       recientes: (a, b) => new Date(b.ultimoServicioEn).getTime() - new Date(a.ultimoServicioEn).getTime(),
@@ -58,10 +66,18 @@ function ClientesPage() {
       frecuencia: (a, b) => b.totalServicios - a.totalServicios,
     }
     return [...base].sort(cmp[orden])
-  }, [clientes, filtroCliente, filtroPlaca, orden])
+  }, [clientes, filtroCliente, filtroPlaca, orden, inactividad, ahora])
 
   const conTelefono = clientes.filter((c) => c.clienteTelefono).length
   const recurrentes = clientes.filter((c) => c.totalServicios > 1).length
+  // Tasa de retorno: % de placas que volvieron al menos una vez, y cada cuánto vuelven en promedio
+  // (días entre la primera y la última visita, repartidos entre las visitas de cada recurrente).
+  const tasaRetorno = clientes.length ? Math.round((recurrentes / clientes.length) * 100) : 0
+  const intervalos = clientes
+    .filter((c) => c.totalServicios > 1)
+    .map((c) => (new Date(c.ultimoServicioEn).getTime() - new Date(c.primerServicioEn).getTime()) / 86_400_000 / (c.totalServicios - 1))
+  const diasEntreVisitas = intervalos.length ? Math.round(intervalos.reduce((a, b) => a + b, 0) / intervalos.length) : null
+  const inactivos60 = clientes.filter((c) => new Date(c.ultimoServicioEn).getTime() < ahora - 60 * 86_400_000).length
   const inicioMes = (() => {
     const d = new Date()
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
@@ -76,27 +92,51 @@ function ClientesPage() {
         title="Clientes"
         description="Quién viene, cuánto gasta y cada cuánto vuelve. Toca un cliente para ver su historial."
         help={{
-          body: 'La base de clientes se construye sola a partir del histórico de órdenes: un registro por placa. No hay que crear clientes a mano — con registrar la orden en recepción basta.\n\nRecurrente = placa con más de una orden.',
+          body: 'La base de clientes se construye sola a partir del histórico de órdenes: un registro por placa. No hay que crear clientes a mano — con registrar la orden en recepción basta.\n\nRecurrente = placa con más de una orden. Tasa de retorno = % de placas que volvieron al menos una vez; "cada ~N días" es el promedio entre visitas de los recurrentes.\n\nInactivos: placas cuya última visita fue hace más de N días. Filtra por "Actividad" y usa el botón de WhatsApp de cada fila para invitarlos a volver.',
         }}
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <StatCard label="Clientes registrados" value={String(clientes.length)} hint={`${conTelefono} con teléfono`} icon={Search} />
-        <StatCard label="Recurrentes" value={String(recurrentes)} hint={`de ${clientes.length} · ${clientes.length ? Math.round((recurrentes / clientes.length) * 100) : 0}%`} icon={Repeat} />
+        <StatCard
+          label="Tasa de retorno"
+          value={`${tasaRetorno}%`}
+          hint={diasEntreVisitas !== null ? `${recurrentes} vuelven · cada ~${diasEntreVisitas} días` : `${recurrentes} recurrentes`}
+          icon={Repeat}
+        />
         <StatCard label="Nuevos este mes" value={String(nuevosDelMes)} icon={UserPlus} />
+        <StatCard
+          label="Inactivos +60 días"
+          value={String(inactivos60)}
+          hint="toca para verlos y escribirles"
+          icon={UserX}
+          onClick={() => setInactividad('60')}
+        />
         <StatCard label="Facturado histórico" value={COP.format(gastoTotalBase)} hint="órdenes entregadas" icon={Coins} />
       </div>
 
       <BarraFiltros
-        activos={[filtroCliente, filtroPlaca].filter(Boolean).length}
+        activos={[filtroCliente, filtroPlaca, inactividad].filter(Boolean).length}
         onLimpiar={() => {
           setFiltroCliente('')
           setFiltroPlaca('')
+          setInactividad('')
         }}
         resultado={`${filtrados.length} de ${clientes.length} clientes`}
       >
         <FiltroBusqueda value={filtroCliente} onChange={setFiltroCliente} placeholder="Buscar cliente" />
         <FiltroBusqueda value={filtroPlaca} onChange={setFiltroPlaca} placeholder="Buscar placa" mayusculas ancho="sm:w-44" />
+        <FiltroMenu
+          label="Actividad"
+          value={inactividad}
+          onChange={setInactividad}
+          todosLabel="Todos"
+          options={[
+            { value: '30', label: 'Sin volver +30 días' },
+            { value: '60', label: 'Sin volver +60 días' },
+            { value: '90', label: 'Sin volver +90 días' },
+          ]}
+        />
         <FiltroMenu
           label="Ordenar"
           value={orden === 'recientes' ? '' : orden}

@@ -144,6 +144,19 @@ function TurnosPage() {
     return true
   })
 
+  // Tendencia de diferencias por persona (Plan M11, control): se agrupa por quien abrió el turno.
+  const porResponsable = Array.from(
+    cerrados.reduce((m, t) => {
+      const r = m.get(t.responsable) ?? { nombre: t.responsable, turnos: 0, conDiferencia: 0, faltantes: 0, sobrantes: 0 }
+      const d = t.diferencia ?? 0
+      r.turnos += 1
+      if (d !== 0) r.conDiferencia += 1
+      if (d < 0) r.faltantes += d
+      if (d > 0) r.sobrantes += d
+      m.set(t.responsable, r)
+      return m
+    }, new Map<string, { nombre: string; turnos: number; conDiferencia: number; faltantes: number; sobrantes: number }>()).values(),
+  ).sort((a, b) => a.faltantes - b.faltantes)
   const faltantes = cerrados.filter((t) => (t.diferencia ?? 0) < 0)
   const totalFaltantes = faltantes.reduce((s, t) => s + (t.diferencia ?? 0), 0)
 
@@ -204,6 +217,55 @@ function TurnosPage() {
             height={200}
           />
         </Card>
+      ) : null}
+
+      {porResponsable.length > 0 ? (
+        <section className="flex flex-col gap-3">
+          <SectionHeader
+            title="Diferencias acumuladas por responsable"
+            hint="Turnos cerrados de cada persona. Un faltante que se repite en la misma persona es la señal a revisar."
+          />
+          <Card className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[36rem] text-sm">
+                <thead>
+                  <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
+                    <th className="px-4 py-3">Responsable</th>
+                    <th className="px-4 py-3 text-right">Turnos</th>
+                    <th className="px-4 py-3 text-right">Con diferencia</th>
+                    <th className="px-4 py-3 text-right">Faltantes</th>
+                    <th className="px-4 py-3 text-right">Sobrantes</th>
+                    <th className="px-4 py-3 text-right">Neto</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {porResponsable.map((r) => (
+                    <tr
+                      key={r.nombre}
+                      onClick={() => setFiltroResponsable(r.nombre)}
+                      className="cursor-pointer border-b border-neutral-100 transition-colors last:border-0 hover:bg-primary-50/40"
+                    >
+                      <td className="px-4 py-3 font-medium text-neutral-900">{r.nombre}</td>
+                      <td className="px-4 py-3 text-right text-neutral-600">{r.turnos}</td>
+                      <td className="px-4 py-3 text-right text-neutral-600">
+                        {r.conDiferencia} <span className="text-xs text-neutral-400">({Math.round((r.conDiferencia / r.turnos) * 100)}%)</span>
+                      </td>
+                      <td className={`px-4 py-3 text-right ${r.faltantes < 0 ? 'text-danger-700' : 'text-neutral-400'}`}>
+                        {COP.format(Math.abs(r.faltantes))}
+                      </td>
+                      <td className={`px-4 py-3 text-right ${r.sobrantes > 0 ? 'text-warning-700' : 'text-neutral-400'}`}>
+                        {COP.format(r.sobrantes)}
+                      </td>
+                      <td className={`px-4 py-3 text-right font-semibold ${diferenciaClassName(r.faltantes + r.sobrantes)}`}>
+                        {formatDiferencia(r.faltantes + r.sobrantes)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </section>
       ) : null}
 
       <BarraFiltros
