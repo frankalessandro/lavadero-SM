@@ -1,9 +1,16 @@
-import { useState, type ReactNode } from 'react'
-import { LayoutGrid, LogOut, Menu } from 'lucide-react'
+import { useState, type ComponentType, type ReactNode } from 'react'
+import { Link } from '@tanstack/react-router'
+import { ChevronRight, LayoutGrid, LogOut, Menu } from 'lucide-react'
 import { ConfirmModal } from './ConfirmModal'
 
 interface TopbarProps {
   title: string
+  /** Sección a la que pertenece la pantalla — va encima del título, en pequeño (ej. "Dinero"). */
+  eyebrow?: string
+  /** Con `eyebrow`: la sección se vuelve enlace a su pantalla. */
+  eyebrowTo?: string
+  /** Ícono de la sección, en una ficha a la izquierda del título. */
+  icon?: ComponentType<{ size?: number; strokeWidth?: number }>
   avatarInitial: string
   onLogout: () => void
   onMenuClick?: () => void
@@ -23,6 +30,9 @@ interface TopbarProps {
 
 export function Topbar({
   title,
+  eyebrow,
+  eyebrowTo,
+  icon: Icon,
   avatarInitial,
   onLogout,
   onMenuClick,
@@ -35,7 +45,7 @@ export function Topbar({
   const [confirmando, setConfirmando] = useState(false)
 
   return (
-    <header className="flex items-center justify-between gap-4 border-b border-neutral-200 bg-white px-4 py-4 sm:px-6">
+    <header className="flex h-[4.5rem] shrink-0 items-center justify-between gap-4 border-b border-neutral-200 bg-white px-4 sm:px-6 lg:px-8">
       <div className="flex min-w-0 items-center gap-3">
         {onMenuClick ? (
           <button
@@ -47,9 +57,32 @@ export function Topbar({
             <Menu size={20} />
           </button>
         ) : null}
-        <h1 className="truncate bg-gradient-to-r from-primary-700 via-primary-600 to-primary-400 bg-clip-text text-xl font-bold tracking-tight text-transparent">
-          {title}
-        </h1>
+        {eyebrow ? (
+          <div className="flex min-w-0 items-center gap-3">
+            {Icon ? (
+              <span className="hidden size-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-600 ring-1 ring-primary-100 sm:flex">
+                <Icon size={19} strokeWidth={2} />
+              </span>
+            ) : null}
+            <div className="min-w-0 leading-tight">
+              <nav aria-label="Ubicación" className="flex min-w-0 items-center gap-1 text-xs font-medium text-neutral-400">
+                {eyebrowTo ? (
+                  <Link to={eyebrowTo} className="truncate transition-colors hover:text-primary-600">
+                    {eyebrow}
+                  </Link>
+                ) : (
+                  <span className="truncate">{eyebrow}</span>
+                )}
+                <ChevronRight size={12} className="shrink-0 text-neutral-300" />
+              </nav>
+              <h1 className="truncate text-lg font-semibold tracking-tight text-neutral-900 sm:text-xl">{title}</h1>
+            </div>
+          </div>
+        ) : (
+          <h1 className="truncate bg-gradient-to-r from-primary-700 via-primary-600 to-primary-400 bg-clip-text font-display text-xl font-bold tracking-tight text-transparent">
+            {title}
+          </h1>
+        )}
       </div>
       <div className="flex shrink-0 items-center gap-3">
         {notificaciones}

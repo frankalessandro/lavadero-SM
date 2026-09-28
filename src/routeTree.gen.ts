@@ -33,6 +33,7 @@ import { Route as AdminDineroIndexRouteImport } from './routes/admin/dinero/inde
 import { Route as AdminOperacionIndexRouteImport } from './routes/admin/operacion/index'
 import { Route as AdminPersonalIndexRouteImport } from './routes/admin/personal/index'
 import { Route as AdminRentabilidadIndexRouteImport } from './routes/admin/rentabilidad/index'
+import { Route as AdminReportesIndexRouteImport } from './routes/admin/reportes/index'
 import { Route as JefeZonaAsistenciaIndexRouteImport } from './routes/jefe-zona/asistencia/index'
 import { Route as JefeZonaCajaIndexRouteImport } from './routes/jefe-zona/caja/index'
 import { Route as JefeZonaInventarioIndexRouteImport } from './routes/jefe-zona/inventario/index'
@@ -49,7 +50,6 @@ import { Route as AdminDineroLiquidacionesIndexRouteImport } from './routes/admi
 import { Route as AdminOperacionAuditoriaIndexRouteImport } from './routes/admin/operacion/auditoria/index'
 import { Route as AdminOperacionClientesIndexRouteImport } from './routes/admin/operacion/clientes/index'
 import { Route as AdminOperacionOrdenesIndexRouteImport } from './routes/admin/operacion/ordenes/index'
-import { Route as AdminOperacionReportesIndexRouteImport } from './routes/admin/operacion/reportes/index'
 import { Route as AdminOperacionTurnosIndexRouteImport } from './routes/admin/operacion/turnos/index'
 import { Route as AdminPersonalLavadoresIndexRouteImport } from './routes/admin/personal/lavadores/index'
 import { Route as AdminPersonalUsuariosIndexRouteImport } from './routes/admin/personal/usuarios/index'
@@ -174,6 +174,11 @@ const AdminRentabilidadIndexRoute = AdminRentabilidadIndexRouteImport.update({
   path: '/rentabilidad/',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const AdminReportesIndexRoute = AdminReportesIndexRouteImport.update({
+  id: '/reportes/',
+  path: '/reportes/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
 const JefeZonaAsistenciaIndexRoute = JefeZonaAsistenciaIndexRouteImport.update({
   id: '/asistencia/',
   path: '/asistencia/',
@@ -264,12 +269,6 @@ const AdminOperacionOrdenesIndexRoute =
     path: '/ordenes/',
     getParentRoute: () => AdminOperacionRouteRoute,
   } as any)
-const AdminOperacionReportesIndexRoute =
-  AdminOperacionReportesIndexRouteImport.update({
-    id: '/reportes/',
-    path: '/reportes/',
-    getParentRoute: () => AdminOperacionRouteRoute,
-  } as any)
 const AdminOperacionTurnosIndexRoute =
   AdminOperacionTurnosIndexRouteImport.update({
     id: '/turnos/',
@@ -314,6 +313,7 @@ export interface FileRoutesByFullPath {
   '/admin/operacion/': typeof AdminOperacionIndexRoute
   '/admin/personal/': typeof AdminPersonalIndexRoute
   '/admin/rentabilidad/': typeof AdminRentabilidadIndexRoute
+  '/admin/reportes/': typeof AdminReportesIndexRoute
   '/jefe-zona/asistencia/': typeof JefeZonaAsistenciaIndexRoute
   '/jefe-zona/caja/': typeof JefeZonaCajaIndexRoute
   '/jefe-zona/inventario/': typeof JefeZonaInventarioIndexRoute
@@ -330,7 +330,6 @@ export interface FileRoutesByFullPath {
   '/admin/operacion/auditoria/': typeof AdminOperacionAuditoriaIndexRoute
   '/admin/operacion/clientes/': typeof AdminOperacionClientesIndexRoute
   '/admin/operacion/ordenes/': typeof AdminOperacionOrdenesIndexRoute
-  '/admin/operacion/reportes/': typeof AdminOperacionReportesIndexRoute
   '/admin/operacion/turnos/': typeof AdminOperacionTurnosIndexRoute
   '/admin/personal/lavadores/': typeof AdminPersonalLavadoresIndexRoute
   '/admin/personal/usuarios/': typeof AdminPersonalUsuariosIndexRoute
@@ -352,6 +351,7 @@ export interface FileRoutesByTo {
   '/admin/operacion': typeof AdminOperacionIndexRoute
   '/admin/personal': typeof AdminPersonalIndexRoute
   '/admin/rentabilidad': typeof AdminRentabilidadIndexRoute
+  '/admin/reportes': typeof AdminReportesIndexRoute
   '/jefe-zona/asistencia': typeof JefeZonaAsistenciaIndexRoute
   '/jefe-zona/caja': typeof JefeZonaCajaIndexRoute
   '/jefe-zona/inventario': typeof JefeZonaInventarioIndexRoute
@@ -368,7 +368,6 @@ export interface FileRoutesByTo {
   '/admin/operacion/auditoria': typeof AdminOperacionAuditoriaIndexRoute
   '/admin/operacion/clientes': typeof AdminOperacionClientesIndexRoute
   '/admin/operacion/ordenes': typeof AdminOperacionOrdenesIndexRoute
-  '/admin/operacion/reportes': typeof AdminOperacionReportesIndexRoute
   '/admin/operacion/turnos': typeof AdminOperacionTurnosIndexRoute
   '/admin/personal/lavadores': typeof AdminPersonalLavadoresIndexRoute
   '/admin/personal/usuarios': typeof AdminPersonalUsuariosIndexRoute
@@ -399,6 +398,7 @@ export interface FileRoutesById {
   '/admin/operacion/': typeof AdminOperacionIndexRoute
   '/admin/personal/': typeof AdminPersonalIndexRoute
   '/admin/rentabilidad/': typeof AdminRentabilidadIndexRoute
+  '/admin/reportes/': typeof AdminReportesIndexRoute
   '/jefe-zona/asistencia/': typeof JefeZonaAsistenciaIndexRoute
   '/jefe-zona/caja/': typeof JefeZonaCajaIndexRoute
   '/jefe-zona/inventario/': typeof JefeZonaInventarioIndexRoute
@@ -415,7 +415,6 @@ export interface FileRoutesById {
   '/admin/operacion/auditoria/': typeof AdminOperacionAuditoriaIndexRoute
   '/admin/operacion/clientes/': typeof AdminOperacionClientesIndexRoute
   '/admin/operacion/ordenes/': typeof AdminOperacionOrdenesIndexRoute
-  '/admin/operacion/reportes/': typeof AdminOperacionReportesIndexRoute
   '/admin/operacion/turnos/': typeof AdminOperacionTurnosIndexRoute
   '/admin/personal/lavadores/': typeof AdminPersonalLavadoresIndexRoute
   '/admin/personal/usuarios/': typeof AdminPersonalUsuariosIndexRoute
@@ -447,6 +446,7 @@ export interface FileRouteTypes {
     | '/admin/operacion/'
     | '/admin/personal/'
     | '/admin/rentabilidad/'
+    | '/admin/reportes/'
     | '/jefe-zona/asistencia/'
     | '/jefe-zona/caja/'
     | '/jefe-zona/inventario/'
@@ -463,7 +463,6 @@ export interface FileRouteTypes {
     | '/admin/operacion/auditoria/'
     | '/admin/operacion/clientes/'
     | '/admin/operacion/ordenes/'
-    | '/admin/operacion/reportes/'
     | '/admin/operacion/turnos/'
     | '/admin/personal/lavadores/'
     | '/admin/personal/usuarios/'
@@ -485,6 +484,7 @@ export interface FileRouteTypes {
     | '/admin/operacion'
     | '/admin/personal'
     | '/admin/rentabilidad'
+    | '/admin/reportes'
     | '/jefe-zona/asistencia'
     | '/jefe-zona/caja'
     | '/jefe-zona/inventario'
@@ -501,7 +501,6 @@ export interface FileRouteTypes {
     | '/admin/operacion/auditoria'
     | '/admin/operacion/clientes'
     | '/admin/operacion/ordenes'
-    | '/admin/operacion/reportes'
     | '/admin/operacion/turnos'
     | '/admin/personal/lavadores'
     | '/admin/personal/usuarios'
@@ -531,6 +530,7 @@ export interface FileRouteTypes {
     | '/admin/operacion/'
     | '/admin/personal/'
     | '/admin/rentabilidad/'
+    | '/admin/reportes/'
     | '/jefe-zona/asistencia/'
     | '/jefe-zona/caja/'
     | '/jefe-zona/inventario/'
@@ -547,7 +547,6 @@ export interface FileRouteTypes {
     | '/admin/operacion/auditoria/'
     | '/admin/operacion/clientes/'
     | '/admin/operacion/ordenes/'
-    | '/admin/operacion/reportes/'
     | '/admin/operacion/turnos/'
     | '/admin/personal/lavadores/'
     | '/admin/personal/usuarios/'
@@ -736,6 +735,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminRentabilidadIndexRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/admin/reportes/': {
+      id: '/admin/reportes/'
+      path: '/reportes'
+      fullPath: '/admin/reportes/'
+      preLoaderRoute: typeof AdminReportesIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/jefe-zona/asistencia/': {
       id: '/jefe-zona/asistencia/'
       path: '/asistencia'
@@ -848,13 +854,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminOperacionOrdenesIndexRouteImport
       parentRoute: typeof AdminOperacionRouteRoute
     }
-    '/admin/operacion/reportes/': {
-      id: '/admin/operacion/reportes/'
-      path: '/reportes'
-      fullPath: '/admin/operacion/reportes/'
-      preLoaderRoute: typeof AdminOperacionReportesIndexRouteImport
-      parentRoute: typeof AdminOperacionRouteRoute
-    }
     '/admin/operacion/turnos/': {
       id: '/admin/operacion/turnos/'
       path: '/turnos'
@@ -922,7 +921,6 @@ interface AdminOperacionRouteRouteChildren {
   AdminOperacionAuditoriaIndexRoute: typeof AdminOperacionAuditoriaIndexRoute
   AdminOperacionClientesIndexRoute: typeof AdminOperacionClientesIndexRoute
   AdminOperacionOrdenesIndexRoute: typeof AdminOperacionOrdenesIndexRoute
-  AdminOperacionReportesIndexRoute: typeof AdminOperacionReportesIndexRoute
   AdminOperacionTurnosIndexRoute: typeof AdminOperacionTurnosIndexRoute
 }
 
@@ -931,7 +929,6 @@ const AdminOperacionRouteRouteChildren: AdminOperacionRouteRouteChildren = {
   AdminOperacionAuditoriaIndexRoute: AdminOperacionAuditoriaIndexRoute,
   AdminOperacionClientesIndexRoute: AdminOperacionClientesIndexRoute,
   AdminOperacionOrdenesIndexRoute: AdminOperacionOrdenesIndexRoute,
-  AdminOperacionReportesIndexRoute: AdminOperacionReportesIndexRoute,
   AdminOperacionTurnosIndexRoute: AdminOperacionTurnosIndexRoute,
 }
 
@@ -961,6 +958,7 @@ interface AdminRouteRouteChildren {
   AdminIndexRoute: typeof AdminIndexRoute
   AdminConfiguracionIndexRoute: typeof AdminConfiguracionIndexRoute
   AdminRentabilidadIndexRoute: typeof AdminRentabilidadIndexRoute
+  AdminReportesIndexRoute: typeof AdminReportesIndexRoute
 }
 
 const AdminRouteRouteChildren: AdminRouteRouteChildren = {
@@ -971,6 +969,7 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminIndexRoute: AdminIndexRoute,
   AdminConfiguracionIndexRoute: AdminConfiguracionIndexRoute,
   AdminRentabilidadIndexRoute: AdminRentabilidadIndexRoute,
+  AdminReportesIndexRoute: AdminReportesIndexRoute,
 }
 
 const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(

@@ -1,7 +1,7 @@
 import { db } from '../lib/db'
 import type { PeriodoReporte } from '../lib/reportes/tipos'
 
-// Lecturas para la pantalla de reportes (/admin/operacion/reportes). Devuelven filas crudas por
+// Lecturas para la pantalla de reportes (/admin/reportes). Devuelven filas crudas por
 // periodo, sin pasar por los fetchers de cada pantalla, por dos razones:
 //   1. Supabase corta cada consulta en 1.000 filas. Un mes de pagos u órdenes puede pasarse, y un
 //      reporte que se calla la mitad de las filas es peor que uno que falla — por eso todo pagina.

@@ -2,17 +2,18 @@ import { useRef, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { CalendarRange, FileSpreadsheet, FileText, Hash, Wallet } from 'lucide-react'
-import { Card } from '../../../../components/layout/Card'
-import { StatCard } from '../../../../components/layout/StatCard'
-import { PeriodoSelector } from '../../../../components/layout/PeriodoSelector'
-import { queryKeys } from '../../../../lib/queryKeys'
-import { toast } from '../../../../lib/toast'
-import { calcularRango, rangoAISO, fechaLocalISO, type ModoPeriodo } from '../../../../lib/periodo'
-import { REPORTES, cargarReporte, cargarTodosLosReportes, infoDe } from '../../../../lib/reportes/definiciones'
-import { formatoCelda, formatoResumen, textoPeriodo } from '../../../../lib/reportes/formato'
-import type { PeriodoReporte, ReporteCargado, ReporteKey } from '../../../../lib/reportes/tipos'
+import { Card } from '../../../components/layout/Card'
+import { StatCard } from '../../../components/layout/StatCard'
+import { PeriodoSelector } from '../../../components/layout/PeriodoSelector'
+import { PageHeader } from '../../../components/layout/PageHeader'
+import { queryKeys } from '../../../lib/queryKeys'
+import { toast } from '../../../lib/toast'
+import { calcularRango, rangoAISO, fechaLocalISO, type ModoPeriodo } from '../../../lib/periodo'
+import { REPORTES, cargarReporte, cargarTodosLosReportes, infoDe } from '../../../lib/reportes/definiciones'
+import { formatoCelda, formatoResumen, textoPeriodo } from '../../../lib/reportes/formato'
+import type { PeriodoReporte, ReporteCargado, ReporteKey } from '../../../lib/reportes/tipos'
 
-export const Route = createFileRoute('/admin/operacion/reportes/')({
+export const Route = createFileRoute('/admin/reportes/')({
   component: Reportes,
 })
 
@@ -77,10 +78,10 @@ function Reportes() {
       const nombreBase = todos ? 'carwash-sm_reporte-completo' : `carwash-sm_${key}`
       // Los exportadores (y sus librerías) se cargan recién acá: no pesan en el resto de la app.
       if (tipo === 'excel' || tipo === 'todo-excel') {
-        const { exportarExcel } = await import('../../../../lib/reportes/exportarExcel')
+        const { exportarExcel } = await import('../../../lib/reportes/exportarExcel')
         await exportarExcel(reportes, periodo, nombreBase)
       } else {
-        const { exportarPdf } = await import('../../../../lib/reportes/exportarPdf')
+        const { exportarPdf } = await import('../../../lib/reportes/exportarPdf')
         await exportarPdf(reportes, periodo, nombreBase)
       }
       toast.exito('Reporte descargado')
@@ -99,13 +100,13 @@ function Reportes() {
 
   return (
     <div className="flex flex-col gap-6 text-left">
-      <div>
-        <h2 className="text-base font-semibold text-neutral-900">Reportes</h2>
-        <p className="max-w-3xl text-sm text-neutral-500">
-          Histórico de la operación por día, semana, mes o un rango de fechas. Cada reporte se descarga en Excel
-          (todas las columnas) o en PDF (hoja A4 horizontal), y también hay un reporte completo con todo el periodo.
-        </p>
-      </div>
+      <PageHeader
+        title="Reportes"
+        description="Descarga el histórico del periodo en Excel o PDF."
+        help={{
+          body: 'Histórico de la operación por día, semana, mes o un rango de fechas: órdenes, pagos, ventas, gastos, compras, inventario, turnos, liquidaciones, deudas, asistencia y parqueadero.\n\nCada reporte se descarga en Excel (todas las columnas) o en PDF (hoja A4 horizontal). También hay un reporte completo con todo el periodo en un solo archivo.',
+        }}
+      />
 
       <Card className="flex flex-col gap-4 p-5">
         <div className="flex flex-wrap items-center gap-3">

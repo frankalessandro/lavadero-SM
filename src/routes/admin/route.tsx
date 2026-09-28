@@ -1,66 +1,63 @@
 import { useState } from 'react'
-import { createFileRoute, Outlet, useNavigate } from '@tanstack/react-router'
-import { LayoutDashboard, TrendingUp, ClipboardList, Coins, Package, Users, Settings } from 'lucide-react'
+import { createFileRoute, Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
 import { Sidebar, type NavItem } from '../../components/layout/Sidebar'
 import { Topbar } from '../../components/layout/Topbar'
 import { NotificacionesCentro } from '../../components/layout/NotificacionesCentro'
 import { fetchAlertas } from '../../data/alertas'
 import { exigirRol, signOut } from '../../lib/auth'
+import { ADMIN_SECCIONES, ubicacionAdmin } from '../../lib/adminNav'
 
 export const Route = createFileRoute('/admin')({
   beforeLoad: ({ context }) => exigirRol(context.auth, 'admin'),
   component: AdminLayout,
 })
 
-// Seis secciones, una por pregunta de negocio — antes eran 14 destinos planos, uno por tabla de
-// base de datos, con la misma tarea repartida en varias pantallas (definir un precio obligaba a
-// pasar por Tipos de vehículo → Servicios → Combos) y la misma información repetida en varias
-// (anulaciones salían en el dashboard dos veces y otra vez en Órdenes). Cada sección de acá
-// agrupa sus pantallas en pestañas (ver SectionTabs); ninguna funcionalidad se eliminó al mover.
-//
-// `exact: false` en las secciones para que el ítem siga resaltado mientras se navega entre sus
-// pestañas hijas; Dashboard y Configuración se quedan en exacto (son ruta única).
-const NAV_ITEMS: NavItem[] = [
-  { to: '/admin', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/admin/rentabilidad', label: 'Rentabilidad', icon: TrendingUp },
-  { to: '/admin/operacion', label: 'Operación', icon: ClipboardList, exact: false },
-  { to: '/admin/dinero', label: 'Dinero', icon: Coins, exact: false },
-  { to: '/admin/catalogo', label: 'Catálogo y precios', icon: Package, exact: false },
-  { to: '/admin/personal', label: 'Personal', icon: Users, exact: false },
-  { to: '/admin/configuracion', label: 'Configuración', icon: Settings },
-]
+// El menú se agrupa por frecuencia de uso (Hoy → Análisis → Gestión → Ajustes) y su definición
+// vive en src/lib/adminNav.ts, compartida con las pestañas de cada sección y el título del Topbar.
+const NAV_ITEMS: NavItem[] = ADMIN_SECCIONES.map(({ to, label, icon, exact, grupo }) => ({
+  to,
+  label,
+  icon,
+  exact,
+  grupo,
+}))
 
-// `fixed inset-0` saca el panel del contenedor angosto (#root) del sitio público —
-// cada área por rol es su propia superficie, no hereda el layout de marketing.
-// La navegación por debajo de `md` vive en el drawer del hamburguesa del Topbar — no hay
-// barra inferior; el drawer del `Sidebar` (mobileOpen/onMobileClose) es la única nav móvil.
+// `fixed inset-0` saca el panel del contenedor angosto (#root) del sitio público.
+// La navegación por debajo de `md` vive en el drawer del hamburguesa del Topbar.
 function AdminLayout() {
   const { auth } = Route.useRouteContext()
   const navigate = useNavigate()
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
   const [menuOpen, setMenuOpen] = useState(false)
   const multiRol = (auth?.perfil.roles.length ?? 0) > 1
+  const { seccion, seccionTo, icon, pagina } = ubicacionAdmin(pathname)
+  const nombre = auth?.perfil.nombre ?? undefined
   return (
     <div className="fixed inset-0 z-10 flex bg-neutral-50 text-left">
       <Sidebar
         navItems={NAV_ITEMS}
         roleLabel="Gerencia"
+        usuario={nombre}
         mobileOpen={menuOpen}
         onMobileClose={() => setMenuOpen(false)}
       />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar
-          title="Panel de administración"
-          avatarInitial="A"
+          title={pagina ?? seccion}
+          eyebrow={pagina ? seccion : 'Gerencia'}
+          eyebrowTo={pagina ? seccionTo : '/admin'}
+          icon={icon}
+          avatarInitial={nombre?.trim().charAt(0).toUpperCase() || 'A'}
           onLogout={signOut}
           multiRol={multiRol}
           onCambiarModulo={() => navigate({ to: '/seleccionar-modulo' })}
           onMenuClick={() => setMenuOpen(true)}
-          responsable={auth?.perfil.nombre ?? undefined}
-          roleLabel="Gerencia"
           notificaciones={<NotificacionesCentro cargarAlertas={fetchAlertas} />}
         />
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6">
-          <Outlet />
+        <main className="custom-scroll flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-7xl p-4 sm:p-6 lg:p-8">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>
