@@ -15,8 +15,6 @@ import {
   SprayCan,
   Repeat,
   Timer,
-  LockOpen,
-  Lock,
   MessageCircle,
   Motorbike,
   UserRound,
@@ -24,7 +22,6 @@ import {
   FileWarning,
   Receipt,
   ClipboardCheck,
-  Search,
   Bell,
   BellRing,
   Undo2,
@@ -34,10 +31,9 @@ import {
   Percent,
   Landmark,
   CreditCard,
-  UserCheck,
-  UserX,
-  BedDouble,
   AlertTriangle,
+  Ban,
+  ClipboardPlus,
 } from 'lucide-react'
 import {
   fetchOrdenesHoy,
@@ -68,6 +64,9 @@ import { clienteInfoInputSchema, type Orden } from '../../schemas/orden'
 import type { TipoVehiculo } from '../../schemas/tipoVehiculo'
 import type { PagoLineaInput } from '../../schemas/pago'
 import { StatCard } from '../../components/layout/StatCard'
+import { PageHeader } from '../../components/layout/PageHeader'
+import { EstadoTurno } from '../../components/layout/EstadoTurno'
+import { BarraFiltros, FiltroBusqueda, FiltroMenu } from '../../components/layout/Filtros'
 import { Card } from '../../components/layout/Card'
 import { CustomSelect } from '../../components/layout/CustomSelect'
 import { ReciboModal, type ReciboData } from '../../components/layout/ReciboModal'
@@ -138,6 +137,8 @@ async function loadDashboard() {
     pagosHoy,
   }
 }
+
+const FECHA_HOY = new Intl.DateTimeFormat('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })
 
 export const Route = createFileRoute('/jefe-zona/')({
   loader: loadDashboard,
@@ -588,24 +589,46 @@ function JefeZonaDashboard() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col items-start gap-3 rounded-2xl bg-primary-600 p-5 text-white shadow-card sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-base font-semibold">Recepción de lavado</h2>
-          <p className="text-sm text-primary-100">Ingreso de vehículos — el seguimiento y el cobro se hacen aquí mismo.</p>
-        </div>
-        <Link
-          to="/recepcion"
-          className="flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-primary-700 transition-colors hover:bg-primary-50"
-        >
-          Abrir recepción <ArrowRight size={15} />
-        </Link>
-      </div>
+      <PageHeader
+        showTitle
+        title={`Hoy, ${FECHA_HOY.format(new Date())}`}
+        description="Los vehículos en el patio, quién los lava y qué falta por cobrar."
+        help={{
+          body:
+            'Seguimiento es el tablero del turno: "En proceso" y "Listos para cobrar". Cada tarjeta muestra hace cuánto entró o está listo, y desde ahí se reasigna lavador, se avisa al cliente, se carga un producto, se corrige o se cobra.\n\n' +
+            'Los vehículos se ingresan en Recepción. Un vehículo sin lavador queda "En cola" hasta que se le asigne; no se puede finalizar sin lavador.\n\n' +
+            'El próximo en cola sale de la rotación por orden de llegada (regla 9).',
+        }}
+        actions={
+          <Link
+            to="/recepcion"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary-600 px-5 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 sm:w-auto"
+          >
+            <ClipboardPlus size={17} />
+            Abrir recepción
+          </Link>
+        }
+      />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <EstadoTurno
+        abierto={Boolean(turno)}
+        titulo={turno ? `Caja abierta · ${turno.responsableActual}` : 'Sin turno abierto'}
+        detalle={turno ? `Base ${COP.format(turno.baseInicial)}` : 'Ábrelo para que el arqueo cuadre al cierre.'}
+        accion={
+          <Link
+            to="/jefe-zona/caja"
+            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50 sm:flex-none"
+          >
+            {turno ? 'Ir a caja' : 'Abrir turno'} <ArrowRight size={14} />
+          </Link>
+        }
+      />
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard
           label="Lavados de hoy"
           value={String(ordenesHoy.filter((o) => o.estado !== 'anulada').length)}
-          hint={anuladasHoyLista.length > 0 ? `${anuladasHoyLista.length} anulada${anuladasHoyLista.length === 1 ? '' : 's'} — no cuenta aquí` : undefined}
+          hint={anuladasHoyLista.length > 0 ? `${anuladasHoyLista.length} anulada${anuladasHoyLista.length === 1 ? '' : 's'} aparte` : `${entregadasHoy.length} entregados`}
           icon={Droplets}
         />
         <StatCard
@@ -615,236 +638,91 @@ function JefeZonaDashboard() {
           icon={Wallet}
           onClick={() => setViendoCajaDesglose(true)}
         />
+        {/* Misma cola que sugiere /recepcion al recibir un vehículo (regla de negocio 9). */}
+        <StatCard
+          label="Próximo en cola"
+          value={proximoEnRotacion ? proximoEnRotacion.nombre : 'Nadie libre'}
+          hint={!proximoEnRotacion && siguienteAunOcupado ? `Sigue: ${siguienteAunOcupado.nombre}` : 'Rotación por llegada'}
+          icon={Repeat}
+        />
+        <StatCard
+          label="Lavadores"
+          value={`${lavadoresDisponibles} libre${lavadoresDisponibles === 1 ? '' : 's'}`}
+          hint={`${ocupadosIds.size} ocupado${ocupadosIds.size === 1 ? '' : 's'} · ${descansosHoy.length} descansa${descansosHoy.length === 1 ? '' : 'n'}${lavadoresSinLlegada > 0 ? ` · ${lavadoresSinLlegada} sin llegar` : ''}`}
+          icon={Users}
+        />
       </div>
 
       {anuladasHoyLista.length > 0 ? (
-        <Card className="flex flex-col gap-2 border border-danger-100 bg-danger-50/40 text-left">
-          <h3 className="text-sm font-semibold text-danger-700">
-            {anuladasHoyLista.length} orden{anuladasHoyLista.length === 1 ? '' : 'es'} anulada{anuladasHoyLista.length === 1 ? '' : 's'} hoy
-          </h3>
-          <ul className="flex flex-col gap-1.5 text-xs text-neutral-600">
-            {anuladasHoyLista.map((o) => (
-              <li key={o.id}>
-                <span className="font-mono font-semibold text-neutral-800">{o.placa}</span> · #{o.consecutivo} — Motivo:{' '}
-                {o.motivoAnulacion ?? '—'} · Anuló: {o.anuladaPor ?? '—'}
-              </li>
-            ))}
-          </ul>
-        </Card>
-      ) : null}
-
-      {/* 3 tarjetas compactas en vez de 2 grandes — antes "Lavadores en turno" cargaba también la
-          cola completa de rotación y quedaba alta; se separa el nombre del próximo en su propia
-          tarjeta (es el dato que más se consulta de un vistazo) y se gana espacio vertical. */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Card className="flex items-center gap-3">
-          <span
-            className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${
-              turno ? 'bg-success-50 text-success-700' : 'bg-warning-50 text-warning-700'
-            }`}
-          >
-            {turno ? <LockOpen size={18} strokeWidth={2} /> : <Lock size={18} strokeWidth={2} />}
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-neutral-900">
-              {turno ? turno.responsableActual : 'Sin turno abierto'}
+        <div className="flex items-start gap-3 rounded-2xl border border-danger-600/25 bg-danger-50 px-4 py-3">
+          <Ban size={18} className="mt-0.5 shrink-0 text-danger-600" />
+          <div className="min-w-0 text-sm">
+            <p className="font-semibold text-danger-700">
+              {anuladasHoyLista.length} orden{anuladasHoyLista.length === 1 ? '' : 'es'} anulada{anuladasHoyLista.length === 1 ? '' : 's'} hoy
             </p>
-            <p className="truncate text-xs text-neutral-500">
-              {turno ? `Base ${COP.format(turno.baseInicial)}` : 'Ábrelo para que el arqueo cuadre al cierre.'}
-            </p>
+            <ul className="mt-1 flex flex-col gap-0.5 text-xs text-danger-700/80">
+              {anuladasHoyLista.map((o) => (
+                <li key={o.id}>
+                  <span className="font-mono font-semibold">{o.placa}</span> · #{o.consecutivo} — {o.motivoAnulacion ?? '—'} · anuló{' '}
+                  {o.anuladaPor ?? '—'}
+                </li>
+              ))}
+            </ul>
           </div>
-          <Link
-            to="/jefe-zona/caja"
-            className="shrink-0 whitespace-nowrap rounded-lg border border-neutral-200 px-3 py-2 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
-          >
-            {turno ? 'Ir a caja' : 'Abrir turno'}
-          </Link>
-        </Card>
-
-        <Card className="flex flex-col gap-2">
-          <p className="flex items-center gap-1.5 text-sm font-semibold text-neutral-900">
-            <Users size={15} className="text-primary-500" />
-            Lavadores en turno
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            <span className="inline-flex items-center gap-1 rounded-full bg-success-50 px-2 py-1 text-xs font-medium text-success-700">
-              <UserCheck size={12} /> {lavadoresDisponibles} disponible{lavadoresDisponibles === 1 ? '' : 's'}
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-warning-50 px-2 py-1 text-xs font-medium text-warning-700">
-              <SprayCan size={12} /> {ocupadosIds.size} ocupado{ocupadosIds.size === 1 ? '' : 's'}
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-2 py-1 text-xs font-medium text-neutral-600">
-              <BedDouble size={12} /> {descansosHoy.length} descansa{descansosHoy.length === 1 ? '' : 'n'}
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-danger-50 px-2 py-1 text-xs font-medium text-danger-700">
-              <UserX size={12} /> {lavadoresSinLlegada} sin llegada
-            </span>
-          </div>
-        </Card>
-
-        {/* Misma cola que sugiere /recepcion al recibir un vehículo (regla de negocio 9). */}
-        <Card className="flex items-center gap-3">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
-            <Repeat size={18} strokeWidth={2} />
-          </span>
-          <div className="min-w-0">
-            <p className="text-xs text-neutral-500">Próximo en cola</p>
-            <p className="truncate text-sm font-semibold text-neutral-900">
-              {proximoEnRotacion ? proximoEnRotacion.nombre : 'Nadie disponible'}
-            </p>
-            {!proximoEnRotacion && siguienteAunOcupado && (
-              <p className="truncate text-xs text-neutral-500">Sigue: {siguienteAunOcupado.nombre}</p>
-            )}
-          </div>
-        </Card>
-      </div>
-
-
-      {/* Tiempo de lavado — solo tiene sentido como chart cuando hay varios combos/lavadores que
-          comparar; con 1–2 nada más un número es más claro que una barra. Full-width para que
-          las barras horizontales tengan espacio real, no un cuarto de página. La espera para
-          recoger va como un solo número junto al título, no como una tercera barra: no depende
-          de combo ni de lavador, así que partirla "por categoría" no tendría una lógica real
-          detrás (ver comentario de `promedios` arriba). */}
-      {entregadasHoy.length > 0 ? (
-        <Card>
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-            <h3 className="flex items-center gap-1.5 text-sm font-semibold text-neutral-900">
-              <Timer size={15} className="text-primary-500" />
-              Tiempo de lavado (hoy)
-            </h3>
-            {promedios.esperaPromedioMinutos !== undefined ? (
-              <p className="text-xs text-neutral-500">
-                Espera promedio para recoger:{' '}
-                <span className="font-semibold text-neutral-900">{formatMinutos(promedios.esperaPromedioMinutos)}</span>
-              </p>
-            ) : null}
-          </div>
-          {promedios.porCombo.length === 0 ? (
-            <p className="py-6 text-center text-sm text-neutral-400">Sin datos de tiempo de lavado hoy todavía.</p>
-          ) : (
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-              <div>
-                <p className="mb-2 text-xs font-medium text-neutral-500">Por combo</p>
-                {promedios.porCombo.length > 2 ? (
-                  <BarChart
-                    labels={promedios.porCombo.map((p) => p.nombre)}
-                    data={promedios.porCombo.map((p) => p.promedio)}
-                    valueFormatter={formatMinutos}
-                    height={Math.max(100, promedios.porCombo.length * 36)}
-                  />
-                ) : (
-                  <ul className="flex flex-col gap-1.5 text-sm">
-                    {promedios.porCombo.map((p) => (
-                      <li key={p.nombre} className="flex items-center justify-between gap-2">
-                        <span className="min-w-0 truncate text-neutral-600">{p.nombre}</span>
-                        <span className="shrink-0 font-medium text-neutral-900">{formatMinutos(p.promedio)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-              <div>
-                <p className="mb-2 text-xs font-medium text-neutral-500">Por lavador</p>
-                {promedios.porLavador.length > 2 ? (
-                  <BarChart
-                    labels={promedios.porLavador.map((p) => p.nombre)}
-                    data={promedios.porLavador.map((p) => p.promedio)}
-                    valueFormatter={formatMinutos}
-                    height={Math.max(100, promedios.porLavador.length * 36)}
-                  />
-                ) : (
-                  <ul className="flex flex-col gap-1.5 text-sm">
-                    {promedios.porLavador.map((p) => (
-                      <li key={p.nombre} className="flex items-center justify-between gap-2">
-                        <span className="min-w-0 truncate text-neutral-600">{p.nombre}</span>
-                        <span className="shrink-0 font-medium text-neutral-900">{formatMinutos(p.promedio)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </div>
-          )}
-        </Card>
-      ) : null}
-
-      {/* Sin tarjeta blanca a propósito — son controles flotantes sobre el fondo de la página,
-          no una sección con contenido propio. Seguimiento/Entregados a un lado, buscador+filtro
-          al otro — se apilan en celular, justify-between los separa en pantallas anchas. */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-        {/* Seguimiento (M3) vs. entregados hoy — ambas vistas permiten reabrir/imprimir el
-            tiquete de cualquier orden, sin importar el estado. */}
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setVista('seguimiento')}
-            className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-              vista === 'seguimiento'
-                ? 'border-primary-600 bg-primary-50 text-primary-700'
-                : 'border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50'
-            }`}
-          >
-            <SprayCan size={15} />
-            Seguimiento
-          </button>
-          <button
-            type="button"
-            onClick={() => setVista('entregados')}
-            className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-              vista === 'entregados'
-                ? 'border-primary-600 bg-primary-50 text-primary-700'
-                : 'border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50'
-            }`}
-          >
-            <ClipboardCheck size={15} />
-            Entregados hoy ({entregadasHoy.length})
-          </button>
-          {busquedaPlaca || lavadorFiltro !== 'todos' ? (
-            <span className="text-xs font-medium text-neutral-500">
-              {vista === 'seguimiento'
-                ? `${enProcesoFiltrada.length + listoFiltrada.length} resultado${enProcesoFiltrada.length + listoFiltrada.length === 1 ? '' : 's'}`
-                : `${entregadasFiltradas.length} resultado${entregadasFiltradas.length === 1 ? '' : 's'}`}
-            </span>
-          ) : null}
         </div>
+      ) : null}
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <label className="relative flex items-center">
-            <Search size={16} className="pointer-events-none absolute left-3 text-neutral-400" />
-            <input
-              value={busquedaPlaca}
-              onChange={(e) => setBusquedaPlaca(e.target.value)}
-              placeholder="Buscar por placa…"
-              className="w-full rounded-lg border border-neutral-300 bg-white py-2.5 pl-9 pr-3 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500 sm:w-48"
-            />
-          </label>
-          <div className="sm:w-48">
-            <CustomSelect
-              size="sm"
-              value={lavadorFiltro}
-              onChange={setLavadorFiltro}
-              placeholder="Todos los lavadores"
-              options={[
-                { value: 'todos', label: 'Todos los lavadores' },
-                { value: 'sin_asignar', label: 'Sin asignar' },
-                ...lavadores.map((l) => ({ value: l.id, label: l.nombre })),
-              ]}
-            />
-          </div>
-          {busquedaPlaca || lavadorFiltro !== 'todos' ? (
+      <div className="flex flex-col gap-3">
+        <div className="grid grid-cols-2 gap-1 rounded-xl bg-neutral-200/60 p-1 sm:w-fit">
+          {(
+            [
+              { key: 'seguimiento' as const, label: 'En el patio', icon: SprayCan, count: enProcesoLista.length + listoLista.length },
+              { key: 'entregados' as const, label: 'Entregados hoy', icon: ClipboardCheck, count: entregadasHoy.length },
+            ] as const
+          ).map(({ key, label, icon: Icon, count }) => (
             <button
+              key={key}
               type="button"
-              onClick={() => {
-                setBusquedaPlaca('')
-                setLavadorFiltro('todos')
-              }}
-              className="flex shrink-0 items-center gap-1 self-start rounded-lg px-2 py-1.5 text-xs font-medium text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-danger-600 sm:self-auto"
+              onClick={() => setVista(key)}
+              className={`flex items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors ${
+                vista === key ? 'bg-white text-primary-700 shadow-sm' : 'text-neutral-500 hover:text-neutral-900'
+              }`}
             >
-              <X size={13} /> Limpiar
+              <Icon size={15} />
+              <span className="truncate">{label}</span>
+              <span
+                className={`rounded-full px-1.5 text-[11px] font-semibold tabular-nums ${
+                  vista === key ? 'bg-primary-100 text-primary-700' : 'bg-neutral-100 text-neutral-500'
+                }`}
+              >
+                {count}
+              </span>
             </button>
-          ) : null}
+          ))}
         </div>
+
+        <BarraFiltros
+          activos={[busquedaPlaca, lavadorFiltro !== 'todos' ? lavadorFiltro : ''].filter(Boolean).length}
+          onLimpiar={() => {
+            setBusquedaPlaca('')
+            setLavadorFiltro('todos')
+          }}
+          resultado={
+            busquedaPlaca || lavadorFiltro !== 'todos'
+              ? vista === 'seguimiento'
+                ? `${enProcesoFiltrada.length + listoFiltrada.length} resultado${enProcesoFiltrada.length + listoFiltrada.length === 1 ? '' : 's'}`
+                : `${entregadasFiltradas.length} resultado${entregadasFiltradas.length === 1 ? '' : 's'}`
+              : undefined
+          }
+        >
+          <FiltroBusqueda value={busquedaPlaca} onChange={setBusquedaPlaca} placeholder="Buscar placa" mayusculas ancho="sm:w-48" />
+          <FiltroMenu
+            label="Lavador"
+            value={lavadorFiltro === 'todos' ? '' : lavadorFiltro}
+            onChange={(v) => setLavadorFiltro(v || 'todos')}
+            options={[{ value: 'sin_asignar', label: 'Sin asignar' }, ...lavadores.map((l) => ({ value: l.id, label: l.nombre }))]}
+          />
+        </BarraFiltros>
       </div>
 
       {vista === 'seguimiento' ? (
@@ -936,6 +814,76 @@ function JefeZonaDashboard() {
           onCorregirPago={setCorrigiendoPago}
         />
       )}
+
+      {/* Tiempo de lavado — solo tiene sentido como chart cuando hay varios combos/lavadores que
+          comparar; con 1–2 nada más un número es más claro que una barra. Full-width para que
+          las barras horizontales tengan espacio real, no un cuarto de página. La espera para
+          recoger va como un solo número junto al título, no como una tercera barra: no depende
+          de combo ni de lavador, así que partirla "por categoría" no tendría una lógica real
+          detrás (ver comentario de `promedios` arriba). */}
+      {entregadasHoy.length > 0 ? (
+        <Card>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <h3 className="flex items-center gap-1.5 text-sm font-semibold text-neutral-900">
+              <Timer size={15} className="text-primary-500" />
+              Tiempo de lavado (hoy)
+            </h3>
+            {promedios.esperaPromedioMinutos !== undefined ? (
+              <p className="text-xs text-neutral-500">
+                Espera promedio para recoger:{' '}
+                <span className="font-semibold text-neutral-900">{formatMinutos(promedios.esperaPromedioMinutos)}</span>
+              </p>
+            ) : null}
+          </div>
+          {promedios.porCombo.length === 0 ? (
+            <p className="py-6 text-center text-sm text-neutral-400">Sin datos de tiempo de lavado hoy todavía.</p>
+          ) : (
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <div>
+                <p className="mb-2 text-xs font-medium text-neutral-500">Por combo</p>
+                {promedios.porCombo.length > 2 ? (
+                  <BarChart
+                    labels={promedios.porCombo.map((p) => p.nombre)}
+                    data={promedios.porCombo.map((p) => p.promedio)}
+                    valueFormatter={formatMinutos}
+                    height={Math.max(100, promedios.porCombo.length * 36)}
+                  />
+                ) : (
+                  <ul className="flex flex-col gap-1.5 text-sm">
+                    {promedios.porCombo.map((p) => (
+                      <li key={p.nombre} className="flex items-center justify-between gap-2">
+                        <span className="min-w-0 truncate text-neutral-600">{p.nombre}</span>
+                        <span className="shrink-0 font-medium text-neutral-900">{formatMinutos(p.promedio)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div>
+                <p className="mb-2 text-xs font-medium text-neutral-500">Por lavador</p>
+                {promedios.porLavador.length > 2 ? (
+                  <BarChart
+                    labels={promedios.porLavador.map((p) => p.nombre)}
+                    data={promedios.porLavador.map((p) => p.promedio)}
+                    valueFormatter={formatMinutos}
+                    height={Math.max(100, promedios.porLavador.length * 36)}
+                  />
+                ) : (
+                  <ul className="flex flex-col gap-1.5 text-sm">
+                    {promedios.porLavador.map((p) => (
+                      <li key={p.nombre} className="flex items-center justify-between gap-2">
+                        <span className="min-w-0 truncate text-neutral-600">{p.nombre}</span>
+                        <span className="shrink-0 font-medium text-neutral-900">{formatMinutos(p.promedio)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
+        </Card>
+      ) : null}
+
 
       {cobrando ? (
         <CobroModal
@@ -1105,8 +1053,8 @@ function CajaDesgloseModal({
   onClose: () => void
 }) {
   return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-[2px]">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-card-hover">
+    <div className="fixed inset-0 z-30 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
+      <div className="w-full max-w-sm rounded-t-3xl sm:rounded-2xl custom-scroll max-h-[92vh] overflow-y-auto bg-white sm:max-h-[88vh] p-6 shadow-card-hover">
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-success-50 text-success-700">
@@ -1229,7 +1177,7 @@ function OrdenCard({
     <Card
       className={`group border-l-4 p-0 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-card-hover ${
         sinAsignar
-          ? 'border-l-danger-500 bg-danger-50/40'
+          ? 'border-l-danger-600 bg-danger-50/40'
           : enProceso
             ? 'border-l-warning-600 bg-warning-50/40'
             : 'border-l-primary-500 bg-primary-50/40 shadow-nav-active'
@@ -1297,7 +1245,7 @@ function OrdenCard({
             title={orden.notificadoListo ? 'Ya se le avisó al cliente — tocar para desmarcar' : 'Marcar que ya se le avisó al cliente'}
             className={`flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium transition-colors ${
               orden.notificadoListo
-                ? 'bg-success-50 text-success-700 hover:bg-success-100'
+                ? 'bg-success-50 text-success-700 hover:bg-success-600/10'
                 : 'border border-neutral-200 text-neutral-500 hover:bg-neutral-50'
             }`}
           >
@@ -1328,7 +1276,7 @@ function OrdenCard({
                         onQuitarProducto(v)
                       }}
                       title="Quitar producto"
-                      className="text-danger-500 transition-colors hover:text-danger-700"
+                      className="text-danger-600 transition-colors hover:text-danger-700"
                     >
                       <Trash2 size={13} />
                     </button>
@@ -1593,8 +1541,8 @@ function DetalleOrdenModal({
   onVerTiquete: () => void
 }) {
   return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-[2px]">
-      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-card-hover">
+    <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
+      <div className="max-h-[92vh] sm:max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-3xl sm:rounded-2xl bg-white p-6 shadow-card-hover">
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h3 className="flex items-center gap-2 text-base font-semibold text-neutral-900">
@@ -1645,7 +1593,7 @@ function DetalleOrdenModal({
             <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-neutral-400">Observaciones</p>
             <p
               className={`rounded-lg p-3 ${
-                orden.observaciones ? 'bg-warning-50 text-warning-900' : 'bg-neutral-50 text-neutral-400 italic'
+                orden.observaciones ? 'bg-warning-50 text-warning-700' : 'bg-neutral-50 text-neutral-400 italic'
               }`}
             >
               {orden.observaciones ?? 'Sin observaciones.'}
@@ -1664,7 +1612,7 @@ function DetalleOrdenModal({
           <button
             type="button"
             onClick={onVerTiquete}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700"
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700"
           >
             <Receipt size={15} />
             Ver tiquete
@@ -1734,8 +1682,8 @@ function ReasignarModal({
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-[2px]">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-card-hover">
+    <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
+      <div className="w-full max-w-sm rounded-t-3xl sm:rounded-2xl custom-scroll max-h-[92vh] overflow-y-auto bg-white sm:max-h-[88vh] p-6 shadow-card-hover">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-base font-semibold text-neutral-900">
             {esAsignacion ? 'Asignar lavador' : 'Reasignar lavador'}
@@ -1785,7 +1733,7 @@ function ReasignarModal({
           type="button"
           onClick={handleConfirmar}
           disabled={saving || !lavadorId}
-          className="mt-5 w-full rounded-lg bg-primary-600 py-2.5 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
+          className="mt-5 w-full rounded-xl bg-primary-600 py-2.5 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
         >
           {saving ? 'Guardando…' : esAsignacion ? 'Confirmar asignación' : 'Guardar cambios'}
         </button>
@@ -1851,10 +1799,10 @@ function EditarClienteModal({
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-[2px]">
+    <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
       <form
         onSubmit={handleSubmit}
-        className="custom-scroll max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-2xl bg-white p-6 shadow-card-hover"
+        className="custom-scroll max-h-[92vh] sm:max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-t-3xl sm:rounded-2xl bg-white p-6 shadow-card-hover"
       >
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-base font-semibold text-neutral-900">Editar datos del cliente</h3>
@@ -1926,7 +1874,7 @@ function EditarClienteModal({
         <button
           type="submit"
           disabled={saving}
-          className="mt-5 w-full rounded-lg bg-primary-600 py-2.5 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
+          className="mt-5 w-full rounded-xl bg-primary-600 py-2.5 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
         >
           {saving ? 'Guardando…' : 'Guardar cambios'}
         </button>
@@ -2034,7 +1982,7 @@ function CobroModal({
 
   return (
     <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="custom-scroll max-h-[92vh] w-full max-w-sm overflow-y-auto rounded-t-2xl bg-white p-5 shadow-card-hover sm:max-w-md sm:rounded-2xl sm:p-6 lg:max-w-lg">
+      <div className="custom-scroll max-h-[92vh] sm:max-h-[92vh] w-full max-w-sm overflow-y-auto rounded-t-2xl bg-white p-5 shadow-card-hover sm:max-w-md sm:rounded-t-3xl sm:rounded-2xl sm:p-6 lg:max-w-lg">
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h3 className="text-base font-semibold text-neutral-900">Cobrar y entregar</h3>
@@ -2084,7 +2032,7 @@ function CobroModal({
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           {/* Descuento — cerrado por defecto; el negocio lo absorbe, no toca comisiones */}
           {descAbierto ? (
-            <div className="flex flex-col gap-3 rounded-lg border border-warning-200 bg-warning-50/50 p-3">
+            <div className="flex flex-col gap-3 rounded-lg border border-warning-600/25 bg-warning-50/50 p-3">
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-xs font-semibold text-warning-700">
                   <Percent size={13} /> Descuento (lo absorbe el negocio)
@@ -2149,14 +2097,14 @@ function CobroModal({
             <button
               type="button"
               onClick={() => setDescAbierto(true)}
-              className="flex items-center gap-1.5 self-start rounded-lg border border-dashed border-neutral-300 px-3 py-2 text-xs font-medium text-neutral-600 transition-colors hover:border-warning-400 hover:text-warning-700"
+              className="flex items-center gap-1.5 self-start rounded-lg border border-dashed border-neutral-300 px-3 py-2 text-xs font-medium text-neutral-600 transition-colors hover:border-warning-600/70 hover:text-warning-700"
             >
               <Percent size={13} /> Aplicar descuento
             </button>
           )}
 
           {esCortesia ? (
-            <p className="rounded-lg bg-success-50 px-3 py-3 text-center text-sm font-medium text-success-800">
+            <p className="rounded-lg bg-success-50 px-3 py-3 text-center text-sm font-medium text-success-700">
               Cortesía total — no se cobra nada. La comisión del lavador se paga igual (la cubre el
               negocio).
             </p>
@@ -2181,7 +2129,7 @@ function CobroModal({
           <button
             type="submit"
             disabled={saving || !cuadra}
-            className="flex items-center justify-center gap-2 rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
+            className="flex items-center justify-center gap-2 rounded-xl bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
           >
             <CheckCircle2 size={16} />
             {saving ? 'Registrando…' : esCortesia ? 'Entregar (cortesía)' : 'Confirmar cobro y entrega'}
