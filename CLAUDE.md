@@ -71,16 +71,29 @@ El repo es un scaffold temprano: rutas de ejemplo (`src/routes/services/*`) cont
 
 El menú de admin estaba organizado por *tabla de base de datos* (un ítem por CRUD), lo que dejaba la misma tarea repartida en varias pantallas y la misma información repetida en varias. Se reagrupó por *pregunta de negocio*. **Ninguna funcionalidad se eliminó al mover — solo cambió dónde vive.**
 
-| Sección (ítem del sidebar) | Pestañas (`SectionTabs`) |
-|---|---|
-| Dashboard (`/admin`) | — |
-| Operación (`/admin/operacion`) | Órdenes · Clientes · Turnos y arqueos · Auditoría · Reportes |
-| Dinero (`/admin/dinero`) | Liquidaciones · Gastos · Inventario y ventas |
-| Catálogo y precios (`/admin/catalogo`) | Combos y precios · Servicios · Tipos de vehículo · Parqueadero |
-| Personal (`/admin/personal`) | Lavadores · Usuarios del sistema |
-| Configuración (`/admin/configuracion`) | — |
+| Grupo del sidebar | Sección (ítem) | Pestañas (`SectionTabs`) |
+|---|---|---|
+| Hoy | Dashboard (`/admin`) | — |
+| Hoy | Operación (`/admin/operacion`) | Órdenes · Turnos y arqueos · Clientes · Auditoría |
+| Análisis | Rentabilidad (`/admin/rentabilidad`) | — |
+| Análisis | Reportes (`/admin/reportes`) | — |
+| Gestión | Dinero (`/admin/dinero`) | Liquidaciones · Deudas · Gastos · Inventario |
+| Gestión | Personal (`/admin/personal`) | Lavadores · Usuarios |
+| Ajustes | Catálogo y precios (`/admin/catalogo`) | Combos y precios · Servicios · Tipos de vehículo · Parqueadero |
+| Ajustes | Configuración (`/admin/configuracion`) | — |
 
-`/admin/rentabilidad` es ítem propio del sidebar (no pestaña de Dinero) — decisión explícita de Alessandro: es *la* pregunta del dueño y quiere el panel completo a un clic.
+**Fuente única del menú: `src/lib/adminNav.ts`** (`ADMIN_SECCIONES`) — de ahí salen el sidebar, las pestañas de cada sección (`tabsDe`) y el título del Topbar (`ubicacionAdmin`, "Dinero › Liquidaciones"). No declarar pestañas dentro de los `route.tsx` de sección.
+
+`/admin/rentabilidad` y `/admin/reportes` son ítems propios del sidebar (no pestañas) — Rentabilidad por decisión explícita de Alessandro (*la* pregunta del dueño, a un clic); Reportes salió de Operación en el rediseño de UX de gerencia (2026-09-28) porque es salida/análisis, no registro operativo.
+
+**Primitivas de UI de gerencia** (`src/components/layout/`), usarlas en vez de armar a mano:
+- **El título de cada pantalla vive en el Topbar** ("Operación › Órdenes", con el ícono de la sección, alto alineado con el logo del sidebar). `PageHeader` NO lo repite: su `title` queda solo para lectores de pantalla, salvo `showTitle` cuando el título aporta algo distinto (dashboard: "Hoy, lunes 28…").
+- **Filtros de tabla** (`src/components/layout/Filtros.tsx`, reemplazó a `TableHeadFilter`): van en una `BarraFiltros` ENCIMA de la tabla (con "Limpiar" y conteo "N de M"), nunca como fila del `<thead>`. `FiltroBusqueda` para texto libre (placas con `mayusculas`, clientes, productos); `FiltroCombo` —desplegable en el que también se escribe— para listas conocidas de personas (lavador, responsable, usuario) y combos; `FiltroMenu` ("Estado: Todos ▾") para pocas opciones fijas.
+- `PageHeader` — una sola línea de descripción, `help` (la explicación larga va en un modal "¿Cómo funciona?", no en párrafos arriba de la pantalla) y `actions` (la acción principal de última, a la derecha). Filtros de periodo que afectan toda la pantalla van en `actions`, **arriba** de las cifras que filtran. `SectionHeader` para bloques internos.
+- `Button` — variantes `primary`/`secondary`/`ghost`/`danger`/`danger-ghost`, tamaños `sm`/`md`, `loading`. Una sola acción `primary` por bloque.
+- `Modal` — hoja inferior en celular, centrada en escritorio, encabezado/pie fijos y cuerpo con scroll. Formularios de alta (ej. registrar gasto) van en modal, no incrustados en la página.
+- `AtencionPanel` — bandeja "Requiere tu atención" del dashboard, alimentada por `fetchAlertas` (`src/data/alertas.ts`), la misma fuente que la campana; cada alerta trae `severidad` (`alta`/`media`/`info`) y `accion`.
+- Listas en tarjeta-fila (`ul` de `rounded-2xl`) en vez de tablas anchas cuando hay ≤ ~6 datos por fila: se leen igual en celular sin scroll horizontal. Pantallas con muchas secciones apiladas se parten en pestañas internas (estado local) — ver Liquidaciones (Por liquidar → Por pagar → Por periodo → Histórico) e Inventario (Stock · Movimientos · Ventas · Compras).
 
 - Cada sección es una ruta padre con `route.tsx` (renderiza `SectionTabs` + `<Outlet/>`) e `index.tsx` que redirige a su primera pestaña — así el ítem del sidebar apunta a la sección, no a una ruta hija concreta.
 - `src/components/layout/SectionTabs.tsx` es la barra de pestañas; son **rutas reales** (cada pestaña con su loader), no estado local.
@@ -258,7 +271,7 @@ Cada punto abajo es el estado actual de una pieza del sistema ya construida; el 
 - **Compras de inventario** (`/admin/dinero/inventario`, `/jefe-zona/inventario`): entidad propia con proveedor/factura/origen del pago (`caja` o `gerencia`), distinta de un ajuste de conteo.
 - **TanStack Query**: migración en curso del patrón `useState` + `refresh()` + `router.invalidate()` a `useQuery`/`queryClient.invalidateQueries`. Ya migradas: `/jefe-zona/ventas`, `/jefe-zona/index.tsx`. El resto sigue con el patrón viejo — no asumir que ya están en Query.
 - **M7 — Inventario** (`/admin/dinero/inventario`): productos + movimientos con signo (entrada/salida/ajuste), valorización a costo promedio ponderado. Productos agotados se ocultan de las grillas de venta pero **nunca se auto-inactivan** (ver "Agotado ≠ inactivo" en el historial — conflarlos rompe el conteo ciego). `productos.costo` es el costo oficial editable; `costo` nunca es visible para jefe de zona (RLS por fila vía la vista `productos_operativo`).
-- **Reportes** (`/admin/operacion/reportes`): histórico por día/semana/mes/rango de fechas de 11 conjuntos de datos (órdenes, pagos, ventas, gastos, compras, movimientos de inventario, turnos, liquidaciones, deudas, asistencia, parqueadero), exportable a Excel y PDF (todo el periodo o un reporte). Lecturas paginadas (Supabase corta a 1.000 filas), librerías de exportación cargadas solo al exportar. Órdenes y Auditoría usan el mismo `PeriodoSelector`. Detalle y trampas (hora en Excel, regla de fecha de ventas) en `docs/historial-tecnico.md` §Reportes.
+- **Reportes** (`/admin/reportes`): histórico por día/semana/mes/rango de fechas de 11 conjuntos de datos (órdenes, pagos, ventas, gastos, compras, movimientos de inventario, turnos, liquidaciones, deudas, asistencia, parqueadero), exportable a Excel y PDF (todo el periodo o un reporte). Lecturas paginadas (Supabase corta a 1.000 filas), librerías de exportación cargadas solo al exportar. Órdenes y Auditoría usan el mismo `PeriodoSelector`. Detalle y trampas (hora en Excel, regla de fecha de ventas) en `docs/historial-tecnico.md` §Reportes.
 - **M11 — Dashboard administrativo** (`/admin`): pulso de HOY (KPIs vs. ayer, flujo del día, dinero de hoy, 7 días de tendencia). **No duplica con `/admin/rentabilidad`**, que es el análisis navegable por periodo con desgloses profundos — si una cifra necesita explorarse fila a fila va en rentabilidad, el dashboard enlaza allá.
 - **M11 — Histórico de turnos y arqueos** (`/admin/operacion/turnos`): solo lectura, un turno cerrado es inmodificable.
 - **M11 — Panel de rentabilidad** (`/admin/rentabilidad`): cascada "De ingresos a utilidad" como P&L por línea de negocio (Lavadero / Productos / Parqueadero / Consolidado, no un embudo único) — ver "Rentabilidad por línea de negocio" abajo.

@@ -518,7 +518,7 @@ Patrón: una lista plana de CRUD se vuelve una herramienta de análisis si al ha
 - **Gastos con periodo** (`/admin/dinero/gastos`): toggle Este mes / 30 / 90 días (ya no clavado al mes), comparación `%` vs. periodo anterior, promedio diario, `BarChart` por categoría y filtro por categoría clicable. `refresh()` y `cambiarRango()` recargan el rango + el previo. **Nota**: recargar al cambiar de rango va por un handler `cambiarRango`, no por `useEffect` con `setState` (`react-hooks/set-state-in-effect`).
 - **Expediente del producto** (`ProductoExpedienteModal`, desde `/admin/dinero/inventario`): stock, valorización, margen unitario, **días de stock** (rotación al ritmo de 30 días), unidades vendidas por mes (`BarChart`) y movimientos. `useState(() => Date.now())` para el "ahora" — no llamar `Date.now()` en render (`react-hooks/purity`).
 
-## Reportes: histórico y exportación a PDF/Excel (`/admin/operacion/reportes`)
+## Reportes: histórico y exportación a PDF/Excel (`/admin/reportes`, antes `/admin/operacion/reportes`)
 
 Pestaña de Operación (no ítem de sidebar). Sin migración: solo lecturas. Solo admin (la restricción real es RLS; las tablas de costos/pagos/liquidaciones no son legibles para jefe de zona ni vigilante).
 
