@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { createFileRoute, Link, useNavigate, useRouter } from '@tanstack/react-router'
 import { Package, Car, Lock, Sparkles, AlertTriangle } from 'lucide-react'
-import { SimpleTopbar } from '../../components/layout/SimpleTopbar'
-import { exigirRol, signOut } from '../../lib/auth'
+import { exigirRol } from '../../lib/auth'
 import { fetchTiposVehiculo } from '../../data/tiposVehiculo'
 import { fetchCombos, precioComboCalculado } from '../../data/combos'
 import { fetchComboServicios, type ComboServicio } from '../../data/comboServicios'
@@ -128,10 +127,7 @@ const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP',
 
 function RecepcionPage() {
   const data = Route.useLoaderData()
-  const { auth } = Route.useRouteContext()
   const router = useRouter()
-  const navigate = useNavigate()
-  const multiRol = (auth?.perfil.roles.length ?? 0) > 1
   const [tipos] = useState<TipoVehiculo[]>(data.tipos)
   const [combos] = useState<Combo[]>(data.combos)
   const [servicios] = useState<Servicio[]>(data.servicios)
@@ -153,12 +149,6 @@ function RecepcionPage() {
 
   return (
     <>
-      <SimpleTopbar
-        title="Recepción"
-        onLogout={signOut}
-        multiRol={multiRol}
-        onCambiarModulo={() => navigate({ to: '/seleccionar-modulo' })}
-      />
       <div className="mx-auto flex max-w-2xl flex-col gap-6 pb-6">
       {data.turno ? (
         <ReceptionForm
@@ -192,7 +182,7 @@ function RecepcionPage() {
           </div>
           <Link
             to="/jefe-zona/caja"
-            className="mt-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700"
+            className="mt-2 rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700"
           >
             Abrir turno
           </Link>
@@ -669,7 +659,7 @@ function ReceptionForm({
         </label>
 
         {motoDuplicada ? (
-          <div className="flex items-start gap-2.5 rounded-lg border border-warning-300 bg-warning-50 px-3 py-2.5 text-sm text-warning-800">
+          <div className="flex items-start gap-2.5 rounded-lg border border-warning-600/30 bg-warning-50 px-3 py-2.5 text-sm text-warning-700">
             <AlertTriangle size={16} className="mt-0.5 shrink-0" />
             <span>
               Esta moto ya está registrada y en proceso — orden #{motoDuplicada.consecutivo},{' '}
@@ -718,7 +708,7 @@ function ReceptionForm({
           type="button"
           onClick={() => setOpenStep(2)}
           disabled={!paso1Completo}
-          className="rounded-lg bg-primary-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-700 disabled:opacity-40"
+          className="rounded-xl bg-primary-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-700 disabled:opacity-40"
         >
           Continuar
         </button>
@@ -892,7 +882,7 @@ function ReceptionForm({
       <button
         type="submit"
         disabled={saving || !paso1Completo || !paso2Completo}
-        className="rounded-lg bg-primary-600 py-3.5 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-40"
+        className="rounded-xl bg-primary-600 py-3.5 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-40"
       >
         {saving ? 'Registrando…' : 'Registrar ingreso'}
       </button>

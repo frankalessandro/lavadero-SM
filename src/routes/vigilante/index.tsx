@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { SimpleTopbar } from '../../components/layout/SimpleTopbar'
-import { exigirRol, signOut } from '../../lib/auth'
-import { LogIn, LogOut, Car, Banknote, AlertTriangle, X, Clock, Lock, Unlock } from 'lucide-react'
+import { createFileRoute } from '@tanstack/react-router'
+import { exigirRol } from '../../lib/auth'
+import { LogIn, LogOut, Car, Banknote, AlertTriangle, Clock, Lock, Unlock, ChevronRight } from 'lucide-react'
 import {
   fetchEstanciasAdentro,
   fetchResumenHoy,
@@ -24,10 +23,15 @@ import { fetchSuscripcionActivaPorPlaca } from '../../data/suscripcionesParquead
 import { estadoVigencia, ESTADO_VIGENCIA_LABEL, type SuscripcionParqueadero } from '../../schemas/suscripcionParqueadero'
 import { fetchTurnoAbierto, abrirTurno, calcularValorEsperado, cerrarTurno } from '../../data/turnos'
 import type { TurnoCaja } from '../../schemas/turnoCaja'
-import { Card } from '../../components/layout/Card'
 import { CustomSelect } from '../../components/layout/CustomSelect'
 import { CurrencyInput } from '../../components/layout/CurrencyInput'
 import { toast } from '../../lib/toast'
+import { Modal } from '../../components/layout/Modal'
+import { Button } from '../../components/layout/Button'
+import { StatCard } from '../../components/layout/StatCard'
+import { EstadoTurno } from '../../components/layout/EstadoTurno'
+import { SectionHeader } from '../../components/layout/PageHeader'
+import { FiltroBusqueda } from '../../components/layout/Filtros'
 
 async function loadParqueadero() {
   const [estancias, resumen, turno] = await Promise.all([
@@ -64,13 +68,15 @@ function tiempoTranscurrido(horaIngreso: string): string {
 function VigilanteHome() {
   const data = Route.useLoaderData()
   const { auth } = Route.useRouteContext()
-  const navigate = useNavigate()
-  const multiRol = (auth?.perfil.roles.length ?? 0) > 1
   const [estancias, setEstancias] = useState<EstanciaParqueadero[]>(data.estancias)
   const [resumen, setResumen] = useState(data.resumen)
   const [turno, setTurno] = useState<TurnoCaja | undefined>(data.turno)
   const [modal, setModal] = useState<'entrada' | 'salida' | 'abrirTurno' | 'cerrarTurno' | null>(null)
   const [salidaSeleccionada, setSalidaSeleccionada] = useState<EstanciaParqueadero | null>(null)
+  const [busqueda, setBusqueda] = useState('')
+  const estanciasVisibles = busqueda
+    ? estancias.filter((e) => e.placa.toUpperCase().includes(busqueda.trim().toUpperCase()))
+    : estancias
 
   async function refresh() {
     const [nuevasEstancias, nuevoResumen] = await Promise.all([fetchEstanciasAdentro(), fetchResumenHoy()])
@@ -90,71 +96,33 @@ function VigilanteHome() {
 
   return (
     <>
-      <SimpleTopbar
-        title="Parqueadero"
-        onLogout={signOut}
-        multiRol={multiRol}
-        onCambiarModulo={() => navigate({ to: '/seleccionar-modulo' })}
-      />
       <div className="mx-auto flex max-w-2xl flex-col gap-4 pb-6">
       {/* Turno de caja — arqueo ciego (regla 15), visible siempre arriba de todo lo demás */}
-      {turno ? (
-        <div className="flex items-center justify-between gap-3 rounded-2xl border border-success-100 bg-success-50 p-4">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-success-100 text-success-700">
-              <Unlock size={16} strokeWidth={2.25} />
-            </span>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-neutral-900">Turno abierto — {turno.responsable}</p>
-              <p className="text-xs text-neutral-500">Desde las {HORA_FORMAT.format(new Date(turno.abiertoEn))}</p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setModal('cerrarTurno')}
-            className="shrink-0 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs font-semibold text-neutral-700 transition-colors hover:bg-neutral-50"
-          >
-            Cerrar turno
-          </button>
-        </div>
-      ) : (
-        <div className="flex items-center justify-between gap-3 rounded-2xl border border-warning-100 bg-warning-50 p-4">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-warning-100 text-warning-700">
-              <Lock size={16} strokeWidth={2.25} />
-            </span>
-            <p className="min-w-0 text-sm font-medium text-warning-700">Abre tu turno para empezar a registrar movimientos.</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setModal('abrirTurno')}
-            className="shrink-0 rounded-lg bg-primary-600 px-3 py-2 text-xs font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700"
-          >
-            Abrir turno
-          </button>
-        </div>
-      )}
+      <EstadoTurno
+        abierto={Boolean(turno)}
+        titulo={turno ? `Turno abierto · ${turno.responsable}` : 'Caja cerrada'}
+        detalle={
+          turno
+            ? `Desde las ${HORA_FORMAT.format(new Date(turno.abiertoEn))}`
+            : 'Abre tu turno para empezar a registrar entradas y salidas.'
+        }
+        accion={
+          turno ? (
+            <Button icon={Lock} onClick={() => setModal('cerrarTurno')}>
+              Cerrar turno
+            </Button>
+          ) : (
+            <Button variant="primary" icon={Unlock} onClick={() => setModal('abrirTurno')}>
+              Abrir turno
+            </Button>
+          )
+        }
+      />
 
-      {/* Stats — 2 columnas incluso en móvil, son las dos cifras que el vigilante necesita de un vistazo */}
+      {/* Las dos cifras que el vigilante necesita de un vistazo — 2 columnas incluso en móvil */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="flex items-center gap-3 rounded-2xl border border-neutral-200 bg-white p-4 shadow-card">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
-            <Car size={18} strokeWidth={2} />
-          </span>
-          <div className="min-w-0">
-            <p className="text-xs font-medium text-neutral-500">Adentro</p>
-            <p className="text-lg font-semibold text-neutral-900">{resumen.vehiculosAdentro}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3 rounded-2xl border border-neutral-200 bg-white p-4 shadow-card">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-success-50 text-success-700">
-            <Banknote size={18} strokeWidth={2} />
-          </span>
-          <div className="min-w-0">
-            <p className="text-xs font-medium text-neutral-500">Recaudado hoy</p>
-            <p className="truncate text-lg font-semibold text-neutral-900">{COP.format(resumen.dineroHoy)}</p>
-          </div>
-        </div>
+        <StatCard label="En el patio" value={String(resumen.vehiculosAdentro)} icon={Car} />
+        <StatCard label="Recaudado hoy" value={COP.format(resumen.dineroHoy)} icon={Banknote} />
       </div>
 
       {/* Acciones principales — grandes, para pulgar, siempre visibles arriba del listado */}
@@ -182,12 +150,17 @@ function VigilanteHome() {
         </button>
       </div>
 
-      <div>
-        <h2 className="mb-2 px-1 text-sm font-semibold text-neutral-900">
-          Vehículos en el patio ({estancias.length})
-        </h2>
+      <section className="flex flex-col gap-3">
+        <SectionHeader
+          title="Vehículos en el patio"
+          count={estancias.length}
+          hint="Toca uno para registrar su salida."
+        />
+        {estancias.length > 5 ? (
+          <FiltroBusqueda value={busqueda} onChange={setBusqueda} placeholder="Buscar placa" mayusculas ancho="" />
+        ) : null}
         <div className="flex flex-col gap-2">
-          {estancias.map((estancia) => {
+          {estanciasVisibles.map((estancia) => {
             const alerta = fueraDeVentanaSalida(estancia.modalidad)
             return (
               <button
@@ -212,17 +185,19 @@ function VigilanteHome() {
                     <Clock size={12} /> {tiempoTranscurrido(estancia.horaIngreso)}
                   </p>
                 </div>
-                <span className="shrink-0 rounded-lg bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-600">
-                  Salida
+                <span className="flex shrink-0 items-center gap-1 rounded-lg bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-600">
+                  Salida <ChevronRight size={13} />
                 </span>
               </button>
             )
           })}
-          {estancias.length === 0 ? (
-            <Card className="py-10 text-center text-sm text-neutral-400">No hay vehículos en el patio.</Card>
+          {estanciasVisibles.length === 0 ? (
+            <p className="rounded-2xl border border-dashed border-neutral-200 bg-white px-4 py-10 text-center text-sm text-neutral-400">
+              {estancias.length === 0 ? 'No hay vehículos en el patio.' : 'Ninguna placa coincide.'}
+            </p>
           ) : null}
         </div>
-      </div>
+      </section>
 
       {modal === 'entrada' ? (
         <EntradaModal
@@ -321,7 +296,7 @@ function AbrirTurnoModal({ miNombre, onClose, onSaved }: { miNombre: string; onC
           type="button"
           onClick={handleSubmit}
           disabled={saving}
-          className="rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
+          className="mt-1 w-full rounded-xl bg-primary-600 py-3.5 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
         >
           {saving ? 'Abriendo…' : 'Abrir turno'}
         </button>
@@ -414,7 +389,7 @@ function CerrarTurnoModal({ turno, onClose, onSaved }: { turno: TurnoCaja; onClo
             type="button"
             onClick={handleRevelar}
             disabled={saving}
-            className="rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
+            className="mt-1 w-full rounded-xl bg-primary-600 py-3.5 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
           >
             {saving ? 'Calculando…' : 'Confirmar conteo'}
           </button>
@@ -480,7 +455,7 @@ function CerrarTurnoModal({ turno, onClose, onSaved }: { turno: TurnoCaja; onClo
             type="button"
             onClick={handleCerrar}
             disabled={saving}
-            className="rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
+            className="mt-1 w-full rounded-xl bg-primary-600 py-3.5 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
           >
             {saving ? 'Cerrando…' : 'Confirmar cierre'}
           </button>
@@ -620,7 +595,7 @@ function EntradaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
                 key={value}
                 type="button"
                 onClick={() => setModalidad(value)}
-                className={`rounded-lg border px-2 py-2.5 text-sm font-medium transition-colors ${
+                className={`rounded-xl border px-2 py-3 text-sm font-medium transition-colors ${
                   modalidad === value
                     ? 'border-primary-600 bg-primary-50 text-primary-700'
                     : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
@@ -644,7 +619,7 @@ function EntradaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
           type="button"
           onClick={handleSubmit}
           disabled={saving}
-          className="rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
+          className="mt-1 w-full rounded-xl bg-primary-600 py-3.5 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
         >
           {saving ? 'Registrando…' : 'Registrar entrada'}
         </button>
@@ -773,7 +748,7 @@ function SalidaModal({
                     key={value}
                     type="button"
                     onClick={() => setMetodoPago(value)}
-                    className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
+                    className={`rounded-xl border px-3 py-3 text-sm font-medium transition-colors ${
                       metodoPago === value
                         ? 'border-primary-600 bg-primary-50 text-primary-700'
                         : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
@@ -791,7 +766,7 @@ function SalidaModal({
           type="button"
           onClick={handleSubmit}
           disabled={!estancia || saving}
-          className="rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
+          className="mt-1 w-full rounded-xl bg-primary-600 py-3.5 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
         >
           {saving ? 'Registrando…' : 'Confirmar salida'}
         </button>
@@ -800,31 +775,11 @@ function SalidaModal({
   )
 }
 
-// Hoja modal — en móvil se ancla abajo (como un bottom sheet), en desktop queda centrada.
-function ModalSheet({
-  title,
-  onClose,
-  children,
-}: {
-  title: string
-  onClose: () => void
-  children: ReactNode
-}) {
+// Hoja modal del parqueadero sobre el Modal común: hoja anclada abajo en celular, centrada en escritorio.
+function ModalSheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
-    <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="w-full max-w-sm rounded-t-2xl bg-white p-5 shadow-card-hover sm:rounded-2xl">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-neutral-900">{title}</h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
+    <Modal title={title} size="sm" onClose={onClose}>
+      {children}
+    </Modal>
   )
 }

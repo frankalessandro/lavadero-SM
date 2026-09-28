@@ -34,7 +34,7 @@ export interface AdminSeccion {
   label: string
   icon: Icono
   /** Grupo del sidebar — ordena el menú por frecuencia de uso, no por tabla de BD. */
-  grupo: 'Hoy' | 'Análisis' | 'Gestión' | 'Ajustes'
+  grupo: string
   /** Sección con pestañas: el ítem sigue activo mientras se navega entre ellas. */
   exact?: boolean
   tabs?: AdminTab[]
@@ -111,15 +111,21 @@ export interface UbicacionAdmin {
   pagina?: string
 }
 
-/** Sección + pestaña activas para el título del Topbar (ej. "Dinero" › "Liquidaciones"). */
-export function ubicacionAdmin(pathname: string): UbicacionAdmin {
-  const limpio = pathname.replace(/\/+$/, '') || '/admin'
-  const directa = ADMIN_SECCIONES.find((s) => !s.tabs && s.to === limpio)
+/** Sección + pestaña activas para el título del Topbar (ej. "Dinero" › "Liquidaciones"). Sirve
+ *  para cualquier área con menú (gerencia, jefe de patio): la primera sección es la raíz. */
+export function ubicacionEn(secciones: AdminSeccion[], pathname: string): UbicacionAdmin {
+  const raiz = secciones[0]
+  const limpio = pathname.replace(/\/+$/, '') || raiz.to
+  const directa = secciones.find((s) => !s.tabs && s.to === limpio)
   if (directa) return { seccion: directa.label, seccionTo: directa.to, icon: directa.icon }
-  for (const s of ADMIN_SECCIONES) {
+  for (const s of secciones) {
     const tab = s.tabs?.find((t) => limpio === t.to || limpio.startsWith(`${t.to}/`))
     if (tab) return { seccion: s.label, seccionTo: s.to, icon: s.icon, pagina: tab.label }
   }
-  const padre = ADMIN_SECCIONES.find((s) => s.to !== '/admin' && limpio.startsWith(s.to)) ?? ADMIN_SECCIONES[0]
+  const padre = secciones.find((s) => s.to !== raiz.to && limpio.startsWith(s.to)) ?? raiz
   return { seccion: padre.label, seccionTo: padre.to, icon: padre.icon }
+}
+
+export function ubicacionAdmin(pathname: string): UbicacionAdmin {
+  return ubicacionEn(ADMIN_SECCIONES, pathname)
 }
