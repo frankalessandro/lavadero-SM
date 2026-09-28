@@ -15,6 +15,7 @@ import {
 } from '../../data/reportes'
 import { METODO_PAGO_LABEL } from '../metodoPago'
 import type { MetodoPago } from '../../schemas/orden'
+import { CLASE_VEHICULO_LABEL, type ClaseVehiculoParqueadero } from '../../schemas/estanciaParqueadero'
 import type {
   Celda,
   ColumnaReporte,
@@ -488,27 +489,34 @@ async function parqueadero(p: PeriodoReporte): Promise<TablaReporte> {
   const cobradas = filas.filter((e) => (e.cobro ?? 0) > 0)
   return {
     columnas: [
+      col('Tiquete', 'texto', 10),
       col('Placa', 'texto', 10),
+      col('Vehículo', 'texto', 11),
       col('Modalidad', 'texto', 14),
       col('Ingreso', 'fechahora', 17),
       col('Salida', 'fechahora', 17),
       col('Estado', 'texto', 10),
       col('Cobro', 'moneda', 12),
+      col('Multa', 'moneda', 10),
       col('Método', 'texto', 14),
     ],
     filas: filas.map((e): Celda[] => [
+      `PAR-${e.consecutivo}`,
       e.placa,
+      CLASE_VEHICULO_LABEL[e.clase_vehiculo as ClaseVehiculoParqueadero] ?? e.clase_vehiculo,
       MODALIDAD[e.modalidad] ?? e.modalidad,
       ts(e.hora_ingreso),
       ts(e.hora_salida),
       e.estado === 'adentro' ? 'Adentro' : 'Fuera',
       e.cobro ?? 0,
+      e.multa,
       metodo(e.metodo_pago),
     ]),
     resumen: [
       resumen('Estancias', filas.length),
       resumen('Con cobro', cobradas.length),
       resumen('Total cobrado', suma(cobradas.map((e) => e.cobro ?? 0)), 'moneda'),
+      resumen('De eso, multas', suma(filas.map((e) => e.multa)), 'moneda'),
     ],
   }
 }

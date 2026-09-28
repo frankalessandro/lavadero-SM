@@ -6,11 +6,12 @@ import {
   type EstanciaParqueadero,
   type ModalidadParqueadero,
   type MetodoPagoParqueadero,
+  type ClaseVehiculoParqueadero,
 } from '../schemas/estanciaParqueadero'
 import { fetchTurnoAbierto } from './turnos'
 
 const ESTANCIA_SELECT =
-  'id, placa, modalidad, horaIngreso:hora_ingreso, horaSalida:hora_salida, cobro, metodoPago:metodo_pago, estado'
+  'id, consecutivo, placa, modalidad, claseVehiculo:clase_vehiculo, horaIngreso:hora_ingreso, horaSalida:hora_salida, cobro, multa, metodoPago:metodo_pago, estado'
 
 function inicioDeHoyISO(): string {
   const ahora = new Date()
@@ -59,13 +60,54 @@ export async function fetchSalidasParqueaderoEnRango(
   }))
 }
 
-// Mensualidad y fijo 24h no cobran por movimiento individual — se facturan aparte (mensualidad)
-// o ya están cubiertos (fijo) — regla de negocio 17. La tarifa viene de M1 (admin), no hardcodeada.
-export async function cobroPorModalidad(modalidad: ModalidadParqueadero): Promise<number> {
-  if (modalidad !== 'noche') return 0
-  const { data, error } = await db.from('tarifas_parqueadero').select('precio').eq('modalidad', 'noche').single()
+// Tarifa de la noche para una clase — solo para el aviso "se cobra $X al retiro" al registrar la
+// entrada. El cobro real lo fija la base al salir (registrar_salida_parqueadero).
+export async function tarifaNoche(clase: ClaseVehiculoParqueadero): Promise<number> {
+  const { data, error } = await db
+    .from('tarifas_parqueadero')
+    .select('precio')
+    .eq('modalidad', 'noche')
+    .eq('clase_vehiculo', clase)
+    .maybeSingle()
   if (error) throw new Error(error.message)
-  return data.precio ?? 0
+  return data?.precio ?? 0
+}
+
+export interface CobroPrevisto {
+  tarifa: number
+  multa: number
+  total: number
+  fueraDeVentana: boolean
+}
+
+// Lo que se cobraría si el vehículo sale AHORA — misma cuenta que la RPC de salida (0075), sin
+// modificar nada. La pantalla nunca calcula el cobro por su lado.
+export async function fetchCobroPrevisto(estanciaId: string): Promise<CobroPrevisto> {
+  const { data, error } = await db.rpc('cobro_previsto_parqueadero', { p_estancia_id: estanciaId })
+  if (error) throw new Error(error.message)
+  const row = (data as Record<string, unknown>[])[0] ?? {}
+  return {
+    tarifa: Number(row.tarifa ?? 0),
+    multa: Number(row.multa ?? 0),
+    total: Number(row.total ?? 0),
+    fueraDeVentana: Boolean(row.fuera_de_ventana),
+  }
+}
+
+// Última estancia de una placa (autocompletado en la entrada: trae clase y modalidad de la vez
+// pasada, M4 "autocompletado de placa desde el histórico").
+export async function fetchUltimaEstanciaPorPlaca(placa: string): Promise<EstanciaParqueadero | undefined> {
+  const normalizada = placa.trim().toUpperCase()
+  if (normalizada.length < 5) return undefined
+  const { data, error } = await db
+    .from('estancias_parqueadero')
+    .select(ESTANCIA_SELECT)
+    .eq('placa', normalizada)
+    .order('hora_ingreso', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  return data ? estanciaParqueaderoSchema.parse(data) : undefined
 }
 
 export async function registrarEntrada(input: EntradaInput): Promise<EstanciaParqueadero> {
@@ -76,7 +118,7 @@ export async function registrarEntrada(input: EntradaInput): Promise<EstanciaPar
   }
   const { data, error } = await db
     .from('estancias_parqueadero')
-    .insert({ placa: parsed.placa, modalidad: parsed.modalidad })
+    .insert({ placa: parsed.placa, modalidad: parsed.modalidad, clase_vehiculo: parsed.claseVehiculo })
     .select(ESTANCIA_SELECT)
     .single()
   if (error) throw new Error(error.message)
@@ -130,9 +172,15 @@ export async function fetchLavadoHoyPorPlaca(placa: string): Promise<LavadoHoy |
   }
 }
 
-// Ventana de salida 7:00–8:00am para noche y mensualidad (regla de negocio 7).
-export function fueraDeVentanaSalida(modalidad: ModalidadParqueadero, ahora = new Date()): boolean {
+// Ventana de salida (regla de negocio 7), espejo de `interno.fuera_de_ventana_salida` (0075):
+// el límite son las 8:00 am siguientes al ingreso. Noche y mensualidad; fijo nunca. Antes se
+// marcaba "tarde" cualquier salida entre 8 am y 7 pm sin mirar el ingreso, así que un carro que
+// entraba a las 10:00 y salía a las 15:00 del mismo día aparecía como fuera de ventana.
+export function fueraDeVentanaSalida(modalidad: ModalidadParqueadero, horaIngreso: string, ahora = new Date()): boolean {
   if (modalidad === 'fijo') return false
-  const hora = ahora.getHours() + ahora.getMinutes() / 60
-  return hora >= 8 && hora < 19
+  const ingreso = new Date(horaIngreso)
+  const limite = new Date(ingreso)
+  limite.setHours(8, 0, 0, 0)
+  if (ingreso >= limite) limite.setDate(limite.getDate() + 1)
+  return ahora > limite
 }

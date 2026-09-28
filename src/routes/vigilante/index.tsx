@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { exigirRol } from '../../lib/auth'
-import { LogIn, LogOut, Car, Banknote, AlertTriangle, Clock, Lock, Unlock, ChevronRight } from 'lucide-react'
+import { LogIn, LogOut, Car, Bike, Banknote, AlertTriangle, Clock, Lock, Unlock, ChevronRight, History } from 'lucide-react'
 import {
   fetchEstanciasAdentro,
   fetchResumenHoy,
@@ -9,7 +9,10 @@ import {
   registrarSalida,
   fetchLavadoHoyPorPlaca,
   type LavadoHoy,
-  cobroPorModalidad,
+  tarifaNoche,
+  fetchCobroPrevisto,
+  fetchUltimaEstanciaPorPlaca,
+  type CobroPrevisto,
   fueraDeVentanaSalida,
 } from '../../data/estanciasParqueadero'
 import {
@@ -17,6 +20,8 @@ import {
   type EstanciaParqueadero,
   type ModalidadParqueadero,
   type MetodoPagoParqueadero,
+  type ClaseVehiculoParqueadero,
+  CLASE_VEHICULO_LABEL,
 } from '../../schemas/estanciaParqueadero'
 import { METODO_PAGO_LABEL } from '../../lib/metodoPago'
 import { fetchSuscripcionActivaPorPlaca } from '../../data/suscripcionesParqueadero'
@@ -26,6 +31,7 @@ import type { TurnoCaja } from '../../schemas/turnoCaja'
 import { CustomSelect } from '../../components/layout/CustomSelect'
 import { CurrencyInput } from '../../components/layout/CurrencyInput'
 import { toast } from '../../lib/toast'
+import { ReciboParqueaderoModal, type VarianteReciboParqueadero } from '../../components/layout/ReciboParqueaderoModal'
 import { Modal } from '../../components/layout/Modal'
 import { Button } from '../../components/layout/Button'
 import { StatCard } from '../../components/layout/StatCard'
@@ -43,6 +49,7 @@ async function loadParqueadero() {
 }
 
 const HORA_FORMAT = new Intl.DateTimeFormat('es-CO', { hour: 'numeric', minute: '2-digit', hour12: true })
+const FECHA_CORTA = new Intl.DateTimeFormat('es-CO', { day: 'numeric', month: 'short' })
 
 export const Route = createFileRoute('/vigilante/')({
   beforeLoad: ({ context }) => exigirRol(context.auth, 'vigilante'),
@@ -74,6 +81,11 @@ function VigilanteHome() {
   const [modal, setModal] = useState<'entrada' | 'salida' | 'abrirTurno' | 'cerrarTurno' | null>(null)
   const [salidaSeleccionada, setSalidaSeleccionada] = useState<EstanciaParqueadero | null>(null)
   const [busqueda, setBusqueda] = useState('')
+  const [recibo, setRecibo] = useState<{
+    estancia: EstanciaParqueadero
+    variant: VarianteReciboParqueadero
+    tarifaNoche?: number
+  } | null>(null)
   const estanciasVisibles = busqueda
     ? estancias.filter((e) => e.placa.toUpperCase().includes(busqueda.trim().toUpperCase()))
     : estancias
@@ -156,12 +168,12 @@ function VigilanteHome() {
           count={estancias.length}
           hint="Toca uno para registrar su salida."
         />
-        {estancias.length > 5 ? (
-          <FiltroBusqueda value={busqueda} onChange={setBusqueda} placeholder="Buscar placa" mayusculas ancho="" />
+        {estancias.length > 0 ? (
+          <FiltroBusqueda value={busqueda} onChange={setBusqueda} placeholder="¿Está adentro? Buscar placa" mayusculas ancho="" />
         ) : null}
         <div className="flex flex-col gap-2">
           {estanciasVisibles.map((estancia) => {
-            const alerta = fueraDeVentanaSalida(estancia.modalidad)
+            const alerta = fueraDeVentanaSalida(estancia.modalidad, estancia.horaIngreso)
             return (
               <button
                 key={estancia.id}
@@ -172,6 +184,9 @@ function VigilanteHome() {
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-mono text-sm font-semibold text-neutral-900">{estancia.placa}</span>
+                    <span className="inline-flex rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-700">
+                      {CLASE_VEHICULO_LABEL[estancia.claseVehiculo]}
+                    </span>
                     <span className="inline-flex rounded-full bg-primary-50 px-2 py-0.5 text-xs font-medium text-primary-700">
                       {MODALIDAD_LABEL[estancia.modalidad]}
                     </span>
@@ -182,7 +197,8 @@ function VigilanteHome() {
                     ) : null}
                   </div>
                   <p className="mt-1 flex items-center gap-1 text-xs text-neutral-400">
-                    <Clock size={12} /> {tiempoTranscurrido(estancia.horaIngreso)}
+                    <Clock size={12} /> {tiempoTranscurrido(estancia.horaIngreso)} ·{' '}
+                    <span className="font-mono">PAR-{estancia.consecutivo}</span>
                   </p>
                 </div>
                 <span className="flex shrink-0 items-center gap-1 rounded-lg bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-600">
@@ -202,8 +218,9 @@ function VigilanteHome() {
       {modal === 'entrada' ? (
         <EntradaModal
           onClose={() => setModal(null)}
-          onSaved={async () => {
+          onSaved={async (estancia, tarifa) => {
             setModal(null)
+            setRecibo({ estancia, variant: 'ingreso', tarifaNoche: tarifa })
             await refresh()
           }}
         />
@@ -214,10 +231,20 @@ function VigilanteHome() {
           estancias={estancias}
           seleccionada={salidaSeleccionada}
           onClose={() => setModal(null)}
-          onSaved={async () => {
+          onSaved={async (estancia) => {
             setModal(null)
+            setRecibo({ estancia, variant: 'salida' })
             await refresh()
           }}
+        />
+      ) : null}
+
+      {recibo ? (
+        <ReciboParqueaderoModal
+          estancia={recibo.estancia}
+          variant={recibo.variant}
+          tarifaNoche={recibo.tarifaNoche}
+          onClose={() => setRecibo(null)}
         />
       ) : null}
 
@@ -512,23 +539,41 @@ function AvisoLavadoHoy({ lavado, enSalida = false }: { lavado: LavadoHoy; enSal
   )
 }
 
-function EntradaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+function EntradaModal({
+  onClose,
+  onSaved,
+}: {
+  onClose: () => void
+  onSaved: (estancia: EstanciaParqueadero, tarifaNoche: number) => void
+}) {
   const [placa, setPlaca] = useState('')
   const [modalidad, setModalidad] = useState<ModalidadParqueadero>('noche')
+  const [clase, setClase] = useState<ClaseVehiculoParqueadero>('carro')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const enVueloRef = useRef(false)
-  const [tarifaNoche, setTarifaNoche] = useState(0)
+  // Si el vigilante ya eligió a mano clase o modalidad, el autocompletado no se la pisa.
+  const tocadoRef = useRef({ clase: false, modalidad: false })
+  const [tarifa, setTarifa] = useState(0)
   const [lavadoHoy, setLavadoHoy] = useState<LavadoHoy | undefined>(undefined)
   const [suscripcion, setSuscripcion] = useState<SuscripcionParqueadero | undefined>(undefined)
+  const [anterior, setAnterior] = useState<EstanciaParqueadero | undefined>(undefined)
+  const yaAdentro = anterior?.estado === 'adentro'
 
   useEffect(() => {
-    cobroPorModalidad('noche').then(setTarifaNoche)
-  }, [])
+    let cancelado = false
+    tarifaNoche(clase)
+      .then((t) => {
+        if (!cancelado) setTarifa(t)
+      })
+      .catch(() => {})
+    return () => {
+      cancelado = true
+    }
+  }, [clase])
 
-  // Regla 8: avisar si esta placa ya pasó por el lavadero hoy — no se cobra parqueadero combinado.
-  // `fetchLavadoHoyPorPlaca('')` resuelve a undefined, así que pasar la placa corta limpia el aviso
-  // sin un setState síncrono dentro del effect.
+  // Autocompletado por placa (M4): suscripción activa (manda la modalidad), lavado de hoy (regla 8)
+  // y última estancia (trae clase y modalidad de la vez pasada, y avisa si ya está adentro).
   useEffect(() => {
     const placaLimpia = placa.trim().length >= 5 ? placa.trim() : ''
     let cancelado = false
@@ -538,9 +583,16 @@ function EntradaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
           if (!cancelado) setLavadoHoy(l)
         })
         .catch(() => {})
-      fetchSuscripcionActivaPorPlaca(placaLimpia)
-        .then((sub) => {
-          if (!cancelado) setSuscripcion(sub)
+      Promise.all([fetchSuscripcionActivaPorPlaca(placaLimpia), fetchUltimaEstanciaPorPlaca(placaLimpia)])
+        .then(([sub, ultima]) => {
+          if (cancelado) return
+          setSuscripcion(sub)
+          setAnterior(ultima)
+          if (ultima && !tocadoRef.current.clase) setClase(ultima.claseVehiculo)
+          if (!tocadoRef.current.modalidad) {
+            if (sub) setModalidad(sub.modalidad)
+            else if (ultima) setModalidad(ultima.modalidad)
+          }
         })
         .catch(() => {})
     }, 350)
@@ -551,8 +603,8 @@ function EntradaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
   }, [placa])
 
   async function handleSubmit() {
-    if (enVueloRef.current) return
-    const parsed = entradaInputSchema.safeParse({ placa, modalidad })
+    if (enVueloRef.current || yaAdentro) return
+    const parsed = entradaInputSchema.safeParse({ placa, modalidad, claseVehiculo: clase })
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Datos inválidos')
       return
@@ -561,9 +613,9 @@ function EntradaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
     enVueloRef.current = true
     setSaving(true)
     try {
-      await registrarEntrada(parsed.data)
-      onSaved()
+      const estancia = await registrarEntrada(parsed.data)
       toast.exito('Entrada registrada')
+      onSaved(estancia, tarifa)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo registrar la entrada')
       toast.desdeError(err, 'No se pudo registrar la entrada')
@@ -585,7 +637,45 @@ function EntradaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
             placeholder="AB123CD"
             className="rounded-lg border border-neutral-300 px-3 py-3 font-mono text-base uppercase outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
           />
+          {anterior && !yaAdentro ? (
+            <span className="flex items-center gap-1.5 text-xs text-primary-700">
+              <History size={12} /> Ya vino antes ({CLASE_VEHICULO_LABEL[anterior.claseVehiculo]} ·{' '}
+              {MODALIDAD_LABEL[anterior.modalidad]}, {FECHA_CORTA.format(new Date(anterior.horaIngreso))}) — datos precargados
+            </span>
+          ) : null}
         </label>
+
+        {yaAdentro && anterior ? (
+          <p className="flex items-start gap-2 rounded-lg border border-danger-600/25 bg-danger-50 px-3 py-2.5 text-xs text-danger-700">
+            <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+            Esta placa ya está adentro (PAR-{anterior.consecutivo}, desde {HORA_FORMAT.format(new Date(anterior.horaIngreso))}).
+            Registra primero su salida.
+          </p>
+        ) : null}
+
+        <div className="flex flex-col gap-1.5 text-sm">
+          <span className="font-medium text-neutral-700">Vehículo</span>
+          <div className="grid grid-cols-3 gap-2">
+            {(Object.keys(CLASE_VEHICULO_LABEL) as ClaseVehiculoParqueadero[]).map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => {
+                  tocadoRef.current.clase = true
+                  setClase(value)
+                }}
+                className={`flex flex-col items-center gap-1 rounded-xl border px-2 py-3 text-sm font-medium transition-colors ${
+                  clase === value
+                    ? 'border-primary-600 bg-primary-50 text-primary-700'
+                    : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
+                }`}
+              >
+                {value === 'carro' ? <Car size={18} /> : <Bike size={18} />}
+                {CLASE_VEHICULO_LABEL[value]}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div className="flex flex-col gap-1.5 text-sm">
           <span className="font-medium text-neutral-700">Modalidad</span>
@@ -594,7 +684,10 @@ function EntradaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
               <button
                 key={value}
                 type="button"
-                onClick={() => setModalidad(value)}
+                onClick={() => {
+                  tocadoRef.current.modalidad = true
+                  setModalidad(value)
+                }}
                 className={`rounded-xl border px-2 py-3 text-sm font-medium transition-colors ${
                   modalidad === value
                     ? 'border-primary-600 bg-primary-50 text-primary-700'
@@ -606,7 +699,9 @@ function EntradaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
             ))}
           </div>
           {modalidad === 'noche' ? (
-            <p className="text-xs text-neutral-400">Se cobra {COP.format(tarifaNoche)} al retiro, no ahora.</p>
+            <p className="text-xs text-neutral-400">
+              {tarifa > 0 ? `Se cobra ${COP.format(tarifa)} al retiro, no ahora.` : 'Tarifa de noche sin definir para este vehículo.'}
+            </p>
           ) : null}
         </div>
 
@@ -618,7 +713,7 @@ function EntradaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={saving}
+          disabled={saving || yaAdentro}
           className="mt-1 w-full rounded-xl bg-primary-600 py-3.5 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
         >
           {saving ? 'Registrando…' : 'Registrar entrada'}
@@ -637,13 +732,13 @@ function SalidaModal({
   estancias: EstanciaParqueadero[]
   seleccionada: EstanciaParqueadero | null
   onClose: () => void
-  onSaved: () => void
+  onSaved: (estancia: EstanciaParqueadero) => void
 }) {
   const [estanciaId, setEstanciaId] = useState(seleccionada?.id ?? '')
   const [metodoPago, setMetodoPago] = useState<MetodoPagoParqueadero>('efectivo')
   const [saving, setSaving] = useState(false)
   const enVueloRef = useRef(false)
-  const [cobro, setCobro] = useState(0)
+  const [cobro, setCobro] = useState<CobroPrevisto | undefined>(undefined)
 
   const estancia = useMemo(() => estancias.find((e) => e.id === estanciaId), [estancias, estanciaId])
   const [lavadoHoy, setLavadoHoy] = useState<LavadoHoy | undefined>(undefined)
@@ -667,30 +762,33 @@ function SalidaModal({
     }
   }, [estancia])
 
+  // El cobro lo calcula la base (tarifa por clase + multa si salió tarde) — la misma cuenta que
+  // hará al confirmar. La pantalla solo lo muestra.
   useEffect(() => {
     let cancelado = false
-    async function cargarCobro() {
-      const valor = estancia ? await cobroPorModalidad(estancia.modalidad) : 0
-      if (!cancelado) setCobro(valor)
-    }
-    cargarCobro()
+    if (!estancia) return
+    fetchCobroPrevisto(estancia.id)
+      .then((c) => {
+        if (!cancelado) setCobro(c)
+      })
+      .catch((err) => toast.desdeError(err, 'No se pudo calcular el cobro'))
     return () => {
       cancelado = true
     }
   }, [estancia])
 
+  const total = estancia && cobro ? cobro.total : 0
+
   async function handleSubmit() {
-    if (!estancia) return
+    if (!estancia || !cobro) return
     if (enVueloRef.current) return
     enVueloRef.current = true
     setSaving(true)
     try {
-      await registrarSalida(estancia.id, cobro > 0 ? metodoPago : undefined)
-      onSaved()
+      const actualizada = await registrarSalida(estancia.id, total > 0 ? metodoPago : undefined)
       toast.exito('Salida registrada')
+      onSaved(actualizada)
     } catch (err) {
-      // Este modal no tenía estado de error propio — un rechazo de la RPC (validación de método
-      // de pago, etc.) fallaba en silencio, sin nada en pantalla. El toast es ahora esa señal.
       toast.desdeError(err, 'No se pudo registrar la salida')
       enVueloRef.current = false
     } finally {
@@ -706,39 +804,67 @@ function SalidaModal({
             <span className="font-medium text-neutral-700">Placa</span>
             <CustomSelect
               value={estanciaId}
-              onChange={setEstanciaId}
+              onChange={(id) => {
+                setCobro(undefined)
+                setEstanciaId(id)
+              }}
               placeholder="Selecciona un vehículo…"
               options={estancias.map((e) => ({
                 value: e.id,
-                label: `${e.placa} — ${MODALIDAD_LABEL[e.modalidad]}`,
+                label: `${e.placa} — ${CLASE_VEHICULO_LABEL[e.claseVehiculo]} · ${MODALIDAD_LABEL[e.modalidad]}`,
               }))}
             />
           </label>
         ) : (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-lg font-semibold text-neutral-900">{estancia?.placa}</span>
-            <span className="inline-flex rounded-full bg-primary-50 px-2 py-0.5 text-xs font-medium text-primary-700">
-              {estancia ? MODALIDAD_LABEL[estancia.modalidad] : ''}
-            </span>
+            {estancia ? (
+              <>
+                <span className="inline-flex rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-700">
+                  {CLASE_VEHICULO_LABEL[estancia.claseVehiculo]}
+                </span>
+                <span className="inline-flex rounded-full bg-primary-50 px-2 py-0.5 text-xs font-medium text-primary-700">
+                  {MODALIDAD_LABEL[estancia.modalidad]}
+                </span>
+                <span className="font-mono text-xs text-neutral-400">PAR-{estancia.consecutivo}</span>
+              </>
+            ) : null}
           </div>
         )}
 
-        {estancia ? (
-          fueraDeVentanaSalida(estancia.modalidad) ? (
-            <p className="flex items-center gap-1.5 rounded-lg bg-warning-50 px-3 py-2 text-xs text-warning-700">
-              <AlertTriangle size={13} /> Fuera de la ventana de salida (7–8am). El cobro adicional queda pendiente
-              de definir.
-            </p>
-          ) : null
+        {estancia && cobro?.fueraDeVentana ? (
+          <p className="flex items-start gap-1.5 rounded-lg bg-warning-50 px-3 py-2 text-xs text-warning-700">
+            <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+            {cobro.multa > 0
+              ? `Salió después de las 8:00 am: se suma la multa de ${COP.format(cobro.multa)}.`
+              : 'Salió después de las 8:00 am. La multa todavía no tiene valor definido, así que no se cobra.'}
+          </p>
         ) : null}
 
         {suscripcion ? <AvisoSuscripcion sus={suscripcion} /> : null}
         {lavadoHoy ? <AvisoLavadoHoy lavado={lavadoHoy} enSalida /> : null}
 
-        {estancia && cobro > 0 ? (
+        {estancia && !cobro ? <p className="text-center text-xs text-neutral-400">Calculando cobro…</p> : null}
+
+        {estancia && cobro && total > 0 ? (
           <>
-            <div className="rounded-lg bg-primary-50 px-3 py-2.5 text-sm font-medium text-primary-900">
-              Cobrar {COP.format(cobro)}
+            <div className="flex flex-col gap-1.5 rounded-lg bg-primary-50 px-3 py-2.5 text-sm">
+              {cobro.multa > 0 ? (
+                <>
+                  <div className="flex justify-between text-primary-900">
+                    <span>Tarifa</span>
+                    <span className="tabular-nums">{COP.format(cobro.tarifa)}</span>
+                  </div>
+                  <div className="flex justify-between text-primary-900">
+                    <span>Multa</span>
+                    <span className="tabular-nums">{COP.format(cobro.multa)}</span>
+                  </div>
+                </>
+              ) : null}
+              <div className="flex justify-between font-semibold text-primary-900">
+                <span>Cobrar</span>
+                <span className="tabular-nums">{COP.format(total)}</span>
+              </div>
             </div>
             <div className="flex flex-col gap-1.5 text-sm">
               <span className="font-medium text-neutral-700">Método de pago</span>
@@ -760,15 +886,19 @@ function SalidaModal({
               </div>
             </div>
           </>
+        ) : estancia && cobro ? (
+          <p className="rounded-lg bg-neutral-50 px-3 py-2.5 text-center text-sm text-neutral-600">
+            Sin cobro en la salida ({MODALIDAD_LABEL[estancia.modalidad].toLowerCase()}).
+          </p>
         ) : null}
 
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={!estancia || saving}
+          disabled={!estancia || !cobro || saving}
           className="mt-1 w-full rounded-xl bg-primary-600 py-3.5 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
         >
-          {saving ? 'Registrando…' : 'Confirmar salida'}
+          {saving ? 'Registrando…' : total > 0 ? `Cobrar ${COP.format(total)} y dar salida` : 'Confirmar salida'}
         </button>
       </div>
     </ModalSheet>

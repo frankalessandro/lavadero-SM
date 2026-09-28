@@ -369,8 +369,11 @@ export function fetchAsistenciaReporte(p: PeriodoReporte): Promise<AsistenciaRep
 
 export interface EstanciaReporteFila {
   id: string
+  consecutivo: number
   placa: string
   modalidad: string
+  clase_vehiculo: string
+  multa: number
   hora_ingreso: string
   hora_salida: string | null
   cobro: number | null
@@ -382,7 +385,7 @@ export function fetchParqueaderoReporte(p: PeriodoReporte): Promise<EstanciaRepo
   return paginar((a, b) =>
     db
       .from('estancias_parqueadero')
-      .select('id, placa, modalidad, hora_ingreso, hora_salida, cobro, metodo_pago, estado')
+      .select('id, consecutivo, placa, modalidad, clase_vehiculo, multa, hora_ingreso, hora_salida, cobro, metodo_pago, estado')
       .gte('hora_ingreso', p.desdeISO)
       .lt('hora_ingreso', p.hastaISO)
       .order('hora_ingreso', { ascending: false })
