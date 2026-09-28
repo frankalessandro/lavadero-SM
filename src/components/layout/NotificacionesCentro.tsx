@@ -1,8 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { Bell } from 'lucide-react'
-import type { Alerta } from '../../data/alertas'
+import type { Alerta, SeveridadAlerta } from '../../data/alertas'
 import { toast } from '../../lib/toast'
+
+const PUNTO_SEVERIDAD: Record<SeveridadAlerta, string> = {
+  alta: 'bg-danger-600',
+  media: 'bg-warning-600',
+  info: 'bg-primary-500',
+}
 
 // Campana junto al avatar del Topbar — antes ese comentario decía "no hay notificaciones reales
 // en el sistema todavía". Ahora sí, y el mismo componente sirve para admin y jefe de patio: cada
@@ -93,10 +99,13 @@ export function NotificacionesCentro({ cargarAlertas }: { cargarAlertas: () => P
                     key={a.id}
                     to={a.ruta}
                     onClick={() => setAbierto(false)}
-                    className="flex flex-col gap-0.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-primary-50/60"
+                    className="flex items-start gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-primary-50/60"
                   >
-                    <span className="text-sm font-medium text-neutral-900">{a.titulo}</span>
-                    <span className="truncate text-xs text-neutral-500">{a.detalle}</span>
+                    <span className={`mt-1.5 size-2 shrink-0 rounded-full ${PUNTO_SEVERIDAD[a.severidad]}`} />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-neutral-900">{a.titulo}</span>
+                      <span className="block truncate text-xs text-neutral-500">{a.detalle}</span>
+                    </span>
                   </Link>
                 ))
               )}

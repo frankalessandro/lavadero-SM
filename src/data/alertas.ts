@@ -4,6 +4,9 @@ import { fetchFaltantesPendientes } from './conteosInventario'
 import { fetchConsecutivosEnRango } from './ordenes'
 import { fetchSuscripciones } from './suscripcionesParqueadero'
 import { fetchCorreccionesEnRango } from './pagos'
+import { fetchLiquidaciones } from './liquidaciones'
+import { fetchLiquidacionesJefeZona } from './liquidacionesJefeZona'
+import { fetchTurnos } from './turnos'
 import { nivelStock } from '../lib/nivelStock'
 import { huecosEntre } from '../lib/consecutivo'
 import { estadoVigencia } from '../schemas/suscripcionParqueadero'
@@ -21,11 +24,23 @@ import { estadoVigencia } from '../schemas/suscripcionParqueadero'
 // `fetchAlertasJefeZona` llamara los mismos fetchers que admin, esas dos consultas devolverían
 // vacío (o error) en vez de simplemente no existir para ese rol — más limpio no llamarlas.
 
+/** `alta` = plata o control comprometido ya; `media` = hay que decidir algo pronto; `info` = aviso. */
+export type SeveridadAlerta = 'alta' | 'media' | 'info'
+
 export interface Alerta {
   id: string
   titulo: string
   detalle: string
   ruta: string
+  severidad: SeveridadAlerta
+  /** Texto del botón que lleva a resolverla (ej. "Pagar", "Revisar"). */
+  accion: string
+}
+
+const ORDEN_SEVERIDAD: Record<SeveridadAlerta, number> = { alta: 0, media: 1, info: 2 }
+
+function ordenarPorSeveridad(alertas: Alerta[]): Alerta[] {
+  return [...alertas].sort((a, b) => ORDEN_SEVERIDAD[a.severidad] - ORDEN_SEVERIDAD[b.severidad])
 }
 
 function hace7DiasISO(): { desdeISO: string; hastaISO: string } {
@@ -44,6 +59,8 @@ function alertaStockBajo(bajos: { nombre: string }[], ruta: string): Alerta | nu
     titulo: `${bajos.length} producto${bajos.length === 1 ? '' : 's'} en stock bajo`,
     detalle: bajos.map((p) => p.nombre).slice(0, 4).join(', ') + (bajos.length > 4 ? '…' : ''),
     ruta,
+    severidad: 'info',
+    accion: 'Ver stock',
   }
 }
 
@@ -67,6 +84,8 @@ function alertaStockNegativo(
         .map((s) => `${nombre(s.productoId)} (${Math.min(s.stock, s.disponible)})`)
         .join(', ') + (negativos.length > 4 ? '…' : '') + ' — falta registrar una entrada o recontar.',
     ruta,
+    severidad: 'media',
+    accion: 'Revisar',
   }
 }
 
@@ -78,19 +97,34 @@ function alertaHuecosConsecutivo(consecutivos: number[], ruta: string): Alerta |
     titulo: `${huecos.length} hueco${huecos.length === 1 ? '' : 's'} en el consecutivo (7 días)`,
     detalle: 'Un tiquete que nunca se confirmó.',
     ruta,
+    severidad: 'alta',
+    accion: 'Revisar',
   }
 }
 
 export async function fetchAlertas(): Promise<Alerta[]> {
   const { desdeISO, hastaISO } = hace7DiasISO()
 
-  const [productos, stock, faltantes, consecutivos, suscripciones, correcciones] = await Promise.all([
+  const [
+    productos,
+    stock,
+    faltantes,
+    consecutivos,
+    suscripciones,
+    correcciones,
+    liquidaciones,
+    liquidacionesJefeZona,
+    turnos,
+  ] = await Promise.all([
     fetchProductos(),
     fetchStockProductos(),
     fetchFaltantesPendientes(),
     fetchConsecutivosEnRango(desdeISO, hastaISO),
     fetchSuscripciones(),
     fetchCorreccionesEnRango(desdeISO, hastaISO),
+    fetchLiquidaciones(),
+    fetchLiquidacionesJefeZona(),
+    fetchTurnos(),
   ])
 
   const stockPorProducto = new Map(stock.map((s) => [s.productoId, s.stock]))
@@ -107,13 +141,50 @@ export async function fetchAlertas(): Promise<Alerta[]> {
   const huecosAlerta = alertaHuecosConsecutivo(consecutivos, '/admin/operacion/ordenes')
   if (huecosAlerta) alertas.push(huecosAlerta)
 
+  // Liquidaciones ya generadas que siguen sin marcarse pagadas: plata que se le debe al personal.
+  const sinPagar = [
+    ...liquidaciones.filter((l) => !l.pagada && !l.anulada),
+    ...liquidacionesJefeZona.filter((l) => !l.pagada && !l.anulada),
+  ]
+  if (sinPagar.length > 0) {
+    const total = sinPagar.reduce((s, l) => s + l.monto, 0)
+    alertas.push({
+      id: 'liquidaciones-sin-pagar',
+      titulo: `${sinPagar.length} liquidación${sinPagar.length === 1 ? '' : 'es'} generada${sinPagar.length === 1 ? '' : 's'} sin pagar`,
+      detalle: `${COP.format(total)} por entregar al personal.`,
+      ruta: '/admin/dinero/liquidaciones',
+      severidad: 'alta',
+      accion: 'Pagar',
+    })
+  }
+
   if (faltantes.length > 0) {
     const valorTotal = faltantes.reduce((s, f) => s + (f.linea.valorDiferencia ?? 0), 0)
     alertas.push({
       id: 'faltantes-inventario',
       titulo: `${faltantes.length} faltante${faltantes.length === 1 ? '' : 's'} de inventario sin revisar`,
-      detalle: valorTotal > 0 ? `Valorado en ${COP.format(valorTotal)}` : 'Pendientes de resolución',
-      ruta: '/admin/dinero/inventario',
+      detalle: valorTotal > 0 ? `Valorado en ${COP.format(valorTotal)} — cobrar o descartar.` : 'Pendientes de resolución.',
+      ruta: '/admin/dinero/deudas',
+      severidad: 'media',
+      accion: 'Decidir',
+    })
+  }
+
+  // Arqueos cerrados con diferencia en los últimos 7 días — el cierre exige justificación, pero
+  // nadie la lee si no se muestra acá.
+  const desde = new Date(desdeISO).getTime()
+  const conDiferencia = turnos.filter(
+    (t) => t.cerrado && t.cerradoEn && new Date(t.cerradoEn).getTime() >= desde && (t.diferencia ?? 0) !== 0,
+  )
+  if (conDiferencia.length > 0) {
+    const faltante = conDiferencia.filter((t) => (t.diferencia ?? 0) < 0).reduce((s, t) => s + (t.diferencia ?? 0), 0)
+    alertas.push({
+      id: 'arqueos-diferencia',
+      titulo: `${conDiferencia.length} arqueo${conDiferencia.length === 1 ? '' : 's'} con diferencia (7 días)`,
+      detalle: faltante < 0 ? `Faltantes de caja por ${COP.format(Math.abs(faltante))}.` : 'Solo sobrantes — revisar justificaciones.',
+      ruta: '/admin/operacion/turnos',
+      severidad: faltante < 0 ? 'alta' : 'info',
+      accion: 'Revisar',
     })
   }
 
@@ -124,6 +195,8 @@ export async function fetchAlertas(): Promise<Alerta[]> {
       titulo: `${porVencer.length} suscripción${porVencer.length === 1 ? '' : 'es'} de parqueadero por vencer`,
       detalle: porVencer.map((s) => s.placa).slice(0, 4).join(', ') + (porVencer.length > 4 ? '…' : ''),
       ruta: '/admin/catalogo/parqueadero',
+      severidad: 'media',
+      accion: 'Renovar',
     })
   }
 
@@ -131,12 +204,14 @@ export async function fetchAlertas(): Promise<Alerta[]> {
     alertas.push({
       id: 'correcciones-pago',
       titulo: `${correcciones.length} corrección${correcciones.length === 1 ? '' : 'es'} de reparto de pago (7 días)`,
-      detalle: 'Cambios al método/monto de un cobro ya hecho — revisar en Operación › Turnos.',
+      detalle: 'Cambios al método/monto de un cobro ya hecho.',
       ruta: '/admin/operacion/turnos',
+      severidad: 'info',
+      accion: 'Ver',
     })
   }
 
-  return alertas
+  return ordenarPorSeveridad(alertas)
 }
 
 // Jefe de patio: sobre todo stock (pedido explícito) — la vista operativa (`*Operativo`, sin
@@ -166,5 +241,5 @@ export async function fetchAlertasJefeZona(): Promise<Alerta[]> {
   const huecosAlerta = alertaHuecosConsecutivo(consecutivos, '/jefe-zona')
   if (huecosAlerta) alertas.push(huecosAlerta)
 
-  return alertas
+  return ordenarPorSeveridad(alertas)
 }
