@@ -26,15 +26,15 @@ export function StatCard({ label, value, hint, icon: Icon, info, onClick }: Stat
       onKeyDown={(e) => {
         if (onClick && (e.key === 'Enter' || e.key === ' ')) onClick()
       }}
-      className={`relative flex items-center gap-4 rounded-2xl border border-neutral-200 bg-white p-2 shadow-card transition-shadow hover:shadow-card-hover ${onClick ? 'cursor-pointer' : ''}`}
+      className={`relative flex items-center gap-3.5 rounded-2xl border border-neutral-200 bg-white p-4 shadow-card transition-shadow ${onClick ? 'cursor-pointer hover:shadow-card-hover hover:border-primary-200' : ''}`}
     >
-      <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
-        <Icon size={20} strokeWidth={2} />
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
+        <Icon size={18} strokeWidth={2} />
       </span>
-      <div className="min-w-0">
-        <p className="text-xs font-medium text-neutral-500">{label}</p>
-        <p className="text-xl font-semibold text-neutral-900">{value}</p>
-        {hint ? <p className="text-xs text-neutral-400">{hint}</p> : null}
+      <div className="min-w-0 pr-5">
+        <p className="truncate text-xs font-medium text-neutral-500">{label}</p>
+        <p className="truncate text-xl font-semibold tabular-nums tracking-tight text-neutral-900">{value}</p>
+        {hint ? <p className="truncate text-xs text-neutral-400">{hint}</p> : null}
       </div>
       {info ? (
         <button

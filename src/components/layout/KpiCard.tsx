@@ -65,7 +65,7 @@ export function KpiCard({
           <Icon size={16} strokeWidth={2} />
         </span>
       </div>
-      <span className={`break-words text-2xl font-semibold tracking-tight tabular-nums md:text-3xl ${t.num}`}>
+      <span className={`break-words text-lg font-semibold tracking-tight tabular-nums sm:text-2xl xl:text-3xl ${t.num}`}>
         {valor}
       </span>
       {delta && IconoDelta ? (

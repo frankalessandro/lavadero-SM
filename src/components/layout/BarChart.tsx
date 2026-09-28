@@ -11,6 +11,8 @@ interface BarChartProps {
   /** true (default): barras horizontales — mejor para nombres largos (combos, lavadores, categorías). */
   horizontal?: boolean
   valueFormatter?: (value: number) => string
+  /** Formato corto para las marcas del eje (ej. "$1,2 M") — el tooltip sigue usando `valueFormatter`. */
+  axisFormatter?: (value: number) => string
   height?: number
   emptyLabel?: string
 }
@@ -25,6 +27,7 @@ export function BarChart({
   colors,
   horizontal = true,
   valueFormatter,
+  axisFormatter,
   height = 220,
   emptyLabel = 'Sin datos todavía.',
 }: BarChartProps) {
@@ -57,7 +60,10 @@ export function BarChart({
       ticks: {
         color: CHART_COLORS.text,
         font: { size: 11 },
-        callback: (value) => (valueFormatter ? valueFormatter(Number(value)) : String(value)),
+        callback: (value) => {
+          const fmt = axisFormatter ?? valueFormatter
+          return fmt ? fmt(Number(value)) : String(value)
+        },
       },
     },
   }

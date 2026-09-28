@@ -20,22 +20,22 @@ export function PeriodoSelector({
   rango: RangoPeriodo
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <div className="flex rounded-lg border border-neutral-300 p-1">
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="flex rounded-xl bg-neutral-200/60 p-1">
         {(['dia', 'semana', 'mes'] as const).map((value) => (
           <button
             key={value}
             type="button"
             onClick={() => onModoChange(value)}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              modo === value ? 'bg-primary-600 text-white shadow-nav-active' : 'text-neutral-600 hover:bg-neutral-50'
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+              modo === value ? 'bg-white text-primary-700 shadow-sm' : 'text-neutral-500 hover:text-neutral-900'
             }`}
           >
             {MODO_LABEL[value]}
           </button>
         ))}
       </div>
-      <div className="flex items-center gap-1 rounded-lg border border-neutral-200 px-1 py-1">
+      <div className="flex items-center gap-1 rounded-xl border border-neutral-200 bg-white p-1">
         <button
           type="button"
           onClick={() => onAnclaChange(moverAncla(modo, ancla, -1))}
