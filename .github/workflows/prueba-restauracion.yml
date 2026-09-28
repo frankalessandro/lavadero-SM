@@ -1,0 +1,87 @@
+# Prueba de restauración (Plan de Alcance §9: "prueba de restauración completa documentada").
+# Cada mes baja el último respaldo de Drive, levanta una base Supabase desechable dentro del
+# runner (no toca producción ni crea proyectos), lo restaura y compara tabla por tabla los conteos
+# contra los que guardó el propio respaldo. Si no coinciden, abre un aviso igual que el respaldo.
+name: Prueba de restauración
+
+on:
+  schedule:
+    - cron: '0 9 2 * *' # día 2 de cada mes, 04:00 hora Colombia (después del respaldo mensual del día 1)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: prueba-restauracion
+  cancel-in-progress: false
+
+jobs:
+  restaurar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar rclone
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq rclone
+
+      - name: Bajar el último respaldo de Drive
+        id: bajar
+        env:
+          RCLONE_CONFIG_DRIVE_TYPE: drive
+          RCLONE_CONFIG_DRIVE_SCOPE: drive
+          RCLONE_CONFIG_DRIVE_TOKEN: ${{ secrets.RCLONE_DRIVE_TOKEN }}
+          CARPETA: ${{ vars.RESPALDO_DRIVE_CARPETA || 'Respaldos Lavadero SM' }}
+        run: |
+          ultimo="$(rclone lsf "drive:$CARPETA/diario" --files-only --include 'lavadero-sm_*.tar.gz.gpg' | sort | tail -n1)"
+          [ -n "$ultimo" ] || { echo "::error::No hay respaldos en Drive ($CARPETA/diario)"; exit 1; }
+          prefijo="${ultimo%.tar.gz.gpg}"
+          rclone copyto "drive:$CARPETA/diario/$ultimo" "$RUNNER_TEMP/$ultimo"
+          rclone copyto "drive:$CARPETA/diario/$prefijo.sha256" "$RUNNER_TEMP/$prefijo.sha256"
+          (cd "$RUNNER_TEMP" && sha256sum -c "$prefijo.sha256")
+          echo "archivo=$RUNNER_TEMP/$ultimo" >> "$GITHUB_OUTPUT"
+          echo "nombre=$ultimo" >> "$GITHUB_OUTPUT"
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # Solo base de datos + auth (auth.users necesita las columnas que crea GoTrue). El resto de
+      # servicios no hace falta para verificar datos.
+      - name: Levantar una base Supabase desechable
+        working-directory: ${{ runner.temp }}
+        run: |
+          mkdir prueba && cd prueba
+          supabase init
+          sed -i 's/^major_version = .*/major_version = 17/' supabase/config.toml
+          supabase start -x realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+
+      - name: Restaurar y verificar
+        env:
+          RESPALDO_CLAVE: ${{ secrets.RESPALDO_CLAVE }}
+          DESTINO_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: bash scripts/respaldo/restaurar.sh "${{ steps.bajar.outputs.archivo }}"
+
+      - name: Dejar constancia
+        if: success()
+        run: |
+          {
+            echo "### ✅ Restauración verificada"
+            echo ""
+            echo "- Respaldo: \`${{ steps.bajar.outputs.nombre }}\`"
+            echo "- Fecha de la prueba: $(TZ=America/Bogota date '+%Y-%m-%d %H:%M') (hora Colombia)"
+            echo "- Resultado: todas las tablas restauradas con el mismo número de filas que el respaldo."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Avisar que la restauración falló
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh issue create --title "Prueba de restauración fallida" --body "$(printf '%s\n\n%s\n\n%s' \
+            "La prueba mensual no pudo restaurar el último respaldo ($(TZ=America/Bogota date '+%Y-%m-%d'))." \
+            "Detalle: $RUN_URL" \
+            "Un respaldo que no se puede restaurar no sirve: revisar ya. Ver docs/respaldos.md.")"

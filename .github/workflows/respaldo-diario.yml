@@ -1,0 +1,85 @@
+# Respaldo diario de la base de Supabase a Google Drive — esquema propio del Plan de Alcance §9,
+# sin depender de los backups administrados de Supabase (esos son del plan pago).
+# Configuración de secretos y restauración: docs/respaldos.md
+name: Respaldo diario
+
+on:
+  schedule:
+    - cron: '0 8 * * *' # 03:00 hora Colombia (UTC-5). GitHub puede demorarlo unos minutos.
+  workflow_dispatch:
+    inputs:
+      forzar:
+        description: 'Subir aunque pese mucho menos que el anterior (solo si ya revisaste por qué)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write # abrir/cerrar el aviso "Respaldo fallido"
+  actions: write # mantener activas las tareas programadas (ver último paso)
+
+concurrency:
+  group: respaldo
+  cancel-in-progress: false
+
+jobs:
+  respaldo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar rclone
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq rclone
+
+      - name: Sacar, validar y cifrar el respaldo
+        id: respaldo
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          RESPALDO_CLAVE: ${{ secrets.RESPALDO_CLAVE }}
+          RESPALDO_MIN_BYTES: ${{ vars.RESPALDO_MIN_BYTES }}
+        run: bash scripts/respaldo/respaldar.sh "$RUNNER_TEMP/respaldo"
+
+      - name: Subir a Google Drive y aplicar retención
+        env:
+          RCLONE_DRIVE_TOKEN: ${{ secrets.RCLONE_DRIVE_TOKEN }}
+          RESPALDO_DRIVE_CARPETA: ${{ vars.RESPALDO_DRIVE_CARPETA }}
+          RESPALDO_FORZAR: ${{ inputs.forzar && '1' || '0' }}
+        run: bash scripts/respaldo/subir-y-rotar.sh "$RUNNER_TEMP/respaldo/${{ steps.respaldo.outputs.archivo }}"
+
+      # Aviso ante fallo (Plan §9): un issue le llega por correo al dueño del repo. Si ya hay uno
+      # abierto se comenta en él en vez de abrir otro por cada noche que falle.
+      - name: Avisar que el respaldo falló
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          abierto="$(gh issue list --state open --search 'Respaldo fallido in:title' --json number -q '.[0].number')"
+          if [ -n "$abierto" ]; then
+            gh issue comment "$abierto" --body "Volvió a fallar el $(TZ=America/Bogota date '+%Y-%m-%d %H:%M'). Detalle: $RUN_URL"
+          else
+            gh issue create --title "Respaldo fallido" --body "$(printf '%s\n\n%s\n\n%s' \
+              "El respaldo diario de la base falló el $(TZ=America/Bogota date '+%Y-%m-%d %H:%M') (hora Colombia)." \
+              "Detalle del error: $RUN_URL" \
+              "Qué revisar y cómo re-ejecutarlo: docs/respaldos.md. Este aviso se cierra solo con el próximo respaldo exitoso.")"
+          fi
+
+      - name: Cerrar el aviso si había uno abierto
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for n in $(gh issue list --state open --search 'Respaldo fallido in:title' --json number -q '.[].number'); do
+            gh issue close "$n" --comment "Respaldo exitoso el $(TZ=America/Bogota date '+%Y-%m-%d %H:%M'). Se cierra el aviso."
+          done
+
+      # GitHub desactiva las tareas programadas de un repo público tras 60 días sin actividad.
+      # Re-habilitarlas desde aquí evita que el respaldo se detenga en silencio.
+      - name: Mantener activas las tareas programadas
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow enable respaldo-diario.yml || true
+          gh workflow enable prueba-restauracion.yml || true
