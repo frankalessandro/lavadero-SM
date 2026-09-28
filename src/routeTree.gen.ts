@@ -50,6 +50,7 @@ import { Route as AdminDineroLiquidacionesIndexRouteImport } from './routes/admi
 import { Route as AdminOperacionAuditoriaIndexRouteImport } from './routes/admin/operacion/auditoria/index'
 import { Route as AdminOperacionClientesIndexRouteImport } from './routes/admin/operacion/clientes/index'
 import { Route as AdminOperacionOrdenesIndexRouteImport } from './routes/admin/operacion/ordenes/index'
+import { Route as AdminOperacionParqueaderoIndexRouteImport } from './routes/admin/operacion/parqueadero/index'
 import { Route as AdminOperacionTurnosIndexRouteImport } from './routes/admin/operacion/turnos/index'
 import { Route as AdminPersonalLavadoresIndexRouteImport } from './routes/admin/personal/lavadores/index'
 import { Route as AdminPersonalUsuariosIndexRouteImport } from './routes/admin/personal/usuarios/index'
@@ -269,6 +270,12 @@ const AdminOperacionOrdenesIndexRoute =
     path: '/ordenes/',
     getParentRoute: () => AdminOperacionRouteRoute,
   } as any)
+const AdminOperacionParqueaderoIndexRoute =
+  AdminOperacionParqueaderoIndexRouteImport.update({
+    id: '/parqueadero/',
+    path: '/parqueadero/',
+    getParentRoute: () => AdminOperacionRouteRoute,
+  } as any)
 const AdminOperacionTurnosIndexRoute =
   AdminOperacionTurnosIndexRouteImport.update({
     id: '/turnos/',
@@ -330,6 +337,7 @@ export interface FileRoutesByFullPath {
   '/admin/operacion/auditoria/': typeof AdminOperacionAuditoriaIndexRoute
   '/admin/operacion/clientes/': typeof AdminOperacionClientesIndexRoute
   '/admin/operacion/ordenes/': typeof AdminOperacionOrdenesIndexRoute
+  '/admin/operacion/parqueadero/': typeof AdminOperacionParqueaderoIndexRoute
   '/admin/operacion/turnos/': typeof AdminOperacionTurnosIndexRoute
   '/admin/personal/lavadores/': typeof AdminPersonalLavadoresIndexRoute
   '/admin/personal/usuarios/': typeof AdminPersonalUsuariosIndexRoute
@@ -368,6 +376,7 @@ export interface FileRoutesByTo {
   '/admin/operacion/auditoria': typeof AdminOperacionAuditoriaIndexRoute
   '/admin/operacion/clientes': typeof AdminOperacionClientesIndexRoute
   '/admin/operacion/ordenes': typeof AdminOperacionOrdenesIndexRoute
+  '/admin/operacion/parqueadero': typeof AdminOperacionParqueaderoIndexRoute
   '/admin/operacion/turnos': typeof AdminOperacionTurnosIndexRoute
   '/admin/personal/lavadores': typeof AdminPersonalLavadoresIndexRoute
   '/admin/personal/usuarios': typeof AdminPersonalUsuariosIndexRoute
@@ -415,6 +424,7 @@ export interface FileRoutesById {
   '/admin/operacion/auditoria/': typeof AdminOperacionAuditoriaIndexRoute
   '/admin/operacion/clientes/': typeof AdminOperacionClientesIndexRoute
   '/admin/operacion/ordenes/': typeof AdminOperacionOrdenesIndexRoute
+  '/admin/operacion/parqueadero/': typeof AdminOperacionParqueaderoIndexRoute
   '/admin/operacion/turnos/': typeof AdminOperacionTurnosIndexRoute
   '/admin/personal/lavadores/': typeof AdminPersonalLavadoresIndexRoute
   '/admin/personal/usuarios/': typeof AdminPersonalUsuariosIndexRoute
@@ -463,6 +473,7 @@ export interface FileRouteTypes {
     | '/admin/operacion/auditoria/'
     | '/admin/operacion/clientes/'
     | '/admin/operacion/ordenes/'
+    | '/admin/operacion/parqueadero/'
     | '/admin/operacion/turnos/'
     | '/admin/personal/lavadores/'
     | '/admin/personal/usuarios/'
@@ -501,6 +512,7 @@ export interface FileRouteTypes {
     | '/admin/operacion/auditoria'
     | '/admin/operacion/clientes'
     | '/admin/operacion/ordenes'
+    | '/admin/operacion/parqueadero'
     | '/admin/operacion/turnos'
     | '/admin/personal/lavadores'
     | '/admin/personal/usuarios'
@@ -547,6 +559,7 @@ export interface FileRouteTypes {
     | '/admin/operacion/auditoria/'
     | '/admin/operacion/clientes/'
     | '/admin/operacion/ordenes/'
+    | '/admin/operacion/parqueadero/'
     | '/admin/operacion/turnos/'
     | '/admin/personal/lavadores/'
     | '/admin/personal/usuarios/'
@@ -854,6 +867,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminOperacionOrdenesIndexRouteImport
       parentRoute: typeof AdminOperacionRouteRoute
     }
+    '/admin/operacion/parqueadero/': {
+      id: '/admin/operacion/parqueadero/'
+      path: '/parqueadero'
+      fullPath: '/admin/operacion/parqueadero/'
+      preLoaderRoute: typeof AdminOperacionParqueaderoIndexRouteImport
+      parentRoute: typeof AdminOperacionRouteRoute
+    }
     '/admin/operacion/turnos/': {
       id: '/admin/operacion/turnos/'
       path: '/turnos'
@@ -921,6 +941,7 @@ interface AdminOperacionRouteRouteChildren {
   AdminOperacionAuditoriaIndexRoute: typeof AdminOperacionAuditoriaIndexRoute
   AdminOperacionClientesIndexRoute: typeof AdminOperacionClientesIndexRoute
   AdminOperacionOrdenesIndexRoute: typeof AdminOperacionOrdenesIndexRoute
+  AdminOperacionParqueaderoIndexRoute: typeof AdminOperacionParqueaderoIndexRoute
   AdminOperacionTurnosIndexRoute: typeof AdminOperacionTurnosIndexRoute
 }
 
@@ -929,6 +950,7 @@ const AdminOperacionRouteRouteChildren: AdminOperacionRouteRouteChildren = {
   AdminOperacionAuditoriaIndexRoute: AdminOperacionAuditoriaIndexRoute,
   AdminOperacionClientesIndexRoute: AdminOperacionClientesIndexRoute,
   AdminOperacionOrdenesIndexRoute: AdminOperacionOrdenesIndexRoute,
+  AdminOperacionParqueaderoIndexRoute: AdminOperacionParqueaderoIndexRoute,
   AdminOperacionTurnosIndexRoute: AdminOperacionTurnosIndexRoute,
 }
 

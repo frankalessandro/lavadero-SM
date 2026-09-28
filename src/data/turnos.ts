@@ -170,6 +170,7 @@ export async function calcularValorEsperado(turno: TurnoCaja): Promise<number> {
       .select('cobro')
       .eq('turno_id', turno.id)
       .eq('estado', 'fuera')
+      .eq('anulada', false)
       .eq('metodo_pago', 'efectivo')
     if (estanciasRes.error) throw new Error(estanciasRes.error.message)
     ingresos = (estanciasRes.data ?? []).reduce((total, e) => total + ((e.cobro as number | null) ?? 0), 0)
