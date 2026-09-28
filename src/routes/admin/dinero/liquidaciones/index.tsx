@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type ComponentType, type FormEvent, type ReactNode } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { Wallet, CheckCircle2, Receipt, Clock, ShieldCheck, Ban, X, HandCoins } from 'lucide-react'
+import { Wallet, CheckCircle2, Receipt, ShieldCheck, Ban, HandCoins, Inbox, UserRound } from 'lucide-react'
 import {
   fetchComisionesPendientes,
   fetchLiquidaciones,
@@ -38,15 +38,11 @@ import { fetchCombos } from '../../../../data/combos'
 import type { ComisionPendiente } from '../../../../data/liquidaciones'
 import type { Liquidacion } from '../../../../schemas/liquidacion'
 import type { LiquidacionJefeZona } from '../../../../schemas/liquidacionJefeZona'
-import type { Lavador } from '../../../../schemas/lavador'
 import type { Configuracion } from '../../../../schemas/configuracion'
 import { Card } from '../../../../components/layout/Card'
-import { FilaFiltros, FiltroTexto, FiltroSelect, FiltroVacio } from '../../../../components/layout/TableHeadFilter'
 import { coincide } from '../../../../lib/tableFilters'
-import { StatCard } from '../../../../components/layout/StatCard'
 import { ConfirmModal } from '../../../../components/layout/ConfirmModal'
 import { GenerarLiquidacionModal } from '../../../../components/layout/GenerarLiquidacionModal'
-import { BarChart } from '../../../../components/layout/BarChart'
 import { ColillaLiquidacionModal, type ColillaLiquidacionData } from '../../../../components/layout/ColillaLiquidacionModal'
 import { PrestamosDeTurno } from '../../../../components/layout/PrestamosDeTurno'
 import { ColillaJefeZonaModal, type ColillaJefeZonaData } from '../../../../components/layout/ColillaJefeZonaModal'
@@ -55,6 +51,10 @@ import {
   type DetalleOrdenJefeZonaFila,
 } from '../../../../components/layout/DetalleOrdenesJefeZonaModal'
 import { toast } from '../../../../lib/toast'
+import { Modal } from '../../../../components/layout/Modal'
+import { BarraFiltros, FiltroCombo, FiltroMenu } from '../../../../components/layout/Filtros'
+import { Button } from '../../../../components/layout/Button'
+import { PageHeader, SectionHeader } from '../../../../components/layout/PageHeader'
 
 // Texto del botón de colilla informativa según el filtro de periodo: "Colilla del día", etc.
 const COLILLA_DE: Record<ModoPeriodo, string> = { dia: 'del día', semana: 'de la semana', mes: 'del mes' }
@@ -190,6 +190,8 @@ function LiquidacionesPage() {
   // un flujo completo a la vez. Los montos pendientes de ambos siguen visibles juntos en el
   // dashboard, que es donde tiene sentido compararlos.
   const [sujeto, setSujeto] = useState<'lavadores' | 'jefe_zona'>('lavadores')
+  // null = elegir sola: "Por pagar" si hay liquidaciones esperando pago, si no "Por liquidar".
+  const [vista, setVista] = useState<VistaLiquidaciones | null>(null)
   const totalPendienteLavadores = pendientes.reduce((suma, c) => suma + c.montoPendiente, 0)
   const totalPendienteJefeZona = pendientesJefeZona.reduce((suma, c) => suma + c.montoPendiente, 0)
 
@@ -338,23 +340,6 @@ function LiquidacionesPage() {
     if (filtro === 'pagada') return l.pagada && !l.anulada
     return !l.pagada && !l.anulada
   }
-
-  const historicoVisible = useMemo(
-    () =>
-      historico.filter(
-        (l) =>
-          coincide(lavadoresPorId.get(l.lavadorId)?.nombre, filtroHistLavador) &&
-          coincideEstadoLiquidacion(l, filtroHistEstadoLavador),
-      ),
-    [historico, lavadoresPorId, filtroHistLavador, filtroHistEstadoLavador],
-  )
-  const historicoJefeZonaVisible = useMemo(
-    () =>
-      historicoJefeZona.filter(
-        (l) => coincide(l.responsable, filtroHistJZ) && coincideEstadoLiquidacion(l, filtroHistEstadoJZ),
-      ),
-    [historicoJefeZona, filtroHistJZ, filtroHistEstadoJZ],
-  )
 
   async function refresh() {
     const data = await loadData()
@@ -612,473 +597,372 @@ function LiquidacionesPage() {
     }
   }
 
+  // --- Vista unificada: lavadores y jefe de patio se pintan con los mismos componentes ---
+  const esLavadores = sujeto === 'lavadores'
+  const filasHistorico: FilaLiquidacion[] = esLavadores
+    ? historico.map((l) => ({ ...l, nombre: lavadoresPorId.get(l.lavadorId)?.nombre ?? '—' }))
+    : historicoJefeZona.map((l) => ({ ...l, nombre: l.responsable }))
+  const porPagar = filasHistorico.filter((l) => !l.pagada && !l.anulada)
+  const totalPorPagar = porPagar.reduce((s, l) => s + l.monto, 0)
+  const pagadas = filasHistorico.filter((l) => l.pagada && !l.anulada)
+  const totalPendienteSujeto = esLavadores ? totalPendienteLavadores : totalPendienteJefeZona
+  const pendientesSujeto = esLavadores ? pendientes.length : pendientesJefeZona.length
+
+  const filtroTexto = esLavadores ? filtroHistLavador : filtroHistJZ
+  const setFiltroTexto = esLavadores ? setFiltroHistLavador : setFiltroHistJZ
+  const filtroEstado = esLavadores ? filtroHistEstadoLavador : filtroHistEstadoJZ
+  const setFiltroEstado = esLavadores ? setFiltroHistEstadoLavador : setFiltroHistEstadoJZ
+  const historicoFiltrado = filasHistorico.filter(
+    (l) => coincide(l.nombre, filtroTexto) && coincideEstadoLiquidacion(l, filtroEstado),
+  )
+
+  function accionesFila(fila: FilaLiquidacion) {
+    return {
+      pagando: esLavadores ? pagando === fila.id : pagandoJefeZona === fila.id,
+      cargandoColilla: esLavadores ? cargandoColilla === fila.id : cargandoColillaJefeZona === fila.id,
+      onMarcarPagada: () => {
+        if (esLavadores) setConfirmandoPago(historico.find((l) => l.id === fila.id) ?? null)
+        else setConfirmandoPagoJefeZona(historicoJefeZona.find((l) => l.id === fila.id) ?? null)
+      },
+      onAnular: () =>
+        setAnulando({ tipo: esLavadores ? 'lavador' : 'jefeZona', id: fila.id, label: fila.nombre, monto: fila.monto }),
+      onVerColilla: () => {
+        if (esLavadores) {
+          const l = historico.find((x) => x.id === fila.id)
+          if (l) void handleVerColilla(l)
+        } else {
+          const l = historicoJefeZona.find((x) => x.id === fila.id)
+          if (l) void handleVerColillaJefeZona(l)
+        }
+      },
+    }
+  }
+
+  const vistaActiva: VistaLiquidaciones = vista ?? (porPagar.length > 0 ? 'por_pagar' : 'por_liquidar')
+  const VISTAS: { id: VistaLiquidaciones; label: string; count?: number }[] = [
+    { id: 'por_liquidar', label: 'Por liquidar', count: pendientesSujeto },
+    { id: 'por_pagar', label: 'Por pagar', count: porPagar.length },
+    { id: 'periodo', label: 'Por periodo' },
+    { id: 'historico', label: 'Histórico' },
+  ]
+
   return (
-    <div className="flex flex-col gap-8 text-left">
-      <div>
-        <h2 className="text-base font-semibold text-neutral-900">Liquidaciones</h2>
-        <p className="text-sm text-neutral-500">
-          Sobre el acumulado, sin descuentos (regla de negocio 4) — genera diaria o semanal para quien sea; la
-          periodicidad marcada como default ({periodicidadLabel}) se define en{' '}
-          <span className="font-medium text-neutral-700">Configuración</span>, junto con los porcentajes de comisión.
-          Cuenta el trabajo del día sin importar si el lavado ya terminó o si el cliente ya pagó — solo se excluyen
-          las órdenes anuladas.
-        </p>
+    <div className="flex flex-col gap-6 text-left">
+      <PageHeader
+        title="Liquidaciones"
+        description="Lo que se le debe al personal: generar el corte, pagarlo y consultar lo ya pagado."
+        help={{
+          body:
+            `Se liquida sobre el acumulado, sin descuentos sobre el precio (regla de negocio 4). Puedes generar diaria o semanal para cualquier persona; la periodicidad resaltada (${periodicidadLabel}) y los porcentajes de comisión se definen en Configuración.\n\n` +
+            'Cuenta el trabajo desde que se asigna el vehículo, sin importar si ya terminó el lavado o si el cliente pagó — solo se excluyen las órdenes anuladas.\n\n' +
+            'El flujo es: Por liquidar (trabajo acumulado) → Generar → Por pagar (liquidación creada, falta entregar la plata) → Marcar pagada → Histórico.\n\n' +
+            'Si la persona tiene deuda (préstamos, consumo de nevera), al generar eliges cuánto descontar.',
+        }}
+        actions={
+          <div className="grid w-full grid-cols-2 gap-1 rounded-xl bg-neutral-200/60 p-1 sm:w-auto">
+            {(
+              [
+                { value: 'lavadores' as const, label: 'Lavadores', icon: Wallet },
+                { value: 'jefe_zona' as const, label: 'Jefe de patio', icon: ShieldCheck },
+              ]
+            ).map(({ value, label, icon: Icon }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => cambiarSujeto(value)}
+                className={`flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                  sujeto === value ? 'bg-white text-primary-700 shadow-sm' : 'text-neutral-500 hover:text-neutral-900'
+                }`}
+              >
+                <Icon size={15} />
+                {label}
+              </button>
+            ))}
+          </div>
+        }
+      />
+
+      {/* Resumen del flujo */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <ResumenPaso
+          paso="1"
+          label="Sin liquidar"
+          valor={COP.format(totalPendienteSujeto)}
+          hint={`${pendientesSujeto} persona${pendientesSujeto === 1 ? '' : 's'} con trabajo acumulado`}
+          activo={vistaActiva === 'por_liquidar'}
+          onClick={() => setVista('por_liquidar')}
+        />
+        <ResumenPaso
+          paso="2"
+          label="Generado, por pagar"
+          valor={COP.format(totalPorPagar)}
+          hint={`${porPagar.length} liquidación${porPagar.length === 1 ? '' : 'es'} esperando pago`}
+          tono={porPagar.length > 0 ? 'warning' : 'neutro'}
+          activo={vistaActiva === 'por_pagar'}
+          onClick={() => setVista('por_pagar')}
+        />
+        <ResumenPaso
+          paso="3"
+          label="Pagado"
+          valor={COP.format(pagadas.reduce((s, l) => s + l.monto, 0))}
+          hint={`${pagadas.length} liquidación${pagadas.length === 1 ? '' : 'es'} en el histórico`}
+          tono="success"
+          activo={vistaActiva === 'historico'}
+          onClick={() => setVista('historico')}
+        />
       </div>
 
-      <div className="grid grid-cols-1 gap-2 sm:max-w-lg sm:grid-cols-2">
-        {(
-          [
-            { value: 'lavadores' as const, label: 'Lavadores', total: totalPendienteLavadores, icon: Wallet },
-            { value: 'jefe_zona' as const, label: 'Jefe de patio', total: totalPendienteJefeZona, icon: ShieldCheck },
-          ]
-        ).map(({ value, label, total, icon: Icon }) => (
+      <nav className="flex w-full flex-wrap gap-1 border-b border-neutral-200">
+        {VISTAS.map((v) => (
           <button
-            key={value}
+            key={v.id}
             type="button"
-            onClick={() => cambiarSujeto(value)}
-            className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left transition-colors ${
-              sujeto === value
-                ? 'border-primary-600 bg-primary-50'
-                : 'border-neutral-200 bg-white hover:bg-neutral-50'
+            onClick={() => setVista(v.id)}
+            className={`-mb-px flex items-center gap-2 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
+              vistaActiva === v.id
+                ? 'border-primary-600 text-primary-700'
+                : 'border-transparent text-neutral-500 hover:text-neutral-800'
             }`}
           >
-            <span
-              className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${
-                sujeto === value ? 'bg-primary-100 text-primary-700' : 'bg-neutral-100 text-neutral-500'
-              }`}
-            >
-              <Icon size={16} strokeWidth={2} />
-            </span>
-            <span className="min-w-0">
+            {v.label}
+            {v.count !== undefined && v.count > 0 ? (
               <span
-                className={`block text-sm font-medium ${sujeto === value ? 'text-primary-700' : 'text-neutral-700'}`}
+                className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${
+                  vistaActiva === v.id ? 'bg-primary-100 text-primary-700' : 'bg-neutral-100 text-neutral-500'
+                }`}
               >
-                {label}
+                {v.count}
               </span>
-              <span className="block text-xs text-neutral-500">{COP.format(total)} pendiente</span>
-            </span>
+            ) : null}
           </button>
         ))}
-      </div>
+      </nav>
 
-      {error ? (
-        <p className="rounded-lg bg-danger-50 px-4 py-3 text-sm text-danger-700">{error}</p>
+      {error ? <p className="rounded-xl bg-danger-50 px-4 py-3 text-sm text-danger-700">{error}</p> : null}
+
+      {/* 1 · Por liquidar */}
+      {vistaActiva === 'por_liquidar' ? (
+        <section className="flex flex-col gap-4">
+          <SectionHeader
+            title={esLavadores ? 'Comisiones acumuladas por lavador' : 'Comisión acumulada por jefe de patio'}
+            hint={
+              esLavadores
+                ? 'Acumulado total sin liquidar. Al generar se calcula el monto real del rango elegido.'
+                : `${(configuracion.comisionJefeZonaCombo1Porcentaje * 100).toFixed(1)}% (Combo 1) / ${(configuracion.comisionJefeZonaCombo2Porcentaje * 100).toFixed(1)}% (Combo 2 en adelante) de cada orden, para quien tenía el turno al registrarla.`
+            }
+          />
+          {(esLavadores ? pendientes.length : pendientesJefeZona.length) === 0 ? (
+            <Vacio texto={esLavadores ? 'Ningún lavador activo tiene comisiones por liquidar.' : 'Nadie tiene comisión de jefe de patio por liquidar.'} />
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {esLavadores
+                ? pendientes.map((c) => (
+                    <PendienteCard
+                      key={c.lavadorId}
+                      nombre={c.lavadorNombre}
+                      icon={Wallet}
+                      monto={c.montoPendiente}
+                      ordenes={c.cantidadOrdenes}
+                      deuda={c.deudaPendiente}
+                      periodicidadDefault={configuracion.periodicidadLiquidacion}
+                      calculando={(p) => calculando === `${c.lavadorId}:${p}`}
+                      bloqueado={generando === c.lavadorId}
+                      onGenerar={(p) => handleElegirPeriodicidad(c, p)}
+                    />
+                  ))
+                : pendientesJefeZona.map((c) => (
+                    <PendienteCard
+                      key={c.personaId}
+                      nombre={c.responsable}
+                      icon={ShieldCheck}
+                      monto={c.montoPendiente}
+                      ordenes={c.cantidadOrdenes}
+                      deuda={c.deudaPendiente}
+                      periodicidadDefault={configuracion.periodicidadLiquidacion}
+                      calculando={(p) => calculandoJefeZona === `${c.personaId}:${p}`}
+                      bloqueado={generandoJefeZona === c.personaId}
+                      onGenerar={(p) => handleElegirPeriodicidadJefeZona(c, p)}
+                      onVerOrdenes={{
+                        cargando: cargandoDetalleJefeZona === c.personaId,
+                        onClick: () => handleVerDetalleJefeZona(c.personaId, c.responsable),
+                      }}
+                    />
+                  ))}
+            </div>
+          )}
+
+          {esLavadores ? (
+            turnoJefeZona ? (
+              <PrestamosDeTurno
+                turno={turnoJefeZona}
+                lavadores={lavadores}
+                prestamos={prestamosTurno}
+                onRegistrado={(prestamo) => setPrestamosTurno((previos) => [prestamo, ...previos])}
+                size="sm"
+              />
+            ) : (
+              <p className="flex items-center gap-2 rounded-xl bg-neutral-100/70 px-4 py-3 text-xs text-neutral-500">
+                <HandCoins size={14} className="shrink-0" />
+                Para prestarle a un lavador hace falta una caja de jefe de patio abierta.
+              </p>
+            )
+          ) : null}
+        </section>
       ) : null}
 
-      <section className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold text-neutral-900">Reporte por periodo</h3>
-          <PeriodoSelector modo={modoPeriodo} onModoChange={cambiarModoPeriodo} ancla={anclaPeriodo} onAnclaChange={cambiarAnclaPeriodo} rango={rangoPeriodo} />
-        </div>
-        <p className="-mt-1 text-xs text-neutral-500">
-          Navega cualquier día, semana o mes — no solo "hoy" o "últimos 7 días". Muestra lo generado en ese rango
-          (liquidado o no) junto con lo ya liquidado que cae ahí, para comparar.
-        </p>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <StatCard
-            label={`Generado en ${rangoPeriodo.label}`}
-            value={COP.format(
-              sujeto === 'lavadores'
-                ? resumenLavadores.reduce((s, r) => s + r.montoTotal, 0)
-                : resumenJefeZona.reduce((s, r) => s + r.montoTotal, 0),
-            )}
-            hint={cargandoResumen ? 'Calculando…' : undefined}
-            icon={Wallet}
+      {/* 2 · Por pagar */}
+      {vistaActiva === 'por_pagar' ? (
+        <section className="flex flex-col gap-4">
+          <SectionHeader
+            title="Liquidaciones generadas sin pagar"
+            count={porPagar.length}
+            hint="Ya se generó el corte; falta entregarle la plata a la persona y marcarla pagada."
           />
-          <StatCard
-            label={`Ya liquidado en ${rangoPeriodo.label}`}
-            value={COP.format(sujeto === 'lavadores' ? totalLiquidadoEnPeriodo : totalLiquidadoJefeZonaEnPeriodo)}
-            hint={`${sujeto === 'lavadores' ? historicoEnPeriodo.length : historicoJefeZonaEnPeriodo.length} liquidación(es) en este rango`}
-            icon={CheckCircle2}
-          />
-        </div>
+          {porPagar.length === 0 ? (
+            <Vacio texto="No hay liquidaciones esperando pago." icon={CheckCircle2} />
+          ) : (
+            <ListaLiquidaciones filas={porPagar} acciones={accionesFila} destacarPago />
+          )}
+        </section>
+      ) : null}
 
-        <Card className="p-0">
-          <div className="overflow-x-auto">
-          <table className="w-full min-w-[36rem] text-sm">
-            <thead>
-              <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
-                <th className="px-5 py-3">{sujeto === 'lavadores' ? 'Lavador' : 'Responsable'}</th>
-                <th className="px-5 py-3">Órdenes</th>
-                <th className="px-5 py-3">Generado</th>
-                <th className="px-5 py-3">Pendiente</th>
-                <th className="px-5 py-3 text-right">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sujeto === 'lavadores'
+      {/* 3 · Por periodo */}
+      {vistaActiva === 'periodo' ? (
+        <section className="flex flex-col gap-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <SectionHeader
+              title="Reporte por periodo"
+              hint="Lo generado en el rango (liquidado o no), con su colilla informativa."
+            />
+            <PeriodoSelector
+              modo={modoPeriodo}
+              onModoChange={cambiarModoPeriodo}
+              ancla={anclaPeriodo}
+              onAnclaChange={cambiarAnclaPeriodo}
+              rango={rangoPeriodo}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <MiniCifra
+              label={`Generado · ${rangoPeriodo.label}`}
+              valor={
+                cargandoResumen
+                  ? '…'
+                  : COP.format(
+                      esLavadores
+                        ? resumenLavadores.reduce((s, r) => s + r.montoTotal, 0)
+                        : resumenJefeZona.reduce((s, r) => s + r.montoTotal, 0),
+                    )
+              }
+            />
+            <MiniCifra
+              label="Ya liquidado en el rango"
+              valor={COP.format(esLavadores ? totalLiquidadoEnPeriodo : totalLiquidadoJefeZonaEnPeriodo)}
+              hint={`${esLavadores ? historicoEnPeriodo.length : historicoJefeZonaEnPeriodo.length} liquidación(es)`}
+            />
+          </div>
+
+          {(esLavadores ? resumenLavadores.length : resumenJefeZona.length) === 0 ? (
+            <Vacio texto={cargandoResumen ? 'Cargando…' : `Nada generado en ${rangoPeriodo.label}.`} />
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {esLavadores
                 ? resumenLavadores.map((r) => (
-                    <tr key={r.lavadorId} className="border-b border-neutral-100 last:border-0">
-                      <td className="px-5 py-3 font-medium text-neutral-900">{r.lavadorNombre}</td>
-                      <td className="px-5 py-3 text-neutral-600">{r.cantidadOrdenes}</td>
-                      <td className="px-5 py-3 text-neutral-700">{COP.format(r.montoTotal)}</td>
-                      <td className="px-5 py-3 text-neutral-700">{COP.format(r.montoPendiente)}</td>
-                      <td className="px-5 py-3 text-right">
-                        {r.montoPendiente > 0 ? (
-                          <div className="flex flex-wrap justify-end gap-1">
-                            <button
-                              type="button"
-                              disabled={cargandoColillaHoy === r.lavadorId}
+                    <FilaPeriodo
+                      key={r.lavadorId}
+                      nombre={r.lavadorNombre}
+                      ordenes={r.cantidadOrdenes}
+                      generado={r.montoTotal}
+                      pendiente={r.montoPendiente}
+                      acciones={
+                        r.montoPendiente > 0 ? (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              icon={Receipt}
+                              loading={cargandoColillaHoy === r.lavadorId}
                               onClick={() => handleVerColillaPeriodo(r)}
-                              title="Corte informativo de este periodo — no genera ni marca nada, el pago sigue siendo semanal"
-                              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-warning-50 hover:text-warning-700 disabled:opacity-50"
+                              title="Corte informativo — no genera ni marca nada"
                             >
-                              <Receipt size={13} />
-                              {cargandoColillaHoy === r.lavadorId ? 'Calculando…' : `Colilla ${COLILLA_DE[modoPeriodo]}`}
-                            </button>
-                            <button
-                              type="button"
-                              disabled={calculando === `${r.lavadorId}:reporte` || generando === r.lavadorId}
+                              Colilla {COLILLA_DE[modoPeriodo]}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="primary"
+                              loading={calculando === `${r.lavadorId}:reporte`}
+                              disabled={generando === r.lavadorId}
                               onClick={() => handleGenerarDesdeReporte(r)}
-                              className="rounded-lg px-3 py-1.5 text-xs font-medium text-primary-700 transition-colors hover:bg-primary-100 disabled:opacity-50"
                             >
-                              {calculando === `${r.lavadorId}:reporte` ? 'Calculando…' : 'Generar de este periodo'}
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-neutral-400">Al día</span>
-                        )}
-                      </td>
-                    </tr>
+                              Generar
+                            </Button>
+                          </>
+                        ) : null
+                      }
+                    />
                   ))
                 : resumenJefeZona.map((r) => (
-                    <tr key={r.personaId} className="border-b border-neutral-100 last:border-0">
-                      <td className="px-5 py-3 font-medium text-neutral-900">{r.responsable}</td>
-                      <td className="px-5 py-3 text-neutral-600">{r.cantidadOrdenes}</td>
-                      <td className="px-5 py-3 text-neutral-700">{COP.format(r.montoTotal)}</td>
-                      <td className="px-5 py-3 text-neutral-700">{COP.format(r.montoPendiente)}</td>
-                      <td className="px-5 py-3 text-right">
-                        {r.montoPendiente > 0 ? (
-                          <button
-                            type="button"
-                            disabled={calculandoJefeZona === `${r.personaId}:reporte` || generandoJefeZona === r.personaId}
+                    <FilaPeriodo
+                      key={r.personaId}
+                      nombre={r.responsable}
+                      ordenes={r.cantidadOrdenes}
+                      generado={r.montoTotal}
+                      pendiente={r.montoPendiente}
+                      acciones={
+                        r.montoPendiente > 0 ? (
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            loading={calculandoJefeZona === `${r.personaId}:reporte`}
+                            disabled={generandoJefeZona === r.personaId}
                             onClick={() => handleGenerarDesdeReporteJefeZona(r)}
-                            className="rounded-lg px-3 py-1.5 text-xs font-medium text-primary-700 transition-colors hover:bg-primary-100 disabled:opacity-50"
                           >
-                            {calculandoJefeZona === `${r.personaId}:reporte` ? 'Calculando…' : 'Generar de este periodo'}
-                          </button>
-                        ) : (
-                          <span className="text-xs text-neutral-400">Al día</span>
-                        )}
-                      </td>
-                    </tr>
+                            Generar
+                          </Button>
+                        ) : null
+                      }
+                    />
                   ))}
-              {(sujeto === 'lavadores' ? resumenLavadores.length : resumenJefeZona.length) === 0 ? (
-                <tr>
-                  <td className="px-5 py-6 text-center text-neutral-400" colSpan={5}>
-                    {cargandoResumen ? 'Cargando…' : `Nada generado en ${rangoPeriodo.label}.`}
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-          </div>
-        </Card>
-      </section>
-
-      {sujeto === 'lavadores' ? (
-        <>
-        <section className="flex flex-col gap-3">
-          <h3 className="text-sm font-semibold text-neutral-900">Comisiones pendientes</h3>
-          {pendientes.length === 0 ? (
-            <Card className="py-8 text-center text-sm text-neutral-400">
-              No hay lavadores activos con comisiones pendientes por liquidar.
-            </Card>
-          ) : (
-            <>
-              {pendientes.length > 2 ? (
-                <Card className="text-left">
-                  <h4 className="mb-3 text-sm font-semibold text-neutral-900">Comparativo por lavador</h4>
-                  <BarChart
-                    labels={pendientes.map((c) => c.lavadorNombre)}
-                    data={pendientes.map((c) => c.montoPendiente)}
-                    valueFormatter={COP.format}
-                    height={Math.max(120, pendientes.length * 40)}
-                  />
-                </Card>
-              ) : null}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {pendientes.map((comision) => (
-                <Card key={comision.lavadorId} className="flex flex-col gap-3">
-                  <div className="flex items-center gap-3">
-                    <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
-                      <Wallet size={18} strokeWidth={2} />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-neutral-900">
-                        {comision.lavadorNombre}
-                      </p>
-                      <p className="text-xs text-neutral-500">
-                        {comision.cantidadOrdenes} orden{comision.cantidadOrdenes === 1 ? '' : 'es'} sin liquidar
-                      </p>
-                    </div>
-                  </div>
-                  <p className="text-xl font-semibold text-neutral-900">{COP.format(comision.montoPendiente)}</p>
-                  <p className="-mt-2 text-xs text-neutral-400">Acumulado total sin liquidar — no es lo que cae en cada rango de abajo.</p>
-                  {comision.deudaPendiente > 0 ? (
-                    <p className="-mt-1.5 flex items-center gap-1.5 rounded-lg bg-warning-50 px-2.5 py-1.5 text-xs text-warning-700">
-                      <HandCoins size={13} className="shrink-0" />
-                      Debe {COP.format(comision.deudaPendiente)} — se elige cuánto descontar al liquidar
-                    </p>
-                  ) : null}
-                  <div className="grid grid-cols-2 gap-2">
-                    {(['diaria', 'semanal'] as const).map((periodicidad) => {
-                      const key = `${comision.lavadorId}:${periodicidad}`
-                      const esDefault = periodicidad === configuracion.periodicidadLiquidacion
-                      return (
-                        <button
-                          key={periodicidad}
-                          type="button"
-                          disabled={comision.montoPendiente === 0 || calculando === key || generando === comision.lavadorId}
-                          onClick={() => handleElegirPeriodicidad(comision, periodicidad)}
-                          className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                            esDefault
-                              ? 'bg-primary-600 text-white shadow-nav-active hover:bg-primary-700'
-                              : 'border border-neutral-200 text-neutral-600 hover:bg-neutral-50'
-                          }`}
-                        >
-                          {calculando === key ? 'Calculando…' : `Generar ${periodicidad}`}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </Card>
-              ))}
-            </div>
-            </>
+            </ul>
           )}
         </section>
+      ) : null}
 
-        {turnoJefeZona ? (
-          <PrestamosDeTurno
-            turno={turnoJefeZona}
-            lavadores={lavadores}
-            prestamos={prestamosTurno}
-            onRegistrado={(prestamo) => setPrestamosTurno((previos) => [prestamo, ...previos])}
-            size="sm"
-          />
-        ) : (
-          <p className="rounded-lg bg-neutral-50 px-4 py-3 text-xs text-neutral-500">
-            No hay turno de jefe de zona abierto ahora mismo — para prestarle a un lavador hace falta una caja abierta.
-          </p>
-        )}
-
-        <section className="flex flex-col gap-3">
-          <h3 className="text-sm font-semibold text-neutral-900">Histórico de liquidaciones</h3>
-          {/* Conteo de liquidaciones ya generadas — "pendiente de pago" (generada, esperando que
-              el admin le pague al lavador) vs "pagada" (marcarLiquidacionPagada ya ejecutado). No
-              confundir con "Comisiones pendientes" arriba: eso es trabajo sin liquidación generada
-              todavía; esto es liquidaciones que sí se generaron y su estado de pago real. */}
-          {historico.length > 0 ? (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <StatCard
-                label="En proceso de pago"
-                value={String(historico.filter((l) => !l.pagada && !l.anulada).length)}
-                hint={COP.format(historico.filter((l) => !l.pagada && !l.anulada).reduce((s, l) => s + l.monto, 0))}
-                icon={Clock}
-              />
-              <StatCard
-                label="Pagadas"
-                value={String(historico.filter((l) => l.pagada).length)}
-                hint={COP.format(historico.filter((l) => l.pagada).reduce((s, l) => s + l.monto, 0))}
-                icon={CheckCircle2}
-              />
-            </div>
-          ) : null}
-          <Card className="p-0">
-            <div className="overflow-x-auto">
-            <table className="w-full min-w-[40rem] text-sm">
-              <thead>
-                <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
-                  <th className="px-5 py-3">Lavador</th>
-                  <th className="px-5 py-3">Tipo y fecha</th>
-                  <th className="px-5 py-3">Monto</th>
-                  <th className="px-5 py-3">Estado</th>
-                  <th className="px-5 py-3 text-right">Acciones</th>
-                </tr>
-                <FilaFiltros>
-                  <FiltroTexto value={filtroHistLavador} onChange={setFiltroHistLavador} placeholder="Buscar…" />
-                  <FiltroVacio />
-                  <FiltroVacio />
-                  <FiltroSelect
-                    value={filtroHistEstadoLavador}
-                    onChange={setFiltroHistEstadoLavador}
-                    options={ESTADO_LIQUIDACION_OPTIONS}
-                  />
-                  <FiltroVacio />
-                </FilaFiltros>
-              </thead>
-              <tbody>
-                {historicoVisible.map((liquidacion) => (
-                  <LiquidacionRow
-                    key={liquidacion.id}
-                    liquidacion={liquidacion}
-                    lavador={lavadoresPorId.get(liquidacion.lavadorId)}
-                    pagando={pagando === liquidacion.id}
-                    cargandoColilla={cargandoColilla === liquidacion.id}
-                    onMarcarPagada={() => setConfirmandoPago(liquidacion)}
-                    onAnular={() =>
-                      setAnulando({
-                        tipo: 'lavador',
-                        id: liquidacion.id,
-                        label: lavadoresPorId.get(liquidacion.lavadorId)?.nombre ?? '—',
-                        monto: liquidacion.monto,
-                      })
-                    }
-                    onVerColilla={() => handleVerColilla(liquidacion)}
-                  />
-                ))}
-                {historicoVisible.length === 0 ? (
-                  <tr>
-                    <td className="px-5 py-6 text-center text-neutral-400" colSpan={5}>
-                      {historico.length === 0 ? 'Todavía no se ha generado ninguna liquidación.' : 'Ninguna liquidación coincide con el filtro.'}
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-            </div>
-          </Card>
-        </section>
-        </>
-      ) : (
-        <>
-        <section className="flex flex-col gap-3">
-          <h3 className="text-sm font-semibold text-neutral-900">Comisiones pendientes</h3>
-          <p className="-mt-1 text-xs text-neutral-500">
-            {(configuracion.comisionJefeZonaCombo1Porcentaje * 100).toFixed(1)}% (Combo 1) /{' '}
-            {(configuracion.comisionJefeZonaCombo2Porcentaje * 100).toFixed(1)}% (Combo 2 en adelante) de cada orden
-            para quien estuvo a cargo del turno de recepción al registrarla — identificado por el nombre del
-            responsable del turno, no por un usuario con id propio todavía.
-          </p>
-          {pendientesJefeZona.length === 0 ? (
-            <Card className="py-8 text-center text-sm text-neutral-400">
-              No hay responsables con comisión de jefe de patio pendiente por liquidar.
-            </Card>
+      {/* 4 · Histórico */}
+      {vistaActiva === 'historico' ? (
+        <section className="flex flex-col gap-4">
+          <BarraFiltros
+            activos={[filtroTexto, filtroEstado].filter(Boolean).length}
+            onLimpiar={() => {
+              setFiltroTexto('')
+              setFiltroEstado('')
+            }}
+            resultado={`${historicoFiltrado.length} de ${filasHistorico.length}`}
+          >
+            <FiltroCombo
+              value={filtroTexto}
+              onChange={setFiltroTexto}
+              options={filasHistorico.map((l) => l.nombre)}
+              placeholder={esLavadores ? 'Lavador' : 'Responsable'}
+              icon={UserRound}
+              ancho="sm:w-60"
+            />
+            <FiltroMenu label="Estado" value={filtroEstado} onChange={setFiltroEstado} options={ESTADO_LIQUIDACION_OPTIONS} todosLabel="Todas" />
+          </BarraFiltros>
+          {historicoFiltrado.length === 0 ? (
+            <Vacio
+              texto={
+                filasHistorico.length === 0
+                  ? 'Todavía no se ha generado ninguna liquidación.'
+                  : 'Ninguna liquidación coincide con el filtro.'
+              }
+            />
           ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {pendientesJefeZona.map((comision) => (
-                <Card key={comision.personaId} className="flex flex-col gap-3">
-                  <div className="flex items-center gap-3">
-                    <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
-                      <ShieldCheck size={18} strokeWidth={2} />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-neutral-900">{comision.responsable}</p>
-                      <p className="text-xs text-neutral-500">
-                        {comision.cantidadOrdenes} orden{comision.cantidadOrdenes === 1 ? '' : 'es'} sin liquidar
-                      </p>
-                    </div>
-                  </div>
-                  <p className="text-xl font-semibold text-neutral-900">{COP.format(comision.montoPendiente)}</p>
-                  {comision.deudaPendiente > 0 ? (
-                    <p className="-mt-1.5 flex items-center gap-1.5 rounded-lg bg-warning-50 px-2.5 py-1.5 text-xs text-warning-700">
-                      <HandCoins size={13} className="shrink-0" />
-                      Debe {COP.format(comision.deudaPendiente)} — se elige cuánto descontar al liquidar
-                    </p>
-                  ) : null}
-                  <button
-                    type="button"
-                    disabled={cargandoDetalleJefeZona === comision.personaId}
-                    onClick={() => handleVerDetalleJefeZona(comision.personaId, comision.responsable)}
-                    className="-mt-1 self-start text-xs font-medium text-primary-700 transition-colors hover:text-primary-800 disabled:opacity-50"
-                  >
-                    {cargandoDetalleJefeZona === comision.personaId
-                      ? 'Cargando…'
-                      : `Ver ${comision.cantidadOrdenes} orden${comision.cantidadOrdenes === 1 ? '' : 'es'} sin liquidar`}
-                  </button>
-                  <div className="grid grid-cols-2 gap-2">
-                    {(['diaria', 'semanal'] as const).map((periodicidad) => {
-                      const key = `${comision.personaId}:${periodicidad}`
-                      const esDefault = periodicidad === configuracion.periodicidadLiquidacion
-                      return (
-                        <button
-                          key={periodicidad}
-                          type="button"
-                          disabled={
-                            comision.montoPendiente === 0 ||
-                            calculandoJefeZona === key ||
-                            generandoJefeZona === comision.personaId
-                          }
-                          onClick={() => handleElegirPeriodicidadJefeZona(comision, periodicidad)}
-                          className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                            esDefault
-                              ? 'bg-primary-600 text-white shadow-nav-active hover:bg-primary-700'
-                              : 'border border-neutral-200 text-neutral-600 hover:bg-neutral-50'
-                          }`}
-                        >
-                          {calculandoJefeZona === key ? 'Calculando…' : `Generar ${periodicidad}`}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </Card>
-              ))}
-            </div>
+            <ListaLiquidaciones filas={historicoFiltrado} acciones={accionesFila} />
           )}
         </section>
-
-        <section className="flex flex-col gap-3">
-          <h3 className="text-sm font-semibold text-neutral-900">Histórico de liquidaciones</h3>
-          <Card className="p-0">
-            <div className="overflow-x-auto">
-            <table className="w-full min-w-[38rem] text-sm">
-              <thead>
-                <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
-                  <th className="px-5 py-3">Responsable</th>
-                  <th className="px-5 py-3">Tipo y fecha</th>
-                  <th className="px-5 py-3">Monto</th>
-                  <th className="px-5 py-3">Estado</th>
-                  <th className="px-5 py-3 text-right">Acciones</th>
-                </tr>
-                <FilaFiltros>
-                  <FiltroTexto value={filtroHistJZ} onChange={setFiltroHistJZ} placeholder="Buscar…" />
-                  <FiltroVacio />
-                  <FiltroVacio />
-                  <FiltroSelect
-                    value={filtroHistEstadoJZ}
-                    onChange={setFiltroHistEstadoJZ}
-                    options={ESTADO_LIQUIDACION_OPTIONS}
-                  />
-                  <FiltroVacio />
-                </FilaFiltros>
-              </thead>
-              <tbody>
-                {historicoJefeZonaVisible.map((liquidacion) => (
-                  <LiquidacionJefeZonaRow
-                    key={liquidacion.id}
-                    liquidacion={liquidacion}
-                    pagando={pagandoJefeZona === liquidacion.id}
-                    cargandoColilla={cargandoColillaJefeZona === liquidacion.id}
-                    onMarcarPagada={() => setConfirmandoPagoJefeZona(liquidacion)}
-                    onAnular={() =>
-                      setAnulando({
-                        tipo: 'jefeZona',
-                        id: liquidacion.id,
-                        label: liquidacion.responsable,
-                        monto: liquidacion.monto,
-                      })
-                    }
-                    onVerColilla={() => handleVerColillaJefeZona(liquidacion)}
-                  />
-                ))}
-                {historicoJefeZonaVisible.length === 0 ? (
-                  <tr>
-                    <td className="px-5 py-6 text-center text-neutral-400" colSpan={5}>
-                      {historicoJefeZona.length === 0
-                        ? 'Todavía no se ha generado ninguna liquidación de jefe de patio.'
-                        : 'Ninguna liquidación coincide con el filtro.'}
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-            </div>
-          </Card>
-        </section>
-        </>
-      )}
+      ) : null}
 
       {confirmandoGenerar ? (
         <GenerarLiquidacionModal
@@ -1181,6 +1065,313 @@ function LiquidacionesPage() {
   )
 }
 
+type VistaLiquidaciones = 'por_liquidar' | 'por_pagar' | 'periodo' | 'historico'
+
+// Forma común de una liquidación de lavador o de jefe de patio para pintarlas con un solo componente.
+interface FilaLiquidacion {
+  id: string
+  nombre: string
+  periodoInicio: string
+  periodoFin: string
+  creadoEn: string
+  monto: number
+  comisionBruta: number
+  deudaDescontada: number
+  pagada: boolean
+  anulada: boolean
+  anuladaPor?: string
+  motivoAnulacion?: string
+  pagadaEn?: string
+}
+
+interface AccionesFila {
+  pagando: boolean
+  cargandoColilla: boolean
+  onMarcarPagada: () => void
+  onAnular: () => void
+  onVerColilla: () => void
+}
+
+type Icono = ComponentType<{ size?: number; strokeWidth?: number; className?: string }>
+
+function Vacio({ texto, icon: Icon = Inbox }: { texto: string; icon?: Icono }) {
+  return (
+    <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-neutral-200 bg-white px-4 py-10 text-center">
+      <Icon size={22} className="text-neutral-300" />
+      <p className="text-sm text-neutral-500">{texto}</p>
+    </div>
+  )
+}
+
+// Paso del flujo (Sin liquidar → Por pagar → Pagado): la tarjeta también es el atajo a su pestaña.
+function ResumenPaso({
+  paso,
+  label,
+  valor,
+  hint,
+  tono = 'neutro',
+  activo,
+  onClick,
+}: {
+  paso: string
+  label: string
+  valor: string
+  hint: string
+  tono?: 'neutro' | 'warning' | 'success'
+  activo: boolean
+  onClick: () => void
+}) {
+  const color = {
+    neutro: 'bg-primary-50 text-primary-700',
+    warning: 'bg-warning-50 text-warning-700',
+    success: 'bg-success-50 text-success-700',
+  }[tono]
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex items-start gap-3 rounded-2xl border bg-white p-4 text-left shadow-card transition-all hover:shadow-card-hover ${
+        activo ? 'border-primary-500 ring-1 ring-primary-500' : 'border-neutral-200'
+      }`}
+    >
+      <span className={`flex size-8 shrink-0 items-center justify-center rounded-lg text-sm font-bold ${color}`}>{paso}</span>
+      <span className="min-w-0">
+        <span className="block text-xs font-medium text-neutral-500">{label}</span>
+        <span className="block text-xl font-semibold tabular-nums tracking-tight text-neutral-900">{valor}</span>
+        <span className="block text-xs text-neutral-400">{hint}</span>
+      </span>
+    </button>
+  )
+}
+
+function MiniCifra({ label, valor, hint }: { label: string; valor: string; hint?: string }) {
+  return (
+    <div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-card">
+      <p className="truncate text-xs font-medium capitalize text-neutral-500">{label}</p>
+      <p className="mt-0.5 text-lg font-semibold tabular-nums text-neutral-900">{valor}</p>
+      {hint ? <p className="text-xs text-neutral-400">{hint}</p> : null}
+    </div>
+  )
+}
+
+function PendienteCard({
+  nombre,
+  icon: Icon,
+  monto,
+  ordenes,
+  deuda,
+  periodicidadDefault,
+  calculando,
+  bloqueado,
+  onGenerar,
+  onVerOrdenes,
+}: {
+  nombre: string
+  icon: Icono
+  monto: number
+  ordenes: number
+  deuda: number
+  periodicidadDefault: Periodicidad
+  calculando: (p: Periodicidad) => boolean
+  bloqueado: boolean
+  onGenerar: (p: Periodicidad) => void
+  onVerOrdenes?: { cargando: boolean; onClick: () => void }
+}) {
+  return (
+    <Card className="flex flex-col gap-4 p-5">
+      <div className="flex items-center gap-3">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
+          <Icon size={18} strokeWidth={2} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-neutral-900">{nombre}</p>
+          {onVerOrdenes ? (
+            <button
+              type="button"
+              disabled={onVerOrdenes.cargando}
+              onClick={onVerOrdenes.onClick}
+              className="text-xs font-medium text-primary-600 transition-colors hover:text-primary-800 disabled:opacity-50"
+            >
+              {onVerOrdenes.cargando ? 'Cargando…' : `${ordenes} orden${ordenes === 1 ? '' : 'es'} sin liquidar →`}
+            </button>
+          ) : (
+            <p className="text-xs text-neutral-500">
+              {ordenes} orden{ordenes === 1 ? '' : 'es'} sin liquidar
+            </p>
+          )}
+        </div>
+      </div>
+      <div>
+        <p className="text-2xl font-semibold tabular-nums tracking-tight text-neutral-900">{COP.format(monto)}</p>
+        {deuda > 0 ? (
+          <p className="mt-2 flex items-center gap-1.5 rounded-lg bg-warning-50 px-2.5 py-1.5 text-xs text-warning-700">
+            <HandCoins size={13} className="shrink-0" />
+            Debe {COP.format(deuda)} — eliges cuánto descontar al generar
+          </p>
+        ) : null}
+      </div>
+      <div className="mt-auto grid grid-cols-2 gap-2">
+        {(['diaria', 'semanal'] as const).map((p) => (
+          <Button
+            key={p}
+            size="md"
+            variant={p === periodicidadDefault ? 'primary' : 'secondary'}
+            loading={calculando(p)}
+            disabled={monto === 0 || bloqueado}
+            onClick={() => onGenerar(p)}
+            className="capitalize"
+          >
+            {p}
+          </Button>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+function FilaPeriodo({
+  nombre,
+  ordenes,
+  generado,
+  pendiente,
+  acciones,
+}: {
+  nombre: string
+  ordenes: number
+  generado: number
+  pendiente: number
+  acciones: ReactNode
+}) {
+  return (
+    <li className="flex flex-col gap-3 rounded-2xl border border-neutral-200 bg-white px-4 py-3 shadow-card sm:flex-row sm:items-center">
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-neutral-900">{nombre}</p>
+        <p className="text-xs text-neutral-500">
+          {ordenes} orden{ordenes === 1 ? '' : 'es'} · generado {COP.format(generado)}
+        </p>
+      </div>
+      <div className="flex items-center justify-between gap-3 sm:justify-end">
+        {pendiente > 0 ? (
+          <span className="text-right">
+            <span className="block text-[11px] text-neutral-400">Pendiente</span>
+            <span className="block text-sm font-semibold tabular-nums text-warning-700">{COP.format(pendiente)}</span>
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 rounded-full bg-success-50 px-2.5 py-1 text-xs font-medium text-success-700">
+            <CheckCircle2 size={13} /> Al día
+          </span>
+        )}
+        {acciones ? <div className="flex flex-wrap justify-end gap-1.5">{acciones}</div> : null}
+      </div>
+    </li>
+  )
+}
+
+function ListaLiquidaciones({
+  filas,
+  acciones,
+  destacarPago = false,
+}: {
+  filas: FilaLiquidacion[]
+  acciones: (fila: FilaLiquidacion) => AccionesFila
+  destacarPago?: boolean
+}) {
+  return (
+    <ul className="flex flex-col gap-2">
+      {filas.map((fila) => (
+        <ItemLiquidacion key={fila.id} fila={fila} {...acciones(fila)} destacarPago={destacarPago} />
+      ))}
+    </ul>
+  )
+}
+
+// Una liquidación como tarjeta-fila: se lee igual en celular y en escritorio, sin tabla con scroll.
+// periodoInicio === periodoFin es el mismo criterio con que se genera una diaria; la hora de
+// generación distingue dos cortes del mismo día.
+function ItemLiquidacion({
+  fila,
+  pagando,
+  cargandoColilla,
+  onMarcarPagada,
+  onAnular,
+  onVerColilla,
+  destacarPago,
+}: { fila: FilaLiquidacion; destacarPago: boolean } & AccionesFila) {
+  const esDiaria = fila.periodoInicio === fila.periodoFin
+  const periodo = esDiaria
+    ? FECHA.format(new Date(`${fila.periodoInicio}T00:00:00`))
+    : `${FECHA.format(new Date(`${fila.periodoInicio}T00:00:00`))} → ${FECHA.format(new Date(`${fila.periodoFin}T00:00:00`))}`
+  const estado = fila.anulada
+    ? { label: 'Anulada', clase: 'bg-danger-50 text-danger-700' }
+    : fila.pagada
+      ? { label: 'Pagada', clase: 'bg-success-50 text-success-700' }
+      : { label: 'Por pagar', clase: 'bg-warning-50 text-warning-700' }
+  return (
+    <li
+      className={`flex flex-col gap-3 rounded-2xl border bg-white px-4 py-3 shadow-card sm:flex-row sm:items-center ${
+        fila.anulada ? 'border-neutral-200 opacity-70' : 'border-neutral-200'
+      }`}
+    >
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="truncate text-sm font-semibold text-neutral-900">{fila.nombre}</p>
+          <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${esDiaria ? 'bg-primary-50 text-primary-700' : 'bg-neutral-100 text-neutral-600'}`}>
+            {esDiaria ? 'Diaria' : 'Semanal'}
+          </span>
+          <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${estado.clase}`} title={fila.motivoAnulacion}>
+            {estado.label}
+          </span>
+        </div>
+        <p className="mt-0.5 text-xs text-neutral-500">
+          {periodo} · generada {FECHA_HORA.format(new Date(fila.creadoEn))}
+        </p>
+        {fila.anulada && fila.motivoAnulacion ? (
+          <p className="mt-0.5 text-xs text-danger-600">
+            {fila.motivoAnulacion}
+            {fila.anuladaPor ? ` · ${fila.anuladaPor}` : ''}
+          </p>
+        ) : null}
+        {fila.pagada && fila.pagadaEn ? (
+          <p className="mt-0.5 text-xs text-success-700">Pagada el {FECHA.format(new Date(fila.pagadaEn))}</p>
+        ) : null}
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
+        <span className="text-right">
+          <span className={`block text-base font-semibold tabular-nums ${fila.anulada ? 'text-neutral-400 line-through' : 'text-neutral-900'}`}>
+            {COP.format(fila.monto)}
+          </span>
+          {fila.deudaDescontada > 0 ? (
+            <span className="block text-[11px] text-warning-700">
+              −{COP.format(fila.deudaDescontada)} deuda · bruto {COP.format(fila.comisionBruta)}
+            </span>
+          ) : null}
+        </span>
+        <div className="flex items-center gap-1">
+          <Button size="sm" variant="ghost" icon={Receipt} loading={cargandoColilla} onClick={onVerColilla}>
+            Colilla
+          </Button>
+          {!fila.anulada && !fila.pagada ? (
+            <>
+              <Button size="sm" variant="danger-ghost" onClick={onAnular}>
+                Anular
+              </Button>
+              <Button
+                size="sm"
+                variant={destacarPago ? 'primary' : 'secondary'}
+                icon={CheckCircle2}
+                loading={pagando}
+                onClick={onMarcarPagada}
+              >
+                Marcar pagada
+              </Button>
+            </>
+          ) : null}
+        </div>
+      </div>
+    </li>
+  )
+}
+
 // Anular un corte no pagado: motivo obligatorio + quién anula (regla 13, mismo patrón que anular
 // una orden). La RPC devuelve las órdenes a "pendiente" y marca la liquidación anulada.
 function AnularLiquidacionModal({
@@ -1209,276 +1400,46 @@ function AnularLiquidacionModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/40 p-4">
-      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-card-hover">
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold text-neutral-900">Anular liquidación</h2>
-            <p className="text-xs text-neutral-500">
-              {label} · {COP.format(monto)}. Las órdenes vuelven a quedar pendientes de liquidar.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-        <form onSubmit={submit} className="flex flex-col gap-4">
-          <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium text-neutral-700">Motivo</span>
-            <textarea
-              autoFocus
-              value={motivo}
-              onChange={(e) => setMotivo(e.target.value)}
-              rows={2}
-              placeholder="Ej. rango equivocado, se generó dos veces"
-              className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-            />
-          </label>
-          <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium text-neutral-700">Quién anula</span>
-            <input
-              value={anuladaPor}
-              onChange={(e) => setAnuladaPor(e.target.value)}
-              className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-            />
-          </label>
-          {error ? <p className="text-xs text-danger-600">{error}</p> : null}
-          <div className="flex justify-end gap-2 border-t border-neutral-100 pt-4">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="rounded-lg px-3 py-2 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-100"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={busy}
-              className="rounded-lg bg-danger-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-danger-700 disabled:opacity-60"
-            >
-              {busy ? 'Anulando…' : 'Anular liquidación'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
-}
-
-function LiquidacionJefeZonaRow({
-  liquidacion,
-  pagando,
-  cargandoColilla,
-  onMarcarPagada,
-  onAnular,
-  onVerColilla,
-}: {
-  liquidacion: LiquidacionJefeZona
-  pagando: boolean
-  cargandoColilla: boolean
-  onMarcarPagada: () => void
-  onAnular: () => void
-  onVerColilla: () => void
-}) {
-  const esDiaria = liquidacion.periodoInicio === liquidacion.periodoFin
-  return (
-    <tr className="border-b border-neutral-100 transition-colors last:border-0 hover:bg-primary-50/40">
-      <td className="px-5 py-3 font-medium text-neutral-900">{liquidacion.responsable}</td>
-      <td className="px-5 py-3 text-neutral-600">
-        <div className="flex items-center gap-1.5">
-          <span
-            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-              esDiaria ? 'bg-primary-50 text-primary-700' : 'bg-neutral-100 text-neutral-600'
-            }`}
-          >
-            {esDiaria ? 'Diaria' : 'Semanal'}
-          </span>
-          <span>
-            {esDiaria
-              ? FECHA.format(new Date(`${liquidacion.periodoInicio}T00:00:00`))
-              : `${FECHA.format(new Date(`${liquidacion.periodoInicio}T00:00:00`))} → ${FECHA.format(new Date(`${liquidacion.periodoFin}T00:00:00`))}`}
-          </span>
-        </div>
-        <p className="mt-0.5 text-[11px] text-neutral-400">Generada {FECHA_HORA.format(new Date(liquidacion.creadoEn))}</p>
-      </td>
-      <td className="px-5 py-3 text-neutral-900">{COP.format(liquidacion.monto)}</td>
-      <td className="px-5 py-3">
-        <span
-          title={liquidacion.anulada ? liquidacion.motivoAnulacion ?? undefined : undefined}
-          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
-            liquidacion.anulada
-              ? 'bg-danger-50 text-danger-700'
-              : liquidacion.pagada
-                ? 'bg-success-50 text-success-700'
-                : 'bg-warning-50 text-warning-700'
-          }`}
-        >
-          {liquidacion.anulada ? 'Anulada' : liquidacion.pagada ? 'Pagada' : 'En proceso de pago'}
-        </span>
-      </td>
-      <td className="px-5 py-3">
-        <div className="flex items-center justify-end gap-1">
-          <button
-            type="button"
-            disabled={cargandoColilla}
-            onClick={onVerColilla}
-            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-primary-100 hover:text-primary-700 disabled:opacity-50"
-          >
-            <Receipt size={14} />
-            {cargandoColilla ? 'Cargando…' : 'Colilla'}
-          </button>
-          {liquidacion.anulada ? (
-            <span
-              className="flex items-center gap-1 text-xs text-danger-600"
-              title={liquidacion.motivoAnulacion ?? undefined}
-            >
-              <Ban size={14} />
-              Anulada{liquidacion.anuladaPor ? ` · ${liquidacion.anuladaPor}` : ''}
-            </span>
-          ) : liquidacion.pagada ? (
-            <span className="flex items-center gap-1 text-xs text-neutral-400">
-              <CheckCircle2 size={14} />
-              {liquidacion.pagadaEn ? new Date(liquidacion.pagadaEn).toLocaleDateString('es-CO') : ''}
-            </span>
-          ) : (
-            <>
-              <button
-                type="button"
-                disabled={pagando}
-                onClick={onMarcarPagada}
-                className="rounded-lg px-3 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-primary-100 hover:text-primary-700 disabled:opacity-50"
-              >
-                {pagando ? 'Guardando…' : 'Marcar pagada'}
-              </button>
-              <button
-                type="button"
-                onClick={onAnular}
-                className="rounded-lg px-3 py-1.5 text-xs font-medium text-danger-600 transition-colors hover:bg-danger-50"
-              >
-                Anular
-              </button>
-            </>
-          )}
-        </div>
-      </td>
-    </tr>
-  )
-}
-
-function LiquidacionRow({
-  liquidacion,
-  lavador,
-  pagando,
-  cargandoColilla,
-  onMarcarPagada,
-  onAnular,
-  onVerColilla,
-}: {
-  liquidacion: Liquidacion
-  lavador: Lavador | undefined
-  pagando: boolean
-  cargandoColilla: boolean
-  onMarcarPagada: () => void
-  onAnular: () => void
-  onVerColilla: () => void
-}) {
-  // periodoInicio === periodoFin es exactamente el criterio que usa rangoPorPeriodicidad al
-  // generar (diaria = un solo día) — así que sirve para etiquetar cada fila sin guardar un campo
-  // "tipo" aparte. La hora de generación (creadoEn) es lo que distingue dos diarias del MISMO día
-  // si el admin liquidó más de una vez esa fecha (regla de negocio 4: se puede, cada corte es su
-  // propia liquidación con lo que estuviera pendiente en ese momento).
-  const esDiaria = liquidacion.periodoInicio === liquidacion.periodoFin
-  return (
-    <tr className="border-b border-neutral-100 transition-colors last:border-0 hover:bg-primary-50/40">
-      <td className="px-5 py-3 font-medium text-neutral-900">{lavador?.nombre ?? '—'}</td>
-      <td className="px-5 py-3 text-neutral-600">
-        <div className="flex items-center gap-1.5">
-          <span
-            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-              esDiaria ? 'bg-primary-50 text-primary-700' : 'bg-neutral-100 text-neutral-600'
-            }`}
-          >
-            {esDiaria ? 'Diaria' : 'Semanal'}
-          </span>
-          <span>
-            {esDiaria
-              ? FECHA.format(new Date(`${liquidacion.periodoInicio}T00:00:00`))
-              : `${FECHA.format(new Date(`${liquidacion.periodoInicio}T00:00:00`))} → ${FECHA.format(new Date(`${liquidacion.periodoFin}T00:00:00`))}`}
-          </span>
-        </div>
-        <p className="mt-0.5 text-[11px] text-neutral-400">Generada {FECHA_HORA.format(new Date(liquidacion.creadoEn))}</p>
-      </td>
-      <td className="px-5 py-3 text-neutral-900">
-        {COP.format(liquidacion.monto)}
-        {liquidacion.deudaDescontada > 0 ? (
-          <p className="text-[11px] font-normal text-warning-700">
-            −{COP.format(liquidacion.deudaDescontada)} deuda (bruto {COP.format(liquidacion.comisionBruta)})
-          </p>
-        ) : null}
-      </td>
-      <td className="px-5 py-3">
-        <span
-          title={liquidacion.anulada ? liquidacion.motivoAnulacion ?? undefined : undefined}
-          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
-            liquidacion.anulada
-              ? 'bg-danger-50 text-danger-700'
-              : liquidacion.pagada
-                ? 'bg-success-50 text-success-700'
-                : 'bg-warning-50 text-warning-700'
-          }`}
-        >
-          {liquidacion.anulada ? 'Anulada' : liquidacion.pagada ? 'Pagada' : 'En proceso de pago'}
-        </span>
-      </td>
-      <td className="px-5 py-3">
-        <div className="flex items-center justify-end gap-1">
-          <button
-            type="button"
-            disabled={cargandoColilla}
-            onClick={onVerColilla}
-            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-primary-100 hover:text-primary-700 disabled:opacity-50"
-          >
-            <Receipt size={14} />
-            {cargandoColilla ? 'Cargando…' : 'Colilla'}
-          </button>
-          {liquidacion.anulada ? (
-            <span
-              className="flex items-center gap-1 text-xs text-danger-600"
-              title={liquidacion.motivoAnulacion ?? undefined}
-            >
-              <Ban size={14} />
-              Anulada{liquidacion.anuladaPor ? ` · ${liquidacion.anuladaPor}` : ''}
-            </span>
-          ) : liquidacion.pagada ? (
-            <span className="flex items-center gap-1 text-xs text-neutral-400">
-              <CheckCircle2 size={14} />
-              {liquidacion.pagadaEn ? new Date(liquidacion.pagadaEn).toLocaleDateString('es-CO') : ''}
-            </span>
-          ) : (
-            <>
-              <button
-                type="button"
-                disabled={pagando}
-                onClick={onMarcarPagada}
-                className="rounded-lg px-3 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-primary-100 hover:text-primary-700 disabled:opacity-50"
-              >
-                {pagando ? 'Guardando…' : 'Marcar pagada'}
-              </button>
-              <button
-                type="button"
-                onClick={onAnular}
-                className="rounded-lg px-3 py-1.5 text-xs font-medium text-danger-600 transition-colors hover:bg-danger-50"
-              >
-                Anular
-              </button>
-            </>
-          )}
-        </div>
-      </td>
-    </tr>
+    <Modal
+      title="Anular liquidación"
+      subtitle={`${label} · ${COP.format(monto)}. Las órdenes vuelven a quedar pendientes de liquidar.`}
+      icon={Ban}
+      tone="danger"
+      size="sm"
+      onClose={onCancel}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onCancel}>
+            Cancelar
+          </Button>
+          <Button variant="danger" type="submit" form="form-anular-liquidacion" loading={busy}>
+            Anular liquidación
+          </Button>
+        </>
+      }
+    >
+      <form id="form-anular-liquidacion" onSubmit={submit} className="flex flex-col gap-4">
+        <label className="flex flex-col gap-1.5 text-sm">
+          <span className="font-medium text-neutral-700">Motivo</span>
+          <textarea
+            autoFocus
+            value={motivo}
+            onChange={(e) => setMotivo(e.target.value)}
+            rows={2}
+            placeholder="Ej. rango equivocado, se generó dos veces"
+            className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+          />
+        </label>
+        <label className="flex flex-col gap-1.5 text-sm">
+          <span className="font-medium text-neutral-700">Quién anula</span>
+          <input
+            value={anuladaPor}
+            onChange={(e) => setAnuladaPor(e.target.value)}
+            className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+          />
+        </label>
+        {error ? <p className="text-xs text-danger-600">{error}</p> : null}
+      </form>
+    </Modal>
   )
 }
