@@ -486,7 +486,9 @@ async function asistencia(p: PeriodoReporte, n: NombresReporte): Promise<TablaRe
 
 async function parqueadero(p: PeriodoReporte): Promise<TablaReporte> {
   const filas = await fetchParqueaderoReporte(p)
-  const cobradas = filas.filter((e) => (e.cobro ?? 0) > 0)
+  const vigentes = filas.filter((e) => !e.anulada)
+  const cobradas = vigentes.filter((e) => (e.cobro ?? 0) > 0)
+  const anuladas = filas.filter((e) => e.anulada)
   return {
     columnas: [
       col('Tiquete', 'texto', 10),
@@ -507,16 +509,17 @@ async function parqueadero(p: PeriodoReporte): Promise<TablaReporte> {
       MODALIDAD[e.modalidad] ?? e.modalidad,
       ts(e.hora_ingreso),
       ts(e.hora_salida),
-      e.estado === 'adentro' ? 'Adentro' : 'Fuera',
+      e.anulada ? 'Anulada' : e.estado === 'adentro' ? 'Adentro' : 'Fuera',
       e.cobro ?? 0,
       e.multa,
       metodo(e.metodo_pago),
     ]),
     resumen: [
       resumen('Estancias', filas.length),
+      resumen('Anuladas', anuladas.length),
       resumen('Con cobro', cobradas.length),
       resumen('Total cobrado', suma(cobradas.map((e) => e.cobro ?? 0)), 'moneda'),
-      resumen('De eso, multas', suma(filas.map((e) => e.multa)), 'moneda'),
+      resumen('De eso, multas', suma(vigentes.map((e) => e.multa)), 'moneda'),
     ],
   }
 }

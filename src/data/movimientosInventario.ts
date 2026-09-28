@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { db } from '../lib/db'
+import { paginar } from '../lib/paginar'
 import {
   movimientoInventarioInputSchema,
   movimientoInventarioSchema,
@@ -143,4 +144,28 @@ export async function fetchStockProductosOperativo(): Promise<StockOperativo[]> 
     comprometido: r.comprometido,
     disponible: r.disponible,
   }))
+}
+
+// Consumo de insumos en [desdeISO, hastaISO): salidas manuales (no ligadas a una venta) de
+// productos sin precio de venta — jabón, cera, etc. Alimenta el cruce consumo vs. lavados de
+// rentabilidad (M11). Pagina por la misma razón que el resto de lecturas por rango.
+export async function fetchConsumoInsumosEnRango(
+  desdeISO: string,
+  hastaISO: string,
+): Promise<{ productoId: string; cantidad: number }[]> {
+  const filas = await paginar<{ productoId: string; cantidad: number; productos: { precio_venta: number | null } | null }>(
+    (a, b) =>
+      db
+        .from('movimientos_inventario')
+        .select('productoId:producto_id, cantidad, productos!inner(precio_venta)')
+        .eq('tipo', 'salida')
+        .is('venta_id', null)
+        .is('productos.precio_venta', null)
+        .gte('creado_en', desdeISO)
+        .lt('creado_en', hastaISO)
+        .order('creado_en')
+        .order('id')
+        .range(a, b),
+  )
+  return filas.map((f) => ({ productoId: f.productoId, cantidad: Math.abs(f.cantidad) }))
 }

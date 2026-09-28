@@ -1,12 +1,18 @@
 import { ahoraTexto, descargarBlob, formatoCelda, formatoResumen, sufijoArchivo, textoPeriodo } from './formato'
-import type { PeriodoReporte, ReporteCargado } from './tipos'
+import type { PeriodoReporte, TablaReporte } from './tipos'
 
 // Hoja A4 horizontal, una sección por reporte (cada uno empieza en hoja nueva). Solo van las
 // columnas marcadas para PDF: las que no caben en la hoja viajan completas en el Excel.
 const MARGEN = 10
 const AZUL: [number, number, number] = [28, 127, 214]
 
-export async function exportarPdf(reportes: ReporteCargado[], periodo: PeriodoReporte, nombreBase: string) {
+// Recibe cualquier lista de secciones con título + tabla (los reportes de /admin/reportes o el
+// cierre mensual de rentabilidad): solo se usa `info.label`.
+export async function exportarPdf(
+  reportes: { info: { label: string }; tabla: TablaReporte }[],
+  periodo: PeriodoReporte,
+  nombreBase: string,
+) {
   const [{ jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
   const anchoUtil = doc.internal.pageSize.getWidth() - MARGEN * 2

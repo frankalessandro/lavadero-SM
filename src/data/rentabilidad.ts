@@ -8,7 +8,11 @@ import { fetchLavadores } from './lavadores'
 import { fetchTiposVehiculo } from './tiposVehiculo'
 import { fetchProductos } from './productos'
 import { fechaLocalISO } from '../lib/periodo'
-import type { Orden } from '../schemas/orden'
+import type { Orden, MetodoPagoBase } from '../schemas/orden'
+import { fetchPagosEnRango } from './pagos'
+import { fetchAsistenciasEnRango } from './asistenciaLavadores'
+import { fetchConsumoInsumosEnRango } from './movimientosInventario'
+import type { ModalidadParqueadero, ClaseVehiculoParqueadero } from '../schemas/estanciaParqueadero'
 
 // Panel de rentabilidad (/admin/rentabilidad): la misma cascada de "Resultado del día" del
 // dashboard de admin, pero para cualquier periodo (día/semana/mes) y con todo el desglose que un
@@ -70,6 +74,10 @@ export interface LavadorRentabilidad {
   descuento: number
   comision: number // ya con la mitad aplicada en órdenes de dos lavadores
   pctComisionDelTotal: number
+  /** Minutos promedio de lavado (M11 productividad). null si ninguna orden tiene tiempo medido. */
+  tiempoPromedioMin: number | null
+  /** Días distintos con llegada marcada en el periodo (asistencia, M9). */
+  diasTrabajados: number
 }
 
 export interface ComboRentabilidad {
@@ -79,6 +87,44 @@ export interface ComboRentabilidad {
   cantidad: number
   ingreso: number // neto de descuento
   ticketPromedio: number
+  /** Comisión de lavadores + jefe de patio de esas órdenes. */
+  comisiones: number
+  /** Margen de contribución: ingreso − comisiones (sin repartir gastos, que no tienen regla). */
+  margen: number
+  margenPct: number
+}
+
+export interface TipoVehiculoRentabilidad {
+  tipoId: string
+  nombre: string
+  cantidad: number
+  ingreso: number
+  comisiones: number
+  margen: number
+  margenPct: number
+}
+
+export interface ParqueaderoRentabilidad {
+  modalidad: ModalidadParqueadero
+  clase: ClaseVehiculoParqueadero
+  salidas: number
+  /** Cobro sin multa. */
+  tarifas: number
+  multas: number
+  total: number
+}
+
+export interface ConsumoInsumo {
+  productoId: string
+  nombre: string
+  unidad: string
+  cantidad: number
+  /** Unidades consumidas por lavado entregado en el periodo. */
+  porLavado: number
+  /** Lo mismo en el periodo anterior de igual longitud (null si no hubo lavados o consumo). */
+  porLavadoPrevio: number | null
+  /** Variación % de porLavado contra el periodo anterior — un salto grande es un desvío a revisar. */
+  variacionPct: number | null
 }
 
 export interface GastoCategoriaRentabilidad {
@@ -136,6 +182,19 @@ export interface RentabilidadReporte extends RentabilidadPeriodo {
   ticketPromedioLavado: number
   diaMasRentable: RentabilidadDia | null
   diaMenosRentable: RentabilidadDia | null
+  // ── M11 completo (2026-09-28) ──
+  porTipoVehiculo: TipoVehiculoRentabilidad[]
+  parqueadero: ParqueaderoRentabilidad[]
+  /** Vehículos que llegaron (creadoEn) por hora del día, 0–23. Demanda, no ingresos (regla 16). */
+  demandaPorHora: number[]
+  /** Igual, por día de la semana: 0 = lunes … 6 = domingo. */
+  demandaPorDiaSemana: number[]
+  /** Lo cobrado en lavados y productos por método (líneas de pago vigentes). Parqueadero aparte. */
+  ingresosPorMetodo: Record<MetodoPagoBase, number>
+  consumoInsumos: ConsumoInsumo[]
+  /** Días calendario del periodo hasta hoy (para promedios diarios y punto de equilibrio). */
+  diasPeriodo: number
+  lavadosPrevio: number
 }
 
 export function totalesVacio(): RentabilidadTotales {
@@ -337,7 +396,7 @@ function limitesISO(periodoInicio: string, periodoFin: string): [string, string]
 
 interface DatosRango {
   ordenes: Orden[]
-  salidasParqueadero: { cobro: number; horaSalida: string }[]
+  salidasParqueadero: Awaited<ReturnType<typeof fetchSalidasParqueaderoEnRango>>
   ventasActivas: Awaited<ReturnType<typeof fetchVentasEnRango>>
   costoPorVenta: Awaited<ReturnType<typeof fetchCostoMercanciaVendidaPorVenta>>
   gastos: GastoConCategoria[]
@@ -452,13 +511,20 @@ export async function fetchRentabilidad(
   periodoFin: string,
 ): Promise<RentabilidadReporte> {
   const [anteriorInicio, anteriorFin] = rangoAnterior(periodoInicio, periodoFin)
-  const [datos, previo, combos, lavadores, tipos] = await Promise.all([
+  const [desdeISO, hastaISO] = limitesISO(periodoInicio, periodoFin)
+  const [prevDesdeISO, prevHastaISO] = limitesISO(anteriorInicio, anteriorFin)
+  const [datos, datosPrevio, combos, lavadores, tipos, pagos, asistencias, consumo, consumoPrevio] = await Promise.all([
     cargarDatosRango(periodoInicio, periodoFin),
-    fetchRentabilidadEnRango(anteriorInicio, anteriorFin),
+    cargarDatosRango(anteriorInicio, anteriorFin),
     fetchCombos(),
     fetchLavadores(),
     fetchTiposVehiculo(),
+    fetchPagosEnRango(desdeISO, hastaISO),
+    fetchAsistenciasEnRango(periodoInicio, periodoFin),
+    fetchConsumoInsumosEnRango(desdeISO, hastaISO),
+    fetchConsumoInsumosEnRango(prevDesdeISO, prevHastaISO),
   ])
+  const previo = agregarPorDia(datosPrevio)
   // `cargarDatosRango` ya trae el catálogo de productos (lo necesita para el desglose por sección);
   // no se vuelve a pedir acá.
   const productos = datos.productos
@@ -485,6 +551,8 @@ export async function fetchRentabilidad(
         descuento: 0,
         comision: 0,
         pctComisionDelTotal: 0,
+        tiempoPromedioMin: null,
+        diasTrabajados: 0,
       }
       porLavadorMap.set(id, v)
     }
@@ -500,9 +568,37 @@ export async function fetchRentabilidad(
       v.comision += comisionParaLavador(o, lid)
     }
   }
+  // Tiempo de lavado: solo órdenes con tiempo medido, atribuido a cada lavador que participó.
+  const tiempos = new Map<string, { suma: number; n: number }>()
+  for (const o of entregadas) {
+    if (o.tiempoLavadoSegundos == null) continue
+    for (const lid of [o.lavadorId, o.lavadorId2]) {
+      if (!lid) continue
+      const t = tiempos.get(lid) ?? { suma: 0, n: 0 }
+      t.suma += o.tiempoLavadoSegundos
+      t.n += 1
+      tiempos.set(lid, t)
+    }
+  }
+  const diasPorLavador = new Map<string, Set<string>>()
+  for (const a of asistencias) {
+    const set = diasPorLavador.get(a.lavadorId) ?? new Set<string>()
+    set.add(a.fecha)
+    diasPorLavador.set(a.lavadorId, set)
+    // Un lavador que vino pero no entregó nada en el periodo también cuenta para productividad.
+    acumLavador(a.lavadorId)
+  }
   const totalComisionLav = base.totales.comisionLavadores
   const porLavador = Array.from(porLavadorMap.values())
-    .map((v) => ({ ...v, pctComisionDelTotal: totalComisionLav > 0 ? (v.comision / totalComisionLav) * 100 : 0 }))
+    .map((v) => {
+      const t = tiempos.get(v.lavadorId)
+      return {
+        ...v,
+        pctComisionDelTotal: totalComisionLav > 0 ? (v.comision / totalComisionLav) * 100 : 0,
+        tiempoPromedioMin: t && t.n > 0 ? Math.round(t.suma / t.n / 60) : null,
+        diasTrabajados: diasPorLavador.get(v.lavadorId)?.size ?? 0,
+      }
+    })
     .sort((a, b) => b.comision - a.comision)
 
   // --- por combo ---
@@ -518,15 +614,86 @@ export async function fetchRentabilidad(
         cantidad: 0,
         ingreso: 0,
         ticketPromedio: 0,
+        comisiones: 0,
+        margen: 0,
+        margenPct: 0,
       }
       porComboMap.set(key, v)
     }
     v.cantidad += 1
     v.ingreso += o.precio - o.descuento
+    v.comisiones += o.comisionLavador + o.comisionJefeZona
   }
   const porCombo = Array.from(porComboMap.values())
-    .map((v) => ({ ...v, ticketPromedio: v.cantidad > 0 ? Math.round(v.ingreso / v.cantidad) : 0 }))
+    .map((v) => {
+      const margen = v.ingreso - v.comisiones
+      return {
+        ...v,
+        ticketPromedio: v.cantidad > 0 ? Math.round(v.ingreso / v.cantidad) : 0,
+        margen,
+        margenPct: v.ingreso > 0 ? (margen / v.ingreso) * 100 : 0,
+      }
+    })
     .sort((a, b) => b.ingreso - a.ingreso)
+
+  // --- por tipo de vehículo (margen de contribución, M11) ---
+  const porTipoMap = new Map<string, TipoVehiculoRentabilidad>()
+  for (const o of entregadas) {
+    let v = porTipoMap.get(o.tipoVehiculoId)
+    if (!v) {
+      v = {
+        tipoId: o.tipoVehiculoId,
+        nombre: tipoNombre.get(o.tipoVehiculoId) ?? '—',
+        cantidad: 0,
+        ingreso: 0,
+        comisiones: 0,
+        margen: 0,
+        margenPct: 0,
+      }
+      porTipoMap.set(o.tipoVehiculoId, v)
+    }
+    v.cantidad += 1
+    v.ingreso += o.precio - o.descuento
+    v.comisiones += o.comisionLavador + o.comisionJefeZona
+  }
+  const porTipoVehiculo = Array.from(porTipoMap.values())
+    .map((v) => {
+      const margen = v.ingreso - v.comisiones
+      return { ...v, margen, margenPct: v.ingreso > 0 ? (margen / v.ingreso) * 100 : 0 }
+    })
+    .sort((a, b) => b.ingreso - a.ingreso)
+
+  // --- parqueadero por modalidad y clase ---
+  const parqMap = new Map<string, ParqueaderoRentabilidad>()
+  for (const s of datos.salidasParqueadero) {
+    const key = `${s.modalidad}:${s.claseVehiculo}`
+    let v = parqMap.get(key)
+    if (!v) {
+      v = { modalidad: s.modalidad, clase: s.claseVehiculo, salidas: 0, tarifas: 0, multas: 0, total: 0 }
+      parqMap.set(key, v)
+    }
+    v.salidas += 1
+    v.multas += s.multa
+    v.tarifas += s.cobro - s.multa
+    v.total += s.cobro
+  }
+  const parqueadero = Array.from(parqMap.values()).sort((a, b) => b.total - a.total || b.salidas - a.salidas)
+
+  // --- demanda: llegada de vehículos por hora y día de la semana (cantidad, no ingresos) ---
+  const demandaPorHora = Array.from({ length: 24 }, () => 0)
+  const demandaPorDiaSemana = Array.from({ length: 7 }, () => 0)
+  for (const o of entregadas) {
+    const llegada = new Date(o.creadoEn)
+    demandaPorHora[llegada.getHours()] += 1
+    demandaPorDiaSemana[(llegada.getDay() + 6) % 7] += 1
+  }
+
+  // --- ingresos por método (líneas de pago vigentes, lavados + productos) ---
+  const ingresosPorMetodo: Record<MetodoPagoBase, number> = { efectivo: 0, transferencia: 0, datafono: 0 }
+  for (const pago of pagos) {
+    if (pago.anulado) continue
+    ingresosPorMetodo[pago.metodoPago] += pago.monto
+  }
 
   // --- gastos por categoría ---
   const gastoCatMap = new Map<string, GastoCategoriaRentabilidad>()
@@ -599,6 +766,37 @@ export async function fetchRentabilidad(
     .sort((a, b) => b.fecha.localeCompare(a.fecha))
 
   const cantidadLavados = entregadas.length
+  const lavadosPrevio = datosPrevio.ordenes.filter((o) => o.estado !== 'anulada' && o.entregadaEn).length
+  const sumar = (filas: { productoId: string; cantidad: number }[]) => {
+    const m = new Map<string, number>()
+    for (const f of filas) m.set(f.productoId, (m.get(f.productoId) ?? 0) + f.cantidad)
+    return m
+  }
+  const consumoActual = sumar(consumo)
+  const consumoAnterior = sumar(consumoPrevio)
+  const consumoInsumos: ConsumoInsumo[] = Array.from(new Set([...consumoActual.keys(), ...consumoAnterior.keys()]))
+    .map((productoId) => {
+      const cantidad = consumoActual.get(productoId) ?? 0
+      const previa = consumoAnterior.get(productoId) ?? 0
+      const porLavado = cantidadLavados > 0 ? cantidad / cantidadLavados : 0
+      const porLavadoPrevio = lavadosPrevio > 0 && previa > 0 ? previa / lavadosPrevio : null
+      return {
+        productoId,
+        nombre: productoInfo.get(productoId)?.nombre ?? 'Producto eliminado',
+        unidad: productoInfo.get(productoId)?.unidadMedida ?? '',
+        cantidad,
+        porLavado,
+        porLavadoPrevio,
+        variacionPct: porLavadoPrevio ? ((porLavado - porLavadoPrevio) / porLavadoPrevio) * 100 : null,
+      }
+    })
+    .sort((a, b) => b.cantidad - a.cantidad)
+
+  // Días del periodo hasta hoy: un mes en curso no divide entre 30 días que aún no pasan.
+  const [iy, im, id] = periodoInicio.split('-').map(Number)
+  const [fy, fm, fd] = periodoFin.split('-').map(Number)
+  const finEfectivo = Math.min(new Date(fy, fm - 1, fd).getTime(), new Date(new Date().setHours(0, 0, 0, 0)).getTime())
+  const diasPeriodo = Math.max(1, Math.round((finEfectivo - new Date(iy, im - 1, id).getTime()) / 86_400_000) + 1)
   const cantidadProductos = datos.ventasActivas.reduce((s, v) => s + v.cantidad, 0)
   const ticketPromedioLavado =
     cantidadLavados > 0 ? Math.round(base.totales.ingresosLavadero / cantidadLavados) : 0
@@ -624,5 +822,42 @@ export async function fetchRentabilidad(
     ticketPromedioLavado,
     diaMasRentable,
     diaMenosRentable,
+    porTipoVehiculo,
+    parqueadero,
+    demandaPorHora,
+    demandaPorDiaSemana,
+    ingresosPorMetodo,
+    consumoInsumos,
+    diasPeriodo,
+    lavadosPrevio,
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Acumulado del año (M11 "comparativos … y acumulado del año")
+// ---------------------------------------------------------------------------------------------
+
+export interface AcumuladoAnual {
+  anio: number
+  hasta: string // YYYY-MM-DD
+  actual: RentabilidadTotales & { lavados: number }
+  /** Mismo tramo (1 de enero → mismo día) del año anterior. */
+  anterior: RentabilidadTotales & { lavados: number }
+}
+
+export async function fetchAcumuladoAnual(hoy = new Date()): Promise<AcumuladoAnual> {
+  const anio = hoy.getFullYear()
+  const hasta = fechaLocalISO(hoy)
+  const mismoDiaAnterior = new Date(anio - 1, hoy.getMonth(), hoy.getDate())
+  const [actual, anterior] = await Promise.all([
+    cargarDatosRango(`${anio}-01-01`, hasta),
+    cargarDatosRango(`${anio - 1}-01-01`, fechaLocalISO(mismoDiaAnterior)),
+  ])
+  const lavados = (d: DatosRango) => d.ordenes.filter((o) => o.estado !== 'anulada' && o.entregadaEn).length
+  return {
+    anio,
+    hasta,
+    actual: { ...agregarPorDia(actual).totales, lavados: lavados(actual) },
+    anterior: { ...agregarPorDia(anterior).totales, lavados: lavados(anterior) },
   }
 }

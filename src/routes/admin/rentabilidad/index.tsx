@@ -40,6 +40,19 @@ import { BarChart } from '../../../components/layout/BarChart'
 import { CHART_COLORS } from '../../../lib/chartTheme'
 import { TablaDetalleModal, type ColumnaDetalle } from '../../../components/layout/TablaDetalleModal'
 import { toast } from '../../../lib/toast'
+import { fetchAcumuladoAnual, type AcumuladoAnual } from '../../../data/rentabilidad'
+import { Button } from '../../../components/layout/Button'
+import {
+  IngresosPorMetodo,
+  AcumuladoAnualCard,
+  MargenPorTipo,
+  PicosDemanda,
+  ParqueaderoDetalle,
+  ProductosRotacion,
+  ConsumoInsumos,
+  PuntoEquilibrio,
+  TendenciaGastos,
+} from './-indicadores'
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 const PCT = (n: number) => `${n.toFixed(1)}%`
@@ -63,6 +76,18 @@ export const Route = createFileRoute('/admin/rentabilidad/')({
   component: RentabilidadPage,
 })
 
+// Pestañas internas (2026-09-28): todo lo que había sigue, solo agrupado por pregunta de negocio;
+// los indicadores de M11 que faltaban entraron en la pestaña que les corresponde.
+type VistaRentabilidad = 'resumen' | 'servicios' | 'personal' | 'parqueadero' | 'productos' | 'gastos'
+const VISTAS_RENTABILIDAD: { id: VistaRentabilidad; label: string }[] = [
+  { id: 'resumen', label: 'Resumen' },
+  { id: 'servicios', label: 'Servicios' },
+  { id: 'personal', label: 'Personal' },
+  { id: 'parqueadero', label: 'Parqueadero' },
+  { id: 'productos', label: 'Productos' },
+  { id: 'gastos', label: 'Gastos' },
+]
+
 type ModalTipo =
   | 'lavadero'
   | 'parqueadero'
@@ -82,6 +107,33 @@ function RentabilidadPage() {
   const [error, setError] = useState<string | null>(null)
   const [modal, setModal] = useState<{ tipo: ModalTipo; dia?: RentabilidadDia } | null>(null)
   const rango = calcularRango(modoPeriodo, anclaPeriodo)
+  const [anual, setAnual] = useState<AcumuladoAnual | null>(null)
+  const [vista, setVista] = useState<VistaRentabilidad>('resumen')
+  const [exportandoCierre, setExportandoCierre] = useState(false)
+
+  useEffect(() => {
+    let vivo = true
+    fetchAcumuladoAnual()
+      .then((a) => {
+        if (vivo) setAnual(a)
+      })
+      .catch((err) => toast.desdeError(err, 'No se pudo calcular el acumulado del año'))
+    return () => {
+      vivo = false
+    }
+  }, [])
+
+  async function descargarCierre() {
+    setExportandoCierre(true)
+    try {
+      const { exportarCierreMensual } = await import('../../../lib/reportes/cierreMensual')
+      await exportarCierreMensual(reporte, rango)
+    } catch (err) {
+      toast.desdeError(err, 'No se pudo generar el cierre del mes')
+    } finally {
+      setExportandoCierre(false)
+    }
+  }
 
   function cambiarModoPeriodo(modo: ModoPeriodo) {
     setCargando(true)
@@ -171,13 +223,20 @@ function RentabilidadPage() {
               'Aún no descuenta el consumo de insumos de lavado. Las comparaciones (▲▼) son contra el periodo anterior de la misma longitud.',
           }}
           actions={
-            <PeriodoSelector
-              modo={modoPeriodo}
-              onModoChange={cambiarModoPeriodo}
-              ancla={anclaPeriodo}
-              onAnclaChange={cambiarAnclaPeriodo}
-              rango={rango}
-            />
+            <>
+              {modoPeriodo === 'mes' ? (
+                <Button icon={Receipt} loading={exportandoCierre} onClick={descargarCierre}>
+                  Cierre del mes (PDF)
+                </Button>
+              ) : null}
+              <PeriodoSelector
+                modo={modoPeriodo}
+                onModoChange={cambiarModoPeriodo}
+                ancla={anclaPeriodo}
+                onAnclaChange={cambiarAnclaPeriodo}
+                rango={rango}
+              />
+            </>
           }
         />
         {error ? <p className="rounded-xl bg-danger-50 px-4 py-3 text-sm text-danger-700">{error}</p> : null}
@@ -216,6 +275,23 @@ function RentabilidadPage() {
         />
       </div>
 
+      <nav className="flex w-full flex-wrap gap-1 border-b border-neutral-200">
+        {VISTAS_RENTABILIDAD.map((v) => (
+          <button
+            key={v.id}
+            type="button"
+            onClick={() => setVista(v.id)}
+            className={`-mb-px border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
+              vista === v.id ? 'border-primary-600 text-primary-700' : 'border-transparent text-neutral-500 hover:text-neutral-800'
+            }`}
+          >
+            {v.label}
+          </button>
+        ))}
+      </nav>
+
+      {vista === 'resumen' ? (
+        <>
       {/* Margen por línea de negocio — cada uno sobre SUS propios ingresos. El del lavadero es el
           que tiene que reflejar el 60/40 (57 % después de la comisión del jefe de patio); si se
           mezclara con productos y parqueadero, subiría o bajaría según cuánto se venda en la
@@ -478,6 +554,51 @@ function RentabilidadPage() {
         </p>
       </section>
 
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <IngresosPorMetodo reporte={reporte} />
+        <AcumuladoAnualCard anual={anual} />
+      </section>
+
+      {/* Indicadores */}
+      <section className="flex flex-col gap-3">
+        <h3 className="text-sm font-semibold text-neutral-900">Indicadores del periodo</h3>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <StatCard label="Lavados entregados" value={`${reporte.cantidadLavados}`} icon={Droplets} />
+          <StatCard
+            label="Ticket promedio de lavado"
+            value={COP.format(reporte.ticketPromedioLavado)}
+            icon={Sparkles}
+          />
+          <StatCard label="Productos vendidos" value={`${reporte.cantidadProductos}`} icon={ShoppingBasket} />
+          <StatCard
+            label="Descuentos absorbidos"
+            value={COP.format(totales.descuentos)}
+            icon={Coins}
+            hint={totales.descuentos > 0 ? 'El negocio asumió estas rebajas' : undefined}
+          />
+          <StatCard
+            label="Día más rentable"
+            value={reporte.diaMasRentable ? COP.format(reporte.diaMasRentable.utilidadNeta) : '—'}
+            icon={TrendingUp}
+            hint={
+              reporte.diaMasRentable
+                ? FECHA_LARGA.format(dateFromISO(reporte.diaMasRentable.fecha))
+                : undefined
+            }
+          />
+          <StatCard
+            label="Día menos rentable"
+            value={reporte.diaMenosRentable ? COP.format(reporte.diaMenosRentable.utilidadNeta) : '—'}
+            icon={TrendingDown}
+            hint={
+              reporte.diaMenosRentable
+                ? FECHA_LARGA.format(dateFromISO(reporte.diaMenosRentable.fecha))
+                : undefined
+            }
+          />
+        </div>
+      </section>
+
       {/* Gráficos */}
       {porDia.length > 2 ? (
         <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -647,54 +768,11 @@ function RentabilidadPage() {
         </section>
       ) : null}
 
-      {/* Desglose por lavador */}
-      <section className="flex flex-col gap-3">
-        <h3 className="text-sm font-semibold text-neutral-900">Comisión por lavador</h3>
-        {reporte.porLavador.length > 2 ? (
-          <Card className="text-left">
-            <BarChart
-              labels={reporte.porLavador.map((l) => l.nombre)}
-              data={reporte.porLavador.map((l) => l.comision)}
-              valueFormatter={COP.format}
-              height={Math.max(120, reporte.porLavador.length * 40)}
-            />
-          </Card>
-        ) : null}
-        <Card className="p-0">
-          <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
-                <th className="px-4 py-3">Lavador</th>
-                <th className="px-4 py-3 text-right">Órdenes</th>
-                <th className="px-4 py-3 text-right">Ingreso generado</th>
-                <th className="px-4 py-3 text-right">Comisión (40%)</th>
-                <th className="px-4 py-3 text-right">% del total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {reporte.porLavador.map((l) => (
-                <tr key={l.lavadorId} className="border-b border-neutral-100 last:border-0">
-                  <td className="px-4 py-3 font-medium text-neutral-900">{l.nombre}</td>
-                  <td className="px-4 py-3 text-right text-neutral-600">{l.ordenes}</td>
-                  <td className="px-4 py-3 text-right text-neutral-600">{COP.format(l.ingresoLista)}</td>
-                  <td className="px-4 py-3 text-right font-medium text-neutral-900">{COP.format(l.comision)}</td>
-                  <td className="px-4 py-3 text-right text-neutral-500">{PCT(l.pctComisionDelTotal)}</td>
-                </tr>
-              ))}
-              {reporte.porLavador.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-neutral-400">
-                    Sin lavados entregados en el periodo.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-          </div>
-        </Card>
-      </section>
+        </>
+      ) : null}
 
+      {vista === 'servicios' ? (
+        <>
       {/* Desglose por combo */}
       <section className="flex flex-col gap-3">
         <h3 className="text-sm font-semibold text-neutral-900">Lavados por combo</h3>
@@ -718,6 +796,9 @@ function RentabilidadPage() {
                 <th className="px-4 py-3 text-right">Cantidad</th>
                 <th className="px-4 py-3 text-right">Ingreso</th>
                 <th className="px-4 py-3 text-right">Ticket promedio</th>
+                <th className="px-4 py-3 text-right">Comisiones</th>
+                <th className="px-4 py-3 text-right">Margen</th>
+                <th className="px-4 py-3 text-right">%</th>
               </tr>
             </thead>
             <tbody>
@@ -728,11 +809,14 @@ function RentabilidadPage() {
                   <td className="px-4 py-3 text-right text-neutral-600">{c.cantidad}</td>
                   <td className="px-4 py-3 text-right text-neutral-700">{COP.format(c.ingreso)}</td>
                   <td className="px-4 py-3 text-right text-neutral-600">{COP.format(c.ticketPromedio)}</td>
+                  <td className="px-4 py-3 text-right text-danger-600">{COP.format(c.comisiones)}</td>
+                  <td className="px-4 py-3 text-right font-semibold text-neutral-900">{COP.format(c.margen)}</td>
+                  <td className="px-4 py-3 text-right text-neutral-500">{PCT(c.margenPct)}</td>
                 </tr>
               ))}
               {reporte.porCombo.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-neutral-400">
+                  <td colSpan={8} className="px-4 py-6 text-center text-neutral-400">
                     Sin lavados entregados en el periodo.
                   </td>
                 </tr>
@@ -743,6 +827,93 @@ function RentabilidadPage() {
         </Card>
       </section>
 
+      <MargenPorTipo reporte={reporte} />
+
+        </>
+      ) : null}
+
+      {vista === 'personal' ? (
+        <>
+      {/* Desglose por lavador */}
+      <section className="flex flex-col gap-3">
+        <h3 className="text-sm font-semibold text-neutral-900">Productividad y comisión por lavador</h3>
+        {reporte.porLavador.length > 2 ? (
+          <Card className="text-left">
+            <BarChart
+              labels={reporte.porLavador.map((l) => l.nombre)}
+              data={reporte.porLavador.map((l) => l.comision)}
+              valueFormatter={COP.format}
+              height={Math.max(120, reporte.porLavador.length * 40)}
+            />
+          </Card>
+        ) : null}
+        <Card className="p-0">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
+                <th className="px-4 py-3">Lavador</th>
+                <th className="px-4 py-3 text-right">Órdenes</th>
+                <th className="px-4 py-3 text-right">Ingreso generado</th>
+                <th className="px-4 py-3 text-right">Comisión (40%)</th>
+                <th className="px-4 py-3 text-right">% del total</th>
+                <th className="px-4 py-3 text-right">Días</th>
+                <th className="px-4 py-3 text-right">Lavados/día</th>
+                <th className="px-4 py-3 text-right">Tiempo prom.</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reporte.porLavador.map((l) => (
+                <tr key={l.lavadorId} className="border-b border-neutral-100 last:border-0">
+                  <td className="px-4 py-3 font-medium text-neutral-900">{l.nombre}</td>
+                  <td className="px-4 py-3 text-right text-neutral-600">{l.ordenes}</td>
+                  <td className="px-4 py-3 text-right text-neutral-600">{COP.format(l.ingresoLista)}</td>
+                  <td className="px-4 py-3 text-right font-medium text-neutral-900">{COP.format(l.comision)}</td>
+                  <td className="px-4 py-3 text-right text-neutral-500">{PCT(l.pctComisionDelTotal)}</td>
+                  <td className="px-4 py-3 text-right text-neutral-600">{l.diasTrabajados || '—'}</td>
+                  <td className="px-4 py-3 text-right text-neutral-600">
+                    {l.diasTrabajados > 0 ? (l.ordenes / l.diasTrabajados).toFixed(1) : '—'}
+                  </td>
+                  <td className="px-4 py-3 text-right text-neutral-600">
+                    {l.tiempoPromedioMin !== null ? `${l.tiempoPromedioMin} min` : '—'}
+                  </td>
+                </tr>
+              ))}
+              {reporte.porLavador.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-6 text-center text-neutral-400">
+                    Sin lavados entregados en el periodo.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+          </div>
+        </Card>
+      </section>
+
+      <PicosDemanda reporte={reporte} />
+
+        </>
+      ) : null}
+
+      {vista === 'parqueadero' ? (
+        <>
+      <ParqueaderoDetalle reporte={reporte} />
+
+        </>
+      ) : null}
+
+      {vista === 'productos' ? (
+        <>
+      <ProductosRotacion reporte={reporte} />
+      <ConsumoInsumos reporte={reporte} />
+
+        </>
+      ) : null}
+
+      {vista === 'gastos' ? (
+        <>
       {/* Gastos por categoría */}
       <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
@@ -798,45 +969,13 @@ function RentabilidadPage() {
         )}
       </section>
 
-      {/* Indicadores */}
-      <section className="flex flex-col gap-3">
-        <h3 className="text-sm font-semibold text-neutral-900">Indicadores del periodo</h3>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          <StatCard label="Lavados entregados" value={`${reporte.cantidadLavados}`} icon={Droplets} />
-          <StatCard
-            label="Ticket promedio de lavado"
-            value={COP.format(reporte.ticketPromedioLavado)}
-            icon={Sparkles}
-          />
-          <StatCard label="Productos vendidos" value={`${reporte.cantidadProductos}`} icon={ShoppingBasket} />
-          <StatCard
-            label="Descuentos absorbidos"
-            value={COP.format(totales.descuentos)}
-            icon={Coins}
-            hint={totales.descuentos > 0 ? 'El negocio asumió estas rebajas' : undefined}
-          />
-          <StatCard
-            label="Día más rentable"
-            value={reporte.diaMasRentable ? COP.format(reporte.diaMasRentable.utilidadNeta) : '—'}
-            icon={TrendingUp}
-            hint={
-              reporte.diaMasRentable
-                ? FECHA_LARGA.format(dateFromISO(reporte.diaMasRentable.fecha))
-                : undefined
-            }
-          />
-          <StatCard
-            label="Día menos rentable"
-            value={reporte.diaMenosRentable ? COP.format(reporte.diaMenosRentable.utilidadNeta) : '—'}
-            icon={TrendingDown}
-            hint={
-              reporte.diaMenosRentable
-                ? FECHA_LARGA.format(dateFromISO(reporte.diaMenosRentable.fecha))
-                : undefined
-            }
-          />
-        </div>
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <PuntoEquilibrio reporte={reporte} />
+        <TendenciaGastos reporte={reporte} />
       </section>
+
+        </>
+      ) : null}
 
       {modal ? <DetalleModal modal={modal} reporte={reporte} onClose={() => setModal(null)} /> : null}
     </div>
