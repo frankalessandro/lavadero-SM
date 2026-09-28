@@ -35,6 +35,12 @@ export const estanciaParqueaderoSchema = z.object({
   multa: z.number().int().nonnegative(),
   metodoPago: metodoPagoParqueaderoSchema.nullish().transform((value) => value ?? undefined),
   estado: z.enum(['adentro', 'fuera']),
+  // Registro anulado (0077) — placa mal digitada, entrada duplicada, etc. Independiente de
+  // `estado`: no borra el histórico (regla 13), solo lo excluye del arqueo y de rentabilidad.
+  anulada: z.boolean(),
+  motivoAnulacion: z.string().nullish().transform((value) => value ?? undefined),
+  anuladaPor: z.string().nullish().transform((value) => value ?? undefined),
+  anuladaEn: z.string().nullish().transform((value) => value ?? undefined),
 })
 
 export const entradaInputSchema = z.object({
