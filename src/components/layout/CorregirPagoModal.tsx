@@ -178,7 +178,7 @@ export function CorregirPagoModal({
               <button
                 type="submit"
                 disabled={saving || !cuadra || motivo.trim().length < 3 || !corregidoPor.trim()}
-                className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
+                className="rounded-xl bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
               >
                 {saving ? 'Guardando…' : 'Guardar corrección'}
               </button>

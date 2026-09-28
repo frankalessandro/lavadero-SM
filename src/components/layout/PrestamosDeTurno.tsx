@@ -284,7 +284,7 @@ export function PrestamosDeTurno({ turno, lavadores, prestamos, onRegistrado, si
             <button
               type="submit"
               disabled={guardando}
-              className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
+              className="rounded-xl bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
             >
               {guardando ? 'Guardando…' : modo === 'prestamo' ? 'Registrar préstamo' : 'Registrar abono'}
             </button>

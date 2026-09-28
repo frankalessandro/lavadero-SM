@@ -132,7 +132,7 @@ export function PagoLineas({
         <div className="h-1.5 overflow-hidden rounded-full bg-neutral-200">
           <div
             className={`h-full rounded-full transition-[width] duration-300 ease-out ${
-              cuadra ? 'bg-success-500' : resto < 0 ? 'bg-danger-500' : 'bg-primary-500'
+              cuadra ? 'bg-success-600' : resto < 0 ? 'bg-danger-600' : 'bg-primary-500'
             }`}
             style={{ width: `${progreso}%` }}
           />

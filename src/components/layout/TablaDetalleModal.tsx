@@ -51,12 +51,12 @@ export function TablaDetalleModal({
 }: Props) {
   return (
     <div
-      className="fixed inset-0 z-30 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-[2px]"
+      className="fixed inset-0 z-30 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4"
       onClick={onClose}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className={`flex max-h-[90vh] w-full flex-col rounded-2xl bg-white shadow-card-hover ${
+        className={`flex max-h-[92vh] sm:max-h-[90vh] w-full flex-col rounded-t-3xl sm:rounded-2xl bg-white shadow-card-hover ${
           ancho === 'lg' ? 'max-w-5xl' : 'max-w-3xl'
         }`}
       >

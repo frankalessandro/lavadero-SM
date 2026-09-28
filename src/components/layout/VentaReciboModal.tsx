@@ -107,7 +107,7 @@ export function VentaReciboModal({ venta, onClose }: { venta: VentaReciboData; o
           <VentaReciboRow label="Fecha" value={FECHA_HORA.format(new Date(venta.fecha))} />
 
           <div className="mt-1 flex items-center justify-between rounded-lg bg-success-50 px-3 py-3">
-            <span className="text-sm font-medium text-success-900">Total pagado</span>
+            <span className="text-sm font-medium text-success-700">Total pagado</span>
             <span className="text-xl font-bold text-success-700">{COP.format(venta.total)}</span>
           </div>
         </div>

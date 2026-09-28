@@ -76,8 +76,8 @@ function corteInformativo(colilla: ColillaLiquidacionData): string {
 export function ColillaLiquidacionModal({ colilla, onClose }: { colilla: ColillaLiquidacionData; onClose: () => void }) {
   const informativo = colilla.tipo === 'informativo'
   return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-[2px]">
-      <div className="custom-scroll max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-2xl bg-white p-6 shadow-card-hover">
+    <div className="fixed inset-0 z-30 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
+      <div className="custom-scroll max-h-[92vh] sm:max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-t-3xl sm:rounded-2xl bg-white p-6 shadow-card-hover">
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h3 className="text-base font-semibold text-neutral-900">
@@ -124,7 +124,7 @@ export function ColillaLiquidacionModal({ colilla, onClose }: { colilla: Colilla
         <div
           className={`mt-3 flex items-center justify-between rounded-lg px-3 py-2.5 text-sm ${informativo ? 'bg-warning-50' : 'bg-primary-50'}`}
         >
-          <span className={`font-medium ${informativo ? 'text-warning-900' : 'text-primary-900'}`}>
+          <span className={`font-medium ${informativo ? 'text-warning-700' : 'text-primary-900'}`}>
             {informativo ? `Ganado ${cuandoInformativo(colilla)} (sin liquidar aún)` : 'Total liquidado'}
           </span>
           <span className={`text-lg font-bold ${informativo ? 'text-warning-700' : 'text-primary-700'}`}>
@@ -155,7 +155,7 @@ export function ColillaLiquidacionModal({ colilla, onClose }: { colilla: Colilla
         <button
           type="button"
           onClick={onClose}
-          className="mt-2.5 w-full rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700"
+          className="mt-2.5 w-full rounded-xl bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700"
         >
           Cerrar
         </button>

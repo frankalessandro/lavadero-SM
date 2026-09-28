@@ -203,7 +203,7 @@ export function GastosDeTurno({ turno, categorias, gastos, onRegistrado, size = 
             <button
               type="submit"
               disabled={guardando}
-              className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
+              className="rounded-xl bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
             >
               {guardando ? 'Guardando…' : 'Registrar gasto'}
             </button>

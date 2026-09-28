@@ -28,8 +28,8 @@ export function DetalleOrdenesJefeZonaModal({ responsable, filas, onClose }: Pro
   const totalPrecio = filas.reduce((s, f) => s + f.precio, 0)
 
   return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-[2px]">
-      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-2xl bg-white p-6 shadow-card-hover sm:p-7">
+    <div className="fixed inset-0 z-30 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
+      <div className="flex max-h-[92vh] sm:max-h-[90vh] w-full max-w-2xl flex-col rounded-t-3xl sm:rounded-2xl bg-white p-6 shadow-card-hover sm:p-7">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-3">
             <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-600">

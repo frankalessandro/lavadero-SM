@@ -26,8 +26,8 @@ export function ContactoModal({
   onClose: () => void
 }) {
   return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-[2px]">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-card-hover">
+    <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
+      <div className="w-full max-w-sm rounded-t-3xl sm:rounded-2xl custom-scroll max-h-[92vh] overflow-y-auto bg-white sm:max-h-[88vh] p-6 shadow-card-hover">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
@@ -55,7 +55,7 @@ export function ContactoModal({
                   href={whatsappHref(telefono, mensajeWhatsapp)}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center gap-2.5 rounded-lg bg-success-50 px-3 py-2.5 text-sm font-semibold text-success-700 transition-colors hover:bg-success-100"
+                  className="flex items-center gap-2.5 rounded-lg bg-success-50 px-3 py-2.5 text-sm font-semibold text-success-700 transition-colors hover:bg-success-600/10"
                 >
                   <MessageCircle size={16} />
                   WhatsApp · {telefono}

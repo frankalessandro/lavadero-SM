@@ -25,8 +25,8 @@ function periodoLabel(inicio: string, fin: string): string {
 // qué combo fue cada vehículo.
 export function ColillaJefeZonaModal({ colilla, onClose }: { colilla: ColillaJefeZonaData; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-[2px]">
-      <div className="custom-scroll max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-2xl bg-white p-6 shadow-card-hover">
+    <div className="fixed inset-0 z-30 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
+      <div className="custom-scroll max-h-[92vh] sm:max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-t-3xl sm:rounded-2xl bg-white p-6 shadow-card-hover">
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h3 className="text-base font-semibold text-neutral-900">Colilla de liquidación — jefe de patio</h3>
@@ -64,7 +64,7 @@ export function ColillaJefeZonaModal({ colilla, onClose }: { colilla: ColillaJef
         <button
           type="button"
           onClick={onClose}
-          className="mt-2.5 w-full rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700"
+          className="mt-2.5 w-full rounded-xl bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700"
         >
           Cerrar
         </button>

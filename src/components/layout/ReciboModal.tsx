@@ -141,7 +141,7 @@ export function ReciboModal({
           <div
             className={`mt-1 flex items-center justify-between rounded-lg px-3 py-3 ${esPago ? 'bg-success-50' : 'bg-primary-50'}`}
           >
-            <span className={`text-sm font-medium ${esPago ? 'text-success-900' : 'text-primary-900'}`}>
+            <span className={`text-sm font-medium ${esPago ? 'text-success-700' : 'text-primary-900'}`}>
               {!esPago ? 'Precio' : recibo.precio === 0 ? 'Cortesía' : 'Total pagado'}
             </span>
             <span className={`text-xl font-bold ${esPago ? 'text-success-700' : 'text-primary-700'}`}>

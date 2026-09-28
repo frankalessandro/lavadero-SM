@@ -82,7 +82,7 @@ export function AbrirTurnoPrompt({
         <button
           type="submit"
           disabled={saving}
-          className="flex items-center justify-center gap-2 rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
+          className="flex items-center justify-center gap-2 rounded-xl bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
         >
           {saving ? 'Abriendo…' : 'Abrir turno'}
         </button>
@@ -251,7 +251,7 @@ export function TurnoResponsableBanner({
               type="button"
               onClick={handleAceptar}
               disabled={saving}
-              className="flex-1 rounded-lg bg-primary-600 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-700 disabled:opacity-60"
+              className="flex-1 rounded-xl bg-primary-600 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-700 disabled:opacity-60"
             >
               {saving ? 'Aceptando…' : 'Aceptar responsabilidad'}
             </button>
@@ -305,7 +305,7 @@ export function TurnoResponsableBanner({
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 rounded-lg bg-primary-600 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-700 disabled:opacity-60"
+              className="flex-1 rounded-xl bg-primary-600 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-700 disabled:opacity-60"
             >
               {saving ? 'Solicitando…' : avisoTraspaso ? 'Contar y solicitar traspaso' : 'Solicitar traspaso'}
             </button>

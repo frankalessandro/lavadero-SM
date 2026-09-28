@@ -51,8 +51,8 @@ export function ConfirmModal({
   const esPeligro = variant === 'danger'
 
   return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-[2px]">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-card-hover">
+    <div className="fixed inset-0 z-30 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
+      <div className="w-full max-w-sm rounded-t-3xl sm:rounded-2xl custom-scroll max-h-[92vh] overflow-y-auto bg-white sm:max-h-[88vh] p-6 shadow-card-hover">
         <div className="flex items-start gap-3">
           <span
             className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${
