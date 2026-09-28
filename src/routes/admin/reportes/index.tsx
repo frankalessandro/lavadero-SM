@@ -153,7 +153,7 @@ function Reportes() {
               <button
                 type="button"
                 onClick={() => setModo('rango')}
-                className="flex items-center gap-1.5 rounded-lg border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-50"
+                className="flex items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3 py-1.5 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-50"
               >
                 <CalendarRange size={15} />
                 Rango de fechas
@@ -200,7 +200,7 @@ function Reportes() {
             type="button"
             disabled={!reporte || ocupado}
             onClick={() => exportar('excel')}
-            className="flex items-center gap-1.5 rounded-lg bg-primary-600 px-3 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-xl bg-primary-600 px-3 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-50"
           >
             <FileSpreadsheet size={15} />
             {exportando === 'excel' ? 'Generando…' : 'Excel'}
@@ -209,7 +209,7 @@ function Reportes() {
             type="button"
             disabled={!reporte || ocupado}
             onClick={() => exportar('pdf')}
-            className="flex items-center gap-1.5 rounded-lg bg-primary-600 px-3 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-xl bg-primary-600 px-3 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-50"
           >
             <FileText size={15} />
             {exportando === 'pdf' ? 'Generando…' : 'PDF'}
@@ -218,7 +218,7 @@ function Reportes() {
             type="button"
             disabled={!periodo || ocupado}
             onClick={() => exportar('todo-excel')}
-            className="flex items-center gap-1.5 rounded-lg border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50 disabled:opacity-50"
           >
             <FileSpreadsheet size={15} />
             {exportando === 'todo-excel' ? 'Generando…' : 'Todo el periodo (Excel)'}
@@ -227,7 +227,7 @@ function Reportes() {
             type="button"
             disabled={!periodo || ocupado}
             onClick={() => exportar('todo-pdf')}
-            className="flex items-center gap-1.5 rounded-lg border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50 disabled:opacity-50"
           >
             <FileText size={15} />
             {exportando === 'todo-pdf' ? 'Generando…' : 'Todo el periodo (PDF)'}
@@ -236,7 +236,7 @@ function Reportes() {
       </div>
 
       {query.isError ? (
-        <Card className="border-l-4 border-l-danger-500 p-5 text-sm text-danger-700">
+        <Card className="border-l-4 border-l-danger-600 p-5 text-sm text-danger-700">
           No se pudo cargar el reporte: {query.error instanceof Error ? query.error.message : 'error desconocido'}
         </Card>
       ) : null}

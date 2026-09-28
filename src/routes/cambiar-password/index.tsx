@@ -117,7 +117,7 @@ function CambiarPasswordPage() {
           <button
             type="submit"
             disabled={loading}
-            className="mt-1 rounded-lg bg-primary-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-700 disabled:opacity-50"
+            className="mt-1 rounded-xl bg-primary-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-700 disabled:opacity-50"
           >
             {loading ? 'Guardando…' : 'Guardar contraseña'}
           </button>

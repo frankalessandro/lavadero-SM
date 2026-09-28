@@ -314,7 +314,7 @@ function UsuarioDetalleModal({ perfil, onClose }: { perfil: Perfil; onClose: () 
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700"
+            className="rounded-xl bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700"
           >
             Cerrar
           </button>
@@ -413,8 +413,8 @@ function ModalShell({ title, subtitle, icon, onClose, children }: {
   children: ReactNode
 }) {
   return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-[2px]">
-      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-card-hover sm:p-7">
+    <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
+      <div className="w-full max-w-lg rounded-t-3xl sm:rounded-2xl custom-scroll max-h-[92vh] overflow-y-auto bg-white sm:max-h-[88vh] p-6 shadow-card-hover sm:p-7">
         <div className="mb-5 flex items-center justify-between">
           <div>
             <h3 className="flex items-center gap-2 text-base font-semibold text-neutral-900">
@@ -492,7 +492,7 @@ function CrearUsuarioForm({
             <button
               type="button"
               onClick={() => void onSaved().then(onClose)}
-              className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700"
+              className="rounded-xl bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700"
             >
               Listo
             </button>
@@ -554,7 +554,7 @@ function CrearUsuarioForm({
           <button
             type="submit"
             disabled={saving}
-            className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
+            className="rounded-xl bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
           >
             {saving ? 'Creando…' : 'Crear usuario'}
           </button>
@@ -656,7 +656,7 @@ function PerfilForm({
           <button
             type="submit"
             disabled={saving}
-            className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
+            className="rounded-xl bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
           >
             {saving ? 'Guardando…' : 'Guardar'}
           </button>
@@ -720,7 +720,7 @@ function ResetPasswordModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700"
+              className="rounded-xl bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700"
             >
               Listo
             </button>
@@ -737,7 +737,7 @@ function ResetPasswordModal({
                 type="button"
                 onClick={() => void confirmar()}
                 disabled={working}
-                className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
+                className="rounded-xl bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
               >
                 {working ? 'Generando…' : 'Restablecer'}
               </button>

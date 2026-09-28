@@ -284,7 +284,7 @@ function InventarioPage() {
         titulo="Productos para vender"
         subtitulo="Nevera / mostrador"
         icono={ShoppingBag}
-        accento="border-t-warning-500"
+        accento="border-t-warning-600"
         badgeClass="bg-warning-50 text-warning-700"
         productos={productosVendibles}
         stockPorProducto={stockPorProducto}
@@ -817,8 +817,8 @@ function MovimientoForm({
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-[2px]">
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-card-hover sm:p-7">
+    <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
+      <div className="max-h-[92vh] sm:max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-3xl sm:rounded-2xl bg-white p-6 shadow-card-hover sm:p-7">
         <div className="mb-5 flex items-center justify-between">
           <h3 className="flex items-center gap-2 text-base font-semibold text-neutral-900">
             <PackageSearch size={16} className="text-primary-500" />
@@ -949,7 +949,7 @@ function MovimientoForm({
           <button
             type="submit"
             disabled={saving}
-            className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
+            className="rounded-xl bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
           >
             {saving ? 'Guardando…' : 'Registrar movimiento'}
           </button>
@@ -1015,8 +1015,8 @@ function ProductoForm({
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-[2px]">
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-card-hover sm:p-7">
+    <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
+      <div className="max-h-[92vh] sm:max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-3xl sm:rounded-2xl bg-white p-6 shadow-card-hover sm:p-7">
         <div className="mb-5 flex items-center justify-between">
           <h3 className="text-base font-semibold text-neutral-900">
             {producto ? 'Editar producto' : 'Nuevo producto'}
@@ -1116,7 +1116,7 @@ function ProductoForm({
             <button
               type="submit"
               disabled={saving}
-              className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
+              className="rounded-xl bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
             >
               {saving ? 'Guardando…' : 'Guardar'}
             </button>
