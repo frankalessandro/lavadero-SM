@@ -53,6 +53,7 @@ export const ADMIN_SECCIONES: AdminSeccion[] = [
     exact: false,
     tabs: [
       { to: '/admin/operacion/ordenes', label: 'Órdenes', icon: ClipboardList },
+      { to: '/admin/operacion/parqueadero', label: 'Parqueadero', icon: CircleParking },
       { to: '/admin/operacion/turnos', label: 'Turnos y arqueos', icon: ClipboardCheck },
       { to: '/admin/operacion/clientes', label: 'Clientes', icon: BookUser },
       { to: '/admin/operacion/auditoria', label: 'Auditoría', icon: ScrollText },
