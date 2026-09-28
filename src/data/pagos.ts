@@ -1,4 +1,5 @@
 import { db } from '../lib/db'
+import { paginar } from '../lib/paginar'
 import { pagoSchema, type Pago, type PagoLineaInput } from '../schemas/pago'
 
 const PAGO_SELECT =
@@ -62,13 +63,16 @@ export async function fetchPagosDeGrupo(ventaGrupoId: string): Promise<Pago[]> {
 // Todas las líneas de pago cuyo cobro cae en [desdeISO, hastaISO) — para los dashboards de admin
 // (ingresos por método) y el reporte de correcciones. Incluye las anuladas; el llamador filtra.
 export async function fetchPagosEnRango(desdeISO: string, hastaISO: string): Promise<Pago[]> {
-  const { data, error } = await db
-    .from('pagos')
-    .select(PAGO_SELECT)
-    .gte('creado_en', desdeISO)
-    .lt('creado_en', hastaISO)
-    .order('creado_en', { ascending: false })
-  if (error) throw new Error(error.message)
+  const data = await paginar((a, b) =>
+    db
+      .from('pagos')
+      .select(PAGO_SELECT)
+      .gte('creado_en', desdeISO)
+      .lt('creado_en', hastaISO)
+      .order('creado_en', { ascending: false })
+      .order('id')
+      .range(a, b),
+  )
   return pagoSchema.array().parse(data)
 }
 

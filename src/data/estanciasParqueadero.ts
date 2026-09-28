@@ -9,9 +9,10 @@ import {
   type ClaseVehiculoParqueadero,
 } from '../schemas/estanciaParqueadero'
 import { fetchTurnoAbierto } from './turnos'
+import { paginar } from '../lib/paginar'
 
 const ESTANCIA_SELECT =
-  'id, consecutivo, placa, modalidad, claseVehiculo:clase_vehiculo, horaIngreso:hora_ingreso, horaSalida:hora_salida, cobro, multa, metodoPago:metodo_pago, estado'
+  'id, consecutivo, placa, modalidad, claseVehiculo:clase_vehiculo, horaIngreso:hora_ingreso, horaSalida:hora_salida, cobro, multa, metodoPago:metodo_pago, estado, anulada, motivoAnulacion:motivo_anulacion, anuladaPor:anulada_por, anuladaEn:anulada_en'
 
 function inicioDeHoyISO(): string {
   const ahora = new Date()
@@ -23,6 +24,7 @@ export async function fetchEstanciasAdentro(): Promise<EstanciaParqueadero[]> {
     .from('estancias_parqueadero')
     .select(ESTANCIA_SELECT)
     .eq('estado', 'adentro')
+    .eq('anulada', false)
     .order('hora_ingreso', { ascending: false })
   if (error) throw new Error(error.message)
   return estanciaParqueaderoSchema.array().parse(data)
@@ -30,8 +32,13 @@ export async function fetchEstanciasAdentro(): Promise<EstanciaParqueadero[]> {
 
 export async function fetchResumenHoy(): Promise<{ vehiculosAdentro: number; dineroHoy: number }> {
   const [adentroRes, salidasRes] = await Promise.all([
-    db.from('estancias_parqueadero').select('id', { count: 'exact', head: true }).eq('estado', 'adentro'),
-    db.from('estancias_parqueadero').select('cobro').eq('estado', 'fuera').gte('hora_salida', inicioDeHoyISO()),
+    db.from('estancias_parqueadero').select('id', { count: 'exact', head: true }).eq('estado', 'adentro').eq('anulada', false),
+    db
+      .from('estancias_parqueadero')
+      .select('cobro')
+      .eq('estado', 'fuera')
+      .eq('anulada', false)
+      .gte('hora_salida', inicioDeHoyISO()),
   ])
   if (adentroRes.error) throw new Error(adentroRes.error.message)
   if (salidasRes.error) throw new Error(salidasRes.error.message)
@@ -40,23 +47,42 @@ export async function fetchResumenHoy(): Promise<{ vehiculosAdentro: number; din
   return { vehiculosAdentro: adentroRes.count ?? 0, dineroHoy }
 }
 
-// Salidas (con cobro) cuya `hora_salida` cae en [desdeISO, hastaISO) — fuente de "ingresos de
-// parqueadero" en el histórico de rentabilidad (/admin/rentabilidad). Se trae `horaSalida`
-// para poder agrupar el cobro por día calendario local.
-export async function fetchSalidasParqueaderoEnRango(
-  desdeISO: string,
-  hastaISO: string,
-): Promise<{ cobro: number; horaSalida: string }[]> {
-  const { data, error } = await db
-    .from('estancias_parqueadero')
-    .select('cobro, horaSalida:hora_salida')
-    .eq('estado', 'fuera')
-    .gte('hora_salida', desdeISO)
-    .lt('hora_salida', hastaISO)
-  if (error) throw new Error(error.message)
-  return ((data ?? []) as { cobro: number | null; horaSalida: string }[]).map((e) => ({
+export interface SalidaParqueadero {
+  cobro: number
+  multa: number
+  horaSalida: string
+  modalidad: ModalidadParqueadero
+  claseVehiculo: ClaseVehiculoParqueadero
+}
+
+// Salidas cuya `hora_salida` cae en [desdeISO, hastaISO) — fuente de "ingresos de parqueadero"
+// en rentabilidad (/admin/rentabilidad), agrupables por día, modalidad y clase. Pagina: un año
+// de salidas pasa de las 1.000 filas que devuelve Supabase por consulta.
+export async function fetchSalidasParqueaderoEnRango(desdeISO: string, hastaISO: string): Promise<SalidaParqueadero[]> {
+  const data = await paginar<{
+    cobro: number | null
+    multa: number | null
+    horaSalida: string
+    modalidad: ModalidadParqueadero
+    claseVehiculo: ClaseVehiculoParqueadero
+  }>((a, b) =>
+    db
+      .from('estancias_parqueadero')
+      .select('cobro, multa, horaSalida:hora_salida, modalidad, claseVehiculo:clase_vehiculo')
+      .eq('estado', 'fuera')
+      .eq('anulada', false)
+      .gte('hora_salida', desdeISO)
+      .lt('hora_salida', hastaISO)
+      .order('hora_salida')
+      .order('id')
+      .range(a, b),
+  )
+  return data.map((e) => ({
     cobro: e.cobro ?? 0,
+    multa: e.multa ?? 0,
     horaSalida: e.horaSalida,
+    modalidad: e.modalidad,
+    claseVehiculo: e.claseVehiculo,
   }))
 }
 
@@ -103,11 +129,39 @@ export async function fetchUltimaEstanciaPorPlaca(placa: string): Promise<Estanc
     .from('estancias_parqueadero')
     .select(ESTANCIA_SELECT)
     .eq('placa', normalizada)
+    .eq('anulada', false)
     .order('hora_ingreso', { ascending: false })
     .limit(1)
     .maybeSingle()
   if (error) throw new Error(error.message)
   return data ? estanciaParqueaderoSchema.parse(data) : undefined
+}
+
+// Histórico para revisar y anular (Operación › Parqueadero) — trae TODO lo que entró en el
+// rango, sin importar si ya salió o sigue adentro. Pagina igual que el resto de lecturas por rango.
+export async function fetchEstanciasEnRango(desdeISO: string, hastaISO: string): Promise<EstanciaParqueadero[]> {
+  const data = await paginar<Record<string, unknown>>((a, b) =>
+    db
+      .from('estancias_parqueadero')
+      .select(ESTANCIA_SELECT)
+      .gte('hora_ingreso', desdeISO)
+      .lt('hora_ingreso', hastaISO)
+      .order('hora_ingreso', { ascending: false })
+      .order('id')
+      .range(a, b),
+  )
+  return estanciaParqueaderoSchema.array().parse(data)
+}
+
+// Anular un registro con motivo (regla 13) — mismo criterio que anular una orden: lo hace
+// vigilante o admin, sin PIN, y queda visible con quién y por qué (bitácora).
+export async function anularEstancia(id: string, motivo: string, anuladaPor: string): Promise<EstanciaParqueadero> {
+  const { data, error } = await db
+    .rpc('anular_estancia_parqueadero', { p_estancia_id: id, p_motivo: motivo, p_anulada_por: anuladaPor })
+    .select(ESTANCIA_SELECT)
+    .single()
+  if (error) throw new Error(error.message)
+  return estanciaParqueaderoSchema.parse(data)
 }
 
 export async function registrarEntrada(input: EntradaInput): Promise<EstanciaParqueadero> {

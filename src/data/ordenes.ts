@@ -1,4 +1,5 @@
 import { db } from '../lib/db'
+import { paginar } from '../lib/paginar'
 import {
   anularOrdenInputSchema,
   clienteInfoInputSchema,
@@ -87,27 +88,33 @@ export async function fetchOrdenesEntregadasHoy(): Promise<Orden[]> {
 // (cuándo entró la plata), no por `creado_en`. Fuente de "ingresos del lavadero" en el histórico
 // de rentabilidad (/admin/rentabilidad).
 export async function fetchOrdenesEntregadasEnRango(desdeISO: string, hastaISO: string): Promise<Orden[]> {
-  const { data, error } = await db
-    .from('ordenes')
-    .select(ORDEN_SELECT)
-    .eq('estado', 'entregado')
-    .gte('entregada_en', desdeISO)
-    .lt('entregada_en', hastaISO)
-    .order('entregada_en', { ascending: true })
-  if (error) throw new Error(error.message)
-  return (data as Record<string, unknown>[]).map(mapOrdenRow)
+  const data = await paginar<Record<string, unknown>>((a, b) =>
+    db
+      .from('ordenes')
+      .select(ORDEN_SELECT)
+      .eq('estado', 'entregado')
+      .gte('entregada_en', desdeISO)
+      .lt('entregada_en', hastaISO)
+      .order('entregada_en', { ascending: true })
+      .order('id')
+      .range(a, b),
+  )
+  return data.map(mapOrdenRow)
 }
 
 // Para reportes (M8/M11): trae órdenes cuya fecha de creación cae en [desdeISO, hastaISO).
 export async function fetchOrdenesEnRango(desdeISO: string, hastaISO: string): Promise<Orden[]> {
-  const { data, error } = await db
-    .from('ordenes')
-    .select(ORDEN_SELECT)
-    .gte('creado_en', desdeISO)
-    .lt('creado_en', hastaISO)
-    .order('consecutivo', { ascending: false })
-  if (error) throw new Error(error.message)
-  return (data as Record<string, unknown>[]).map(mapOrdenRow)
+  const data = await paginar<Record<string, unknown>>((a, b) =>
+    db
+      .from('ordenes')
+      .select(ORDEN_SELECT)
+      .gte('creado_en', desdeISO)
+      .lt('creado_en', hastaISO)
+      .order('consecutivo', { ascending: false })
+      .order('id')
+      .range(a, b),
+  )
+  return data.map(mapOrdenRow)
 }
 
 // Todas las órdenes de una placa (incluidas las anuladas) — para el expediente del cliente en

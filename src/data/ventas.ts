@@ -1,4 +1,5 @@
 import { db } from '../lib/db'
+import { paginar } from '../lib/paginar'
 import {
   anularVentaInputSchema,
   ventaCarritoInputSchema,
@@ -119,13 +120,16 @@ export async function fetchVentasDeCuenta(cuentaId: string): Promise<Venta[]> {
 // — mismo motivo que fetchVentasHoy: rentabilidad fecha el ingreso por cuándo entró la plata, no
 // por cuándo se cargó el producto al carrito/orden/cuenta.
 export async function fetchVentasEnRango(desdeISO: string, hastaISO: string): Promise<Venta[]> {
-  const { data, error } = await db
-    .from('ventas')
-    .select(VENTA_SELECT)
-    .gte('cobrada_en', desdeISO)
-    .lt('cobrada_en', hastaISO)
-    .order('consecutivo', { ascending: false })
-  if (error) throw new Error(error.message)
+  const data = await paginar((a, b) =>
+    db
+      .from('ventas')
+      .select(VENTA_SELECT)
+      .gte('cobrada_en', desdeISO)
+      .lt('cobrada_en', hastaISO)
+      .order('consecutivo', { ascending: false })
+      .order('id')
+      .range(a, b),
+  )
   return ventaSchema.array().parse(data)
 }
 

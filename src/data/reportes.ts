@@ -1,5 +1,6 @@
 import { db } from '../lib/db'
 import type { PeriodoReporte } from '../lib/reportes/tipos'
+import { paginar } from '../lib/paginar'
 
 // Lecturas para la pantalla de reportes (/admin/reportes). Devuelven filas crudas por
 // periodo, sin pasar por los fetchers de cada pantalla, por dos razones:
@@ -8,23 +9,6 @@ import type { PeriodoReporte } from '../lib/reportes/tipos'
 //   2. Cada reporte necesita el histórico completo del periodo (incluidas anuladas, inactivos,
 //      etc.), no la vista filtrada que necesita una pantalla operativa.
 // Solo admin: la restricción real es RLS, esta capa no filtra nada por rol.
-
-const TAM_PAGINA = 1000
-
-type Respuesta = { data: unknown[] | null; error: { message: string } | null }
-
-// El orden de cada consulta termina siempre en `id` para que dos filas con el mismo timestamp no
-// se salten ni se repitan entre páginas.
-async function paginar<T>(pedir: (desde: number, hasta: number) => PromiseLike<Respuesta>): Promise<T[]> {
-  const todas: T[] = []
-  for (let desde = 0; ; desde += TAM_PAGINA) {
-    const { data, error } = await pedir(desde, desde + TAM_PAGINA - 1)
-    if (error) throw new Error(error.message)
-    const pagina = (data ?? []) as T[]
-    todas.push(...pagina)
-    if (pagina.length < TAM_PAGINA) return todas
-  }
-}
 
 export interface NombresReporte {
   lavadores: Map<string, string>
@@ -379,13 +363,14 @@ export interface EstanciaReporteFila {
   cobro: number | null
   metodo_pago: string | null
   estado: string
+  anulada: boolean
 }
 
 export function fetchParqueaderoReporte(p: PeriodoReporte): Promise<EstanciaReporteFila[]> {
   return paginar((a, b) =>
     db
       .from('estancias_parqueadero')
-      .select('id, consecutivo, placa, modalidad, clase_vehiculo, multa, hora_ingreso, hora_salida, cobro, metodo_pago, estado')
+      .select('id, consecutivo, placa, modalidad, clase_vehiculo, multa, hora_ingreso, hora_salida, cobro, metodo_pago, estado, anulada')
       .gte('hora_ingreso', p.desdeISO)
       .lt('hora_ingreso', p.hastaISO)
       .order('hora_ingreso', { ascending: false })
