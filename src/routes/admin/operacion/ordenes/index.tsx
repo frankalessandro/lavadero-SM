@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { fetchVentasDeOrden } from '../../../../data/ventas'
 import { queryKeys } from '../../../../lib/queryKeys'
 import { DestinoProductoAnulado } from '../../../../components/layout/DestinoProductoAnulado'
-import { Ban, ClipboardList, Wallet, X } from 'lucide-react'
+import { Ban, ClipboardList, Package, Timer, Users, Wallet, X } from 'lucide-react'
 import { anularOrden, fetchOrdenesEnRango } from '../../../../data/ordenes'
 import { fetchLavadores } from '../../../../data/lavadores'
 import { fetchCombos } from '../../../../data/combos'
@@ -17,10 +17,11 @@ import { fetchProductos } from '../../../../data/productos'
 import { StatCard } from '../../../../components/layout/StatCard'
 import { OrdenExpedienteModal } from '../../../../components/layout/OrdenExpedienteModal'
 import { duracion } from '../../../../lib/ordenFormato'
-import { FilaFiltros, FiltroTexto, FiltroSelect, FiltroVacio } from '../../../../components/layout/TableHeadFilter'
+import { BarraFiltros, FiltroBusqueda, FiltroCombo, FiltroMenu } from '../../../../components/layout/Filtros'
 import { coincide } from '../../../../lib/tableFilters'
 import { toast } from '../../../../lib/toast'
 import { PeriodoSelector } from '../../../../components/layout/PeriodoSelector'
+import { PageHeader } from '../../../../components/layout/PageHeader'
 import { calcularRango, rangoAISO, type ModoPeriodo } from '../../../../lib/periodo'
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
@@ -143,32 +144,96 @@ function OrdenesPage() {
 
   return (
     <div className="flex flex-col gap-6 text-left">
-      <div>
-        <h2 className="text-base font-semibold text-neutral-900">Órdenes</h2>
-        <p className="text-sm text-neutral-500">Histórico de órdenes de lavado, con anulación auditada.</p>
-      </div>
+      <PageHeader
+        title="Órdenes"
+        description="Cada lavado del periodo. Toca una fila para ver su expediente completo."
+        help={{
+          body:
+            'Histórico de órdenes de lavado con anulación auditada (regla 13: nada se borra, se anula con motivo).\n\n' +
+            'Los ingresos del periodo solo cuentan órdenes entregadas (cobradas). El ticket promedio y el mix de pago también salen de las entregadas.',
+        }}
+        actions={
+          <PeriodoSelector
+            modo={modoPeriodo}
+            onModoChange={(modo) => cambiarPeriodo(modo, anclaPeriodo)}
+            ancla={anclaPeriodo}
+            onAnclaChange={(ancla) => cambiarPeriodo(modoPeriodo, ancla)}
+            rango={rango}
+          />
+        }
+      />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Órdenes del rango" value={String(ordenes.length)} icon={ClipboardList} />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard label="Ingresos cobrados" value={COP.format(totalIngresos)} hint={`${ordenes.length} órdenes en el rango`} icon={ClipboardList} />
         <StatCard label="Ticket promedio" value={COP.format(ticketPromedio)} hint={`${entregadas.length} entregadas`} icon={Wallet} />
-        <StatCard label="Tiempo promedio" value={tiempoPromedio != null ? duracion(tiempoPromedio) : '—'} icon={Wallet} />
+        <StatCard label="Tiempo promedio" value={tiempoPromedio != null ? duracion(tiempoPromedio) : '—'} icon={Timer} />
         <StatCard label="Anuladas" value={`${anuladasEnRango.length} · ${pctAnuladas}%`} icon={Ban} />
       </div>
       {mixPago ? <p className="-mt-3 text-xs text-neutral-500">Mix de pago (entregadas): {mixPago}</p> : null}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <PeriodoSelector
-          modo={modoPeriodo}
-          onModoChange={(modo) => cambiarPeriodo(modo, anclaPeriodo)}
-          ancla={anclaPeriodo}
-          onAnclaChange={(ancla) => cambiarPeriodo(modoPeriodo, ancla)}
-          rango={rango}
+      {huecos.length > 0 ? (
+        <div className="flex items-start gap-3 rounded-2xl border border-danger-600/25 bg-danger-50 px-4 py-3">
+          <Ban size={18} className="mt-0.5 shrink-0 text-danger-600" />
+          <div className="min-w-0 text-sm">
+            <p className="font-semibold text-danger-700">
+              {huecos.length === 1 ? 'Falta 1 tiquete en el consecutivo' : `Faltan ${huecos.length} tiquetes en el consecutivo`}:{' '}
+              <span className="font-mono">{formatearHuecos(huecos)}</span>
+            </p>
+            <p className="mt-0.5 text-xs text-danger-700/80">
+              Un número que nunca se confirmó. Una anulación conserva su tiquete y no aparece acá — un hueco hay que explicarlo.
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      <BarraFiltros
+        activos={[filtroPlaca, filtroCombo, filtroLavador, filtroPago, filtroEstado].filter(Boolean).length}
+        onLimpiar={() => {
+          setFiltroPlaca('')
+          setFiltroCombo('')
+          setFiltroLavador('')
+          setFiltroPago('')
+          setFiltroEstado('')
+        }}
+        resultado={`${visibles.length} de ${ordenes.length} órdenes`}
+      >
+        <FiltroBusqueda value={filtroPlaca} onChange={setFiltroPlaca} placeholder="Buscar placa" mayusculas ancho="sm:w-44" />
+        <FiltroCombo
+          value={filtroLavador}
+          onChange={setFiltroLavador}
+          options={initial.lavadores.map((l) => l.nombre)}
+          placeholder="Lavador"
+          icon={Users}
         />
-        <p className="text-sm text-neutral-500">
-          Total ingresos del rango (solo entregadas/cobradas):{' '}
-          <span className="font-semibold text-neutral-900">{COP.format(totalIngresos)}</span>
-        </p>
-      </div>
+        <FiltroCombo
+          value={filtroCombo}
+          onChange={setFiltroCombo}
+          options={initial.combos.map((c) => c.nombre)}
+          placeholder="Combo"
+          icon={Package}
+        />
+        <FiltroMenu
+          label="Pago"
+          value={filtroPago}
+          onChange={setFiltroPago}
+          options={[
+            { value: 'efectivo', label: METODO_PAGO_LABEL.efectivo },
+            { value: 'transferencia', label: METODO_PAGO_LABEL.transferencia },
+            { value: 'datafono', label: METODO_PAGO_LABEL.datafono },
+            { value: 'mixto', label: METODO_PAGO_LABEL.mixto },
+            { value: 'sin_cobrar', label: 'Sin cobrar' },
+          ]}
+        />
+        <FiltroMenu
+          label="Estado"
+          value={filtroEstado}
+          onChange={setFiltroEstado}
+          options={(['en_proceso', 'listo', 'entregado', 'anulada'] as const).map((e) => ({
+            value: e,
+            label: ESTADO_LABEL[e],
+          }))}
+        />
+      </BarraFiltros>
 
       <Card className="p-0">
         <div className="overflow-x-auto">
@@ -185,34 +250,6 @@ function OrdenesPage() {
                 <th className="px-5 py-3">Estado</th>
                 <th className="px-5 py-3 text-right">Acciones</th>
               </tr>
-              <FilaFiltros>
-                <FiltroVacio />
-                <FiltroTexto value={filtroPlaca} onChange={setFiltroPlaca} placeholder="Placa…" />
-                <FiltroVacio />
-                <FiltroTexto value={filtroCombo} onChange={setFiltroCombo} placeholder="Combo…" />
-                <FiltroTexto value={filtroLavador} onChange={setFiltroLavador} placeholder="Lavador…" />
-                <FiltroVacio />
-                <FiltroSelect
-                  value={filtroPago}
-                  onChange={setFiltroPago}
-                  options={[
-                    { value: 'efectivo', label: METODO_PAGO_LABEL.efectivo },
-                    { value: 'transferencia', label: METODO_PAGO_LABEL.transferencia },
-                    { value: 'datafono', label: METODO_PAGO_LABEL.datafono },
-                    { value: 'mixto', label: METODO_PAGO_LABEL.mixto },
-                    { value: 'sin_cobrar', label: 'Sin cobrar' },
-                  ]}
-                />
-                <FiltroSelect
-                  value={filtroEstado}
-                  onChange={setFiltroEstado}
-                  options={(['en_proceso', 'listo', 'entregado', 'anulada'] as const).map((e) => ({
-                    value: e,
-                    label: ESTADO_LABEL[e],
-                  }))}
-                />
-                <FiltroVacio />
-              </FilaFiltros>
             </thead>
             <tbody>
               {visibles.map((orden) => (
@@ -302,23 +339,6 @@ function OrdenesPage() {
           </table>
         </div>
       </Card>
-
-      {huecos.length > 0 ? (
-        <Card className="border-l-4 border-l-danger-500 text-left">
-          <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-danger-700">
-            <Ban size={15} />
-            Huecos en el consecutivo de tiquetes
-          </h2>
-          <p className="text-sm text-neutral-600">
-            {huecos.length === 1 ? 'Falta el tiquete' : `Faltan ${huecos.length} tiquetes:`}{' '}
-            <span className="font-mono font-semibold text-neutral-900">{formatearHuecos(huecos)}</span>
-          </p>
-          <p className="mt-1 text-xs text-neutral-500">
-            Un número que nunca se confirmó. Una anulación conserva su tiquete y no aparece acá — un
-            hueco hay que explicarlo.
-          </p>
-        </Card>
-      ) : null}
 
       {anuladasEnRango.length > 0 ? (
         <Card className="text-left">

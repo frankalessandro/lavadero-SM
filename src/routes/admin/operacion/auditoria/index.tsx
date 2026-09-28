@@ -12,6 +12,7 @@ import {
 import type { Perfil } from '../../../../schemas/perfil'
 import { Card } from '../../../../components/layout/Card'
 import { StatCard } from '../../../../components/layout/StatCard'
+import { PageHeader } from '../../../../components/layout/PageHeader'
 import { CustomSelect } from '../../../../components/layout/CustomSelect'
 import { toast } from '../../../../lib/toast'
 import { PeriodoSelector } from '../../../../components/layout/PeriodoSelector'
@@ -102,15 +103,23 @@ function Auditoria() {
   }, [entradas])
 
   return (
-    <div className="flex flex-col gap-5">
-      <div>
-        <h1 className="text-lg font-semibold text-neutral-900">Auditoría</h1>
-        <p className="max-w-3xl text-sm text-neutral-500">
-          Registro append-only de creaciones, anulaciones, cambios de precio, movimientos de inventario y cambios de
-          configuración. Lo escribe la base de datos por trigger, no la aplicación: queda igual venga de la interfaz o
-          de una escritura directa, y nadie —tampoco un administrador— puede editarlo ni borrarlo.
-        </p>
-      </div>
+    <div className="flex flex-col gap-6 text-left">
+      <PageHeader
+        title="Auditoría"
+        description="Quién hizo qué y cuándo: creaciones, anulaciones, precios, inventario y configuración."
+        help={{
+          body: 'Registro append-only. Lo escribe la base de datos por trigger, no la aplicación: queda igual venga de la interfaz o de una escritura directa, y nadie —tampoco un administrador— puede editarlo ni borrarlo.\n\nCada fila guarda la cuenta que hizo el cambio y quién estaba a cargo del turno en ese momento.',
+        }}
+        actions={
+          <PeriodoSelector
+            modo={modoPeriodo}
+            onModoChange={(modo) => recargar({ modo })}
+            ancla={anclaPeriodo}
+            onAnclaChange={(ancla) => recargar({ ancla })}
+            rango={rango}
+          />
+        }
+      />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Eventos en el rango" value={String(resumen.total)} icon={ScrollText} />
@@ -120,14 +129,6 @@ function Auditoria() {
       </div>
 
       <Card className="flex flex-col gap-4 p-5">
-        <PeriodoSelector
-          modo={modoPeriodo}
-          onModoChange={(modo) => recargar({ modo })}
-          ancla={anclaPeriodo}
-          onAnclaChange={(ancla) => recargar({ ancla })}
-          rango={rango}
-        />
-
         <div className="grid gap-3 sm:grid-cols-3">
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-medium text-neutral-700">Acción</span>

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { ClipboardCheck, ClipboardList, Scale } from 'lucide-react'
+import { ClipboardCheck, ClipboardList, Repeat2, Scale, TrendingDown, UserRound } from 'lucide-react'
 import { fetchTurnos } from '../../../../data/turnos'
 import { fetchCorreccionesEnRango, type CorreccionReparto } from '../../../../data/pagos'
 import { fetchCombos } from '../../../../data/combos'
@@ -11,7 +11,12 @@ import { Card } from '../../../../components/layout/Card'
 import { StatCard } from '../../../../components/layout/StatCard'
 import { BarChart } from '../../../../components/layout/BarChart'
 import { TurnoExpedienteModal } from '../../../../components/layout/TurnoExpedienteModal'
-import { FilaFiltros, FiltroTexto, FiltroSelect, FiltroVacio } from '../../../../components/layout/TableHeadFilter'
+import { Modal } from '../../../../components/layout/Modal'
+import { BarraFiltros, FiltroCombo, FiltroMenu } from '../../../../components/layout/Filtros'
+import { Button } from '../../../../components/layout/Button'
+import { PageHeader, SectionHeader } from '../../../../components/layout/PageHeader'
+import { CHART_COLORS } from '../../../../lib/chartTheme'
+import { copCompacto } from '../../../../lib/formato'
 import { coincide } from '../../../../lib/tableFilters'
 import { toast } from '../../../../lib/toast'
 import { METODO_PAGO_LABEL } from '../../../../lib/metodoPago'
@@ -36,6 +41,7 @@ const ROL_CLASSNAME: Record<RolCaja, string> = {
 }
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
+const FECHA_HORA = new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium', timeStyle: 'short' })
 
 function fetchByFiltro(filtro: FiltroKey): Promise<TurnoCaja[]> {
   if (filtro === 'todos') return fetchTurnos()
@@ -95,6 +101,7 @@ function TurnosPage() {
   const [expedienteDe, setExpedienteDe] = useState<TurnoCaja | null>(null)
   const [filtroResponsable, setFiltroResponsable] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('')
+  const [verCorrecciones, setVerCorrecciones] = useState(false)
 
   const comboNombrePorId = new Map(initial.combos.map((c) => [c.id, c.nombre]))
   const lavadorNombrePorId = new Map(initial.lavadores.map((l) => [l.id, l.nombre]))
@@ -133,226 +140,187 @@ function TurnosPage() {
     if (!coincide(t.responsableActual, filtroResponsable) && !coincide(t.responsable, filtroResponsable)) return false
     if (filtroEstado === 'abierto' && t.cerrado) return false
     if (filtroEstado === 'cerrado' && !t.cerrado) return false
+    if (filtroEstado === 'diferencia' && (!t.cerrado || (t.diferencia ?? 0) === 0)) return false
     return true
   })
 
+  const faltantes = cerrados.filter((t) => (t.diferencia ?? 0) < 0)
+  const totalFaltantes = faltantes.reduce((s, t) => s + (t.diferencia ?? 0), 0)
+
   return (
     <div className="flex flex-col gap-6 text-left">
-      <div>
-        <h2 className="text-base font-semibold text-neutral-900">Turnos y arqueos</h2>
-        <p className="text-sm text-neutral-500">
-          Histórico de turnos de caja (jefe de zona y vigilante), con diferencias de arqueo por responsable. Solo
-          lectura — un turno cerrado es inmodificable.
-        </p>
-      </div>
+      <PageHeader
+        title="Turnos y arqueos"
+        description="Cada caja abierta y cerrada, con su diferencia de arqueo. Toca un turno para ver su expediente."
+        help={{
+          body:
+            'Histórico de turnos de caja de jefe de patio y vigilante. Solo lectura: un turno cerrado es inmodificable (regla 14).\n\n' +
+            'Diferencia = conteo físico − valor esperado por el sistema. Negativa = faltó plata (rojo); positiva = sobró (ámbar). Toda diferencia exige justificación al cerrar.\n\n' +
+            'Las correcciones de reparto de pago (cambiar cuánto fue efectivo, transferencia o datáfono sin cambiar el total) se ven en su propio botón.',
+        }}
+        actions={
+          <>
+            <div className="flex rounded-xl bg-neutral-200/60 p-1">
+              {FILTROS.map((f) => (
+                <button
+                  key={f.key}
+                  type="button"
+                  onClick={() => cambiarFiltro(f.key)}
+                  className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                    filtro === f.key ? 'bg-white text-primary-700 shadow-sm' : 'text-neutral-500 hover:text-neutral-900'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            <Button icon={Repeat2} onClick={() => setVerCorrecciones(true)}>
+              Correcciones de pago
+              {correcciones.length > 0 ? (
+                <span className="rounded-full bg-warning-50 px-1.5 text-[11px] font-semibold text-warning-700">{correcciones.length}</span>
+              ) : null}
+            </Button>
+          </>
+        }
+      />
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard label="Turnos mostrados" value={String(turnos.length)} icon={ClipboardList} />
-        <StatCard
-          label="Con diferencia"
-          value={String(conDiferencia.length)}
-          hint={`de ${cerrados.length} cerrados`}
-          icon={ClipboardCheck}
-        />
-        <StatCard
-          label="Suma de diferencias"
-          value={formatDiferencia(sumaDiferencias)}
-          hint="positivo = sobrante, negativo = faltante"
-          icon={Scale}
-        />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard label="Turnos" value={String(turnos.length)} hint={`${turnos.length - cerrados.length} abierto(s)`} icon={ClipboardList} />
+        <StatCard label="Con diferencia" value={String(conDiferencia.length)} hint={`de ${cerrados.length} cerrados`} icon={ClipboardCheck} />
+        <StatCard label="Faltantes de caja" value={COP.format(Math.abs(totalFaltantes))} hint={`${faltantes.length} turno(s)`} icon={TrendingDown} />
+        <StatCard label="Neto de diferencias" value={formatDiferencia(sumaDiferencias)} hint="+ sobrante · − faltante" icon={Scale} />
       </div>
 
       {serieDiferencias.data.filter((d) => d !== 0).length > 2 ? (
-        <Card className="flex flex-col gap-2 p-4">
-          <h3 className="text-sm font-semibold text-neutral-900">Diferencia de arqueo por turno</h3>
-          <p className="text-xs text-neutral-500">Positivo = sobrante, negativo = faltante. Del más antiguo al más reciente.</p>
+        <Card className="flex flex-col gap-2 p-5">
+          <SectionHeader title="Diferencia por turno" hint="Del más antiguo al más reciente. Rojo = faltante, ámbar = sobrante." />
           <BarChart
             horizontal={false}
             labels={serieDiferencias.labels}
             data={serieDiferencias.data}
+            colors={serieDiferencias.data.map((d) => (d < 0 ? CHART_COLORS.danger : d > 0 ? CHART_COLORS.warning : CHART_COLORS.primarySoft))}
             valueFormatter={(v) => COP.format(v)}
+            axisFormatter={copCompacto}
             height={200}
           />
         </Card>
       ) : null}
 
-      <div className="flex w-fit max-w-full flex-wrap rounded-lg border border-neutral-300 p-1">
-        {FILTROS.map((f) => (
-          <button
-            key={f.key}
-            type="button"
-            onClick={() => cambiarFiltro(f.key)}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              filtro === f.key ? 'bg-primary-600 text-white shadow-nav-active' : 'text-neutral-600 hover:bg-neutral-50'
-            }`}
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
+      <BarraFiltros
+        activos={[filtroResponsable, filtroEstado].filter(Boolean).length}
+        onLimpiar={() => {
+          setFiltroResponsable('')
+          setFiltroEstado('')
+        }}
+        resultado={`${visibles.length} de ${turnos.length} turnos`}
+      >
+        <FiltroCombo
+          value={filtroResponsable}
+          onChange={setFiltroResponsable}
+          options={turnos.flatMap((t) => [t.responsable, t.responsableActual])}
+          placeholder="Responsable"
+          icon={UserRound}
+          ancho="sm:w-60"
+        />
+        <FiltroMenu
+          label="Estado"
+          value={filtroEstado}
+          onChange={setFiltroEstado}
+          options={[
+            { value: 'abierto', label: 'Abiertos' },
+            { value: 'cerrado', label: 'Cerrados' },
+            { value: 'diferencia', label: 'Con diferencia' },
+          ]}
+        />
+      </BarraFiltros>
 
-      <Card className="p-0">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[60rem] text-sm">
-            <thead>
-              <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
-                <th className="px-5 py-3">Rol</th>
-                <th className="px-5 py-3">Responsable</th>
-                <th className="px-5 py-3">Apertura</th>
-                <th className="px-5 py-3">Cierre</th>
-                <th className="px-5 py-3">Base inicial</th>
-                <th className="px-5 py-3">Valor esperado</th>
-                <th className="px-5 py-3">Conteo físico</th>
-                <th className="px-5 py-3">Diferencia</th>
-                <th className="px-5 py-3">Estado</th>
-                <th className="px-5 py-3">Cerró</th>
-                <th className="px-5 py-3">Recibió</th>
-              </tr>
-              <FilaFiltros>
-                <FiltroVacio />
-                <FiltroTexto value={filtroResponsable} onChange={setFiltroResponsable} placeholder="Buscar…" />
-                <FiltroVacio />
-                <FiltroVacio />
-                <FiltroVacio />
-                <FiltroVacio />
-                <FiltroVacio />
-                <FiltroVacio />
-                <FiltroSelect
-                  value={filtroEstado}
-                  onChange={setFiltroEstado}
-                  options={[
-                    { value: 'abierto', label: 'Abierto' },
-                    { value: 'cerrado', label: 'Cerrado' },
-                  ]}
-                />
-                <FiltroVacio />
-                <FiltroVacio />
-              </FilaFiltros>
-            </thead>
-            <tbody>
-              {visibles.map((turno) => (
-                <tr
-                  key={turno.id}
-                  onClick={() => setExpedienteDe(turno)}
-                  className="cursor-pointer border-b border-neutral-100 transition-colors last:border-0 hover:bg-primary-50/40"
-                >
-                  <td className="px-5 py-3">
-                    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${ROL_CLASSNAME[turno.rol]}`}>
+      {visibles.length === 0 ? (
+        <p className="rounded-2xl border border-dashed border-neutral-200 bg-white px-4 py-10 text-center text-sm text-neutral-400">
+          {loading ? 'Cargando…' : turnos.length === 0 ? 'No hay turnos registrados.' : 'Ningún turno coincide con el filtro.'}
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {visibles.map((turno) => (
+            <li key={turno.id}>
+              <button
+                type="button"
+                onClick={() => setExpedienteDe(turno)}
+                className="flex w-full flex-col gap-3 rounded-2xl border border-neutral-200 bg-white px-4 py-3.5 text-left shadow-card transition-all hover:border-primary-200 hover:shadow-card-hover md:flex-row md:items-center"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${ROL_CLASSNAME[turno.rol]}`}>
                       {ROL_LABEL[turno.rol]}
                     </span>
-                  </td>
-                  <td className="px-5 py-3 font-medium text-neutral-900">
-                    {turno.responsable}
-                    <span className="ml-1.5 text-xs font-normal text-primary-600">Ver expediente</span>
-                  </td>
-                  <td className="px-5 py-3 text-neutral-700">{new Date(turno.abiertoEn).toLocaleString('es-CO')}</td>
-                  <td className="px-5 py-3 text-neutral-700">
-                    {turno.cerrado ? (
-                      turno.cerradoEn ? (
-                        new Date(turno.cerradoEn).toLocaleString('es-CO')
-                      ) : (
-                        '—'
-                      )
-                    ) : (
-                      <span className="inline-flex rounded-full bg-warning-50 px-2.5 py-1 text-xs font-medium text-warning-700">
-                        Abierto
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-5 py-3 text-neutral-700">{COP.format(turno.baseInicial)}</td>
-                  <td className="px-5 py-3 text-neutral-700">
-                    {turno.cerrado && turno.valorEsperado !== undefined ? COP.format(turno.valorEsperado) : '—'}
-                  </td>
-                  <td className="px-5 py-3 text-neutral-700">
-                    {turno.cerrado && turno.conteoFisico !== undefined ? COP.format(turno.conteoFisico) : '—'}
-                  </td>
-                  <td className="px-5 py-3">
-                    {turno.cerrado ? (
-                      <span
-                        className={`font-medium ${diferenciaClassName(turno.diferencia)}`}
-                        title={turno.justificacionDiferencia ? `Justificación: ${turno.justificacionDiferencia}` : undefined}
-                      >
-                        {formatDiferencia(turno.diferencia)}
-                        {turno.justificacionDiferencia ? (
-                          <span className="mt-0.5 block max-w-[16rem] truncate text-xs font-normal text-neutral-400">
-                            {turno.justificacionDiferencia}
-                          </span>
-                        ) : null}
-                      </span>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                  <td className="px-5 py-3">
-                    <span
-                      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
-                        turno.cerrado ? 'bg-neutral-100 text-neutral-600' : 'bg-success-50 text-success-700'
-                      }`}
-                    >
-                      {turno.cerrado ? 'Cerrado' : 'Abierto'}
+                    <span className="truncate text-sm font-semibold text-neutral-900">{turno.responsable}</span>
+                    {!turno.cerrado ? (
+                      <span className="rounded-full bg-success-50 px-2 py-0.5 text-[11px] font-medium text-success-700">Abierto ahora</span>
+                    ) : null}
+                  </div>
+                  <p className="mt-0.5 text-xs text-neutral-500">
+                    {FECHA_HORA.format(new Date(turno.abiertoEn))}
+                    {turno.cerradoEn ? ` → ${FECHA_HORA.format(new Date(turno.cerradoEn))}` : ''}
+                    {turno.cerradoPor ? ` · cerró ${turno.cerradoPor}` : ''}
+                    {turno.recibidoPor ? ` · recibió ${turno.recibidoPor}` : ''}
+                  </p>
+                  {turno.justificacionDiferencia ? (
+                    <p className="mt-1 line-clamp-2 text-xs text-neutral-600">“{turno.justificacionDiferencia}”</p>
+                  ) : null}
+                </div>
+                <div className="grid grid-cols-3 gap-3 text-right md:w-[26rem] md:shrink-0">
+                  <Dato label="Esperado" valor={turno.cerrado && turno.valorEsperado !== undefined ? COP.format(turno.valorEsperado) : '—'} />
+                  <Dato label="Contado" valor={turno.cerrado && turno.conteoFisico !== undefined ? COP.format(turno.conteoFisico) : '—'} />
+                  <div>
+                    <span className="block text-[11px] text-neutral-400">Diferencia</span>
+                    <span className={`block text-sm font-semibold tabular-nums ${turno.cerrado ? diferenciaClassName(turno.diferencia) : 'text-neutral-300'}`}>
+                      {turno.cerrado ? formatDiferencia(turno.diferencia) : '—'}
                     </span>
-                  </td>
-                  <td className="px-5 py-3 text-neutral-700">{turno.cerrado ? (turno.cerradoPor ?? '—') : '—'}</td>
-                  <td className="px-5 py-3 text-neutral-700">{turno.recibidoPor ?? '—'}</td>
-                </tr>
-              ))}
-              {visibles.length === 0 ? (
-                <tr>
-                  <td className="px-5 py-6 text-center text-neutral-400" colSpan={11}>
-                    {loading ? 'Cargando…' : turnos.length === 0 ? 'No hay turnos registrados.' : 'Ningún turno coincide con el filtro.'}
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+                  </div>
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
 
-      <div>
-        <h2 className="text-base font-semibold text-neutral-900">Correcciones de reparto de pago</h2>
-        <p className="mb-3 text-sm text-neutral-500">
-          Últimos 30 días. Solo cambia cómo se repartió un cobro entre efectivo/transferencia/datáfono — el
-          total nunca cambia. Si el turno de ese cobro ya estaba cerrado, su arqueo quedó congelado y esta es
-          la única traza del ajuste.
-        </p>
-        <Card className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[44rem] text-sm">
-              <thead>
-                <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
-                  <th className="px-5 py-3">Fecha</th>
-                  <th className="px-5 py-3">Cobro</th>
-                  <th className="px-5 py-3">Reparto anterior</th>
-                  <th className="px-5 py-3">Reparto corregido</th>
-                  <th className="px-5 py-3">Motivo</th>
-                  <th className="px-5 py-3">Quién</th>
-                </tr>
-              </thead>
-              <tbody>
-                {correcciones.map((c, i) => (
-                  <tr key={i} className="border-b border-neutral-100 last:border-0">
-                    <td className="px-5 py-3 text-neutral-700">{new Date(c.fecha).toLocaleString('es-CO')}</td>
-                    <td className="px-5 py-3 text-neutral-700">
+      {verCorrecciones ? (
+        <Modal
+          title="Correcciones de reparto de pago"
+          subtitle="Últimos 30 días. El total nunca cambia, solo cómo se repartió entre métodos."
+          icon={Repeat2}
+          size="xl"
+          flush
+          onClose={() => setVerCorrecciones(false)}
+        >
+          {correcciones.length === 0 ? (
+            <p className="px-6 py-10 text-center text-sm text-neutral-400">Sin correcciones de reparto en los últimos 30 días.</p>
+          ) : (
+            <ul className="divide-y divide-neutral-100">
+              {correcciones.map((c, i) => (
+                <li key={i} className="flex flex-col gap-1.5 px-5 py-3.5 sm:px-6">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-sm font-medium text-neutral-900">
                       {c.ordenId ? 'Orden de lavado' : 'Venta de mostrador'}
-                    </td>
-                    <td className="px-5 py-3 text-neutral-500 line-through">{repartoTexto(c.antes)}</td>
-                    <td className="px-5 py-3 font-medium text-neutral-900">{repartoTexto(c.despues)}</td>
-                    <td className="px-5 py-3 text-neutral-500">{c.motivo}</td>
-                    <td className="px-5 py-3 text-neutral-700">{c.corregidoPor}</td>
-                  </tr>
-                ))}
-                {correcciones.length === 0 ? (
-                  <tr>
-                    <td className="px-5 py-6 text-center text-neutral-400" colSpan={6}>
-                      Sin correcciones de reparto en los últimos 30 días.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      </div>
+                    </span>
+                    <span className="text-xs text-neutral-400">
+                      {FECHA_HORA.format(new Date(c.fecha))} · {c.corregidoPor}
+                    </span>
+                  </div>
+                  <p className="text-sm">
+                    <span className="text-neutral-400 line-through">{repartoTexto(c.antes)}</span>
+                    <span className="mx-2 text-neutral-300">→</span>
+                    <span className="font-medium text-neutral-900">{repartoTexto(c.despues)}</span>
+                  </p>
+                  <p className="text-xs text-neutral-500">Motivo: {c.motivo}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="border-t border-neutral-100 px-6 py-3 text-xs text-neutral-400">
+            Si el turno de ese cobro ya estaba cerrado, su arqueo quedó congelado y esta es la única traza del ajuste.
+          </p>
+        </Modal>
+      ) : null}
 
       {expedienteDe ? (
         <TurnoExpedienteModal
@@ -363,6 +331,15 @@ function TurnosPage() {
           onClose={() => setExpedienteDe(null)}
         />
       ) : null}
+    </div>
+  )
+}
+
+function Dato({ label, valor }: { label: string; valor: string }) {
+  return (
+    <div className="min-w-0">
+      <span className="block text-[11px] text-neutral-400">{label}</span>
+      <span className="block truncate text-sm font-medium tabular-nums text-neutral-700">{valor}</span>
     </div>
   )
 }

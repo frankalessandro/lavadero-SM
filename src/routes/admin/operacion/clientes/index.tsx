@@ -8,8 +8,9 @@ import { fetchLavadores } from '../../../../data/lavadores'
 import { fetchProductos } from '../../../../data/productos'
 import { Card } from '../../../../components/layout/Card'
 import { StatCard } from '../../../../components/layout/StatCard'
+import { PageHeader } from '../../../../components/layout/PageHeader'
 import { ClienteExpedienteModal } from '../../../../components/layout/ClienteExpedienteModal'
-import { FilaFiltros, FiltroTexto, FiltroVacio } from '../../../../components/layout/TableHeadFilter'
+import { BarraFiltros, FiltroBusqueda, FiltroMenu } from '../../../../components/layout/Filtros'
 import { coincide } from '../../../../lib/tableFilters'
 
 // Mismo criterio de indicativo que src/components/layout/ContactoModal.tsx.
@@ -71,12 +72,13 @@ function ClientesPage() {
 
   return (
     <div className="flex flex-col gap-6 text-left">
-      <div>
-        <h2 className="text-base font-semibold text-neutral-900">Clientes</h2>
-        <p className="text-sm text-neutral-500">
-          Base de clientes construida a partir del histórico de órdenes (M2) — un registro por placa.
-        </p>
-      </div>
+      <PageHeader
+        title="Clientes"
+        description="Quién viene, cuánto gasta y cada cuánto vuelve. Toca un cliente para ver su historial."
+        help={{
+          body: 'La base de clientes se construye sola a partir del histórico de órdenes: un registro por placa. No hay que crear clientes a mano — con registrar la orden en recepción basta.\n\nRecurrente = placa con más de una orden.',
+        }}
+      />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Clientes registrados" value={String(clientes.length)} hint={`${conTelefono} con teléfono`} icon={Search} />
@@ -85,22 +87,27 @@ function ClientesPage() {
         <StatCard label="Facturado histórico" value={COP.format(gastoTotalBase)} hint="órdenes entregadas" icon={Coins} />
       </div>
 
-      <div className="flex w-fit max-w-full flex-wrap rounded-lg border border-neutral-300 p-1">
-        {([['recientes', 'Recientes'], ['gastado', 'Más gastan'], ['frecuencia', 'Más frecuentes']] as const).map(
-          ([k, label]) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => setOrden(k)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                orden === k ? 'bg-primary-600 text-white shadow-nav-active' : 'text-neutral-600 hover:bg-neutral-50'
-              }`}
-            >
-              {label}
-            </button>
-          ),
-        )}
-      </div>
+      <BarraFiltros
+        activos={[filtroCliente, filtroPlaca].filter(Boolean).length}
+        onLimpiar={() => {
+          setFiltroCliente('')
+          setFiltroPlaca('')
+        }}
+        resultado={`${filtrados.length} de ${clientes.length} clientes`}
+      >
+        <FiltroBusqueda value={filtroCliente} onChange={setFiltroCliente} placeholder="Buscar cliente" />
+        <FiltroBusqueda value={filtroPlaca} onChange={setFiltroPlaca} placeholder="Buscar placa" mayusculas ancho="sm:w-44" />
+        <FiltroMenu
+          label="Ordenar"
+          value={orden === 'recientes' ? '' : orden}
+          onChange={(v) => setOrden((v || 'recientes') as typeof orden)}
+          todosLabel="Más recientes"
+          options={[
+            { value: 'gastado', label: 'Más gastan' },
+            { value: 'frecuencia', label: 'Más frecuentes' },
+          ]}
+        />
+      </BarraFiltros>
 
       <Card className="p-0">
         <div className="overflow-x-auto">
@@ -116,16 +123,6 @@ function ClientesPage() {
                 <th className="px-5 py-3 text-right">Total gastado</th>
                 <th className="px-5 py-3 text-right">Ticket prom.</th>
               </tr>
-              <FilaFiltros>
-                <FiltroTexto value={filtroCliente} onChange={setFiltroCliente} placeholder="Buscar…" />
-                <FiltroVacio />
-                <FiltroVacio />
-                <FiltroTexto value={filtroPlaca} onChange={setFiltroPlaca} placeholder="Placa…" />
-                <FiltroVacio />
-                <FiltroVacio />
-                <FiltroVacio />
-                <FiltroVacio />
-              </FilaFiltros>
             </thead>
             <tbody>
               {filtrados.map((cliente) => (
