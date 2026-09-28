@@ -16,6 +16,7 @@ import type { Lavador } from '../../../schemas/lavador'
 import { Card } from '../../../components/layout/Card'
 import { AbrirTurnoPrompt, TurnoResponsableBanner } from '../../../components/layout/TurnoResponsableBanner'
 import { toast } from '../../../lib/toast'
+import { PageHeader } from '../../../components/layout/PageHeader'
 
 const SEMANAS_A_GENERAR_ADELANTE = 8
 const DIAS_DESCANSABLES = ['Lunes', 'Martes', 'Miércoles', 'Jueves']
@@ -160,6 +161,13 @@ function AsistenciaJefeZona() {
 
   return (
     <div className="flex flex-col gap-6">
+      <PageHeader
+        title="Asistencia"
+        description="Quién llegó hoy y el cronograma de descansos de la semana."
+        help={{
+          body: 'Marca la llegada de cada lavador: la rotación del día se arma por orden de llegada.\n\nEl cronograma de descansos rota solo; si cambias un día, queda en "Cambios recientes" con quién lo hizo.',
+        }}
+      />
       <TurnoResponsableBanner
         turno={turno}
         miPersonaId={auth?.perfil.id ?? ''}
@@ -208,7 +216,7 @@ function AsistenciaJefeZona() {
                     type="button"
                     onClick={() => handleMarcarAsistencia(lavador.id)}
                     disabled={marcandoLavadorId === lavador.id}
-                    className="shrink-0 rounded-lg bg-primary-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-700 disabled:opacity-60"
+                    className="shrink-0 rounded-xl bg-primary-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-700 disabled:opacity-60"
                   >
                     {marcandoLavadorId === lavador.id ? 'Marcando…' : 'Marcar entrada'}
                   </button>

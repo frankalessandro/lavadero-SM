@@ -13,7 +13,6 @@ import { movimientoInventarioInputSchema, type TipoMovimientoInventario } from '
 import type { Producto } from '../../../schemas/producto'
 import type { Compra } from '../../../schemas/compra'
 import { Card } from '../../../components/layout/Card'
-import { StatCard } from '../../../components/layout/StatCard'
 import { CustomSelect } from '../../../components/layout/CustomSelect'
 import { NivelStockModal } from '../../../components/layout/NivelStockModal'
 import { CompraForm, AnularCompraModal } from '../../../components/layout/CompraForm'
@@ -29,13 +28,15 @@ import {
   type NivelStock,
 } from '../../../lib/nivelStock'
 import { toast } from '../../../lib/toast'
+import { PageHeader } from '../../../components/layout/PageHeader'
+import { Button } from '../../../components/layout/Button'
 
 // Hoja inferior en móvil, centrada en desktop — mismo patrón que src/routes/vigilante/index.tsx,
 // es la convención del repo para formularios modales nuevos en pantallas operativas mobile-first.
 function ModalSheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
     <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="custom-scroll max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-t-2xl bg-white p-5 shadow-card-hover sm:rounded-2xl">
+      <div className="custom-scroll max-h-[92vh] sm:max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-t-2xl bg-white p-5 shadow-card-hover sm:rounded-t-3xl sm:rounded-2xl">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-neutral-900">{title}</h3>
           <button
@@ -138,32 +139,23 @@ function StockPage() {
 
   return (
     <div className="flex flex-col gap-6 text-left">
-      <div className="flex items-start justify-between gap-3 px-1">
-        <p className="text-sm text-neutral-500">
-          Insumos de lavado (jabón, cera, etc.) y productos de nevera para vender — mismo catálogo, registra acá
-          el consumo o reposición del día a día. Costos y valorización solo los ve Admin.
-        </p>
-        <div className="flex shrink-0 gap-2">
-          <button
-            type="button"
-            onClick={() => setCompraFormOpen(true)}
-            className="flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700"
-          >
-            <ShoppingBasket size={16} />
-            Compra
-          </button>
-          <button
-            type="button"
-            onClick={() => setMovimientoFormOpen(true)}
-            className="flex items-center gap-2 rounded-lg border border-neutral-300 px-4 py-2.5 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
-          >
-            <PackageSearch size={16} />
-            Movimiento
-          </button>
-        </div>
-      </div>
-
-      <StatCard label="Productos activos" value={String(productosActivos.length)} icon={Package} />
+      <PageHeader
+        title="Inventario"
+        description="Cuánto hay de cada insumo y producto de nevera, y lo que entra o sale."
+        help={{
+          body: 'Insumos de lavado (jabón, cera…) y productos de nevera para vender: un solo catálogo.\n\nCompra: lo que llega de un proveedor, con factura y si se pagó con la caja del turno.\nMovimiento: consumo o ajuste del día a día, con justificación obligatoria — gerencia lo revisa.\n\nLos costos y la valorización solo los ve gerencia.',
+        }}
+        actions={
+          <>
+            <Button icon={PackageSearch} onClick={() => setMovimientoFormOpen(true)}>
+              Movimiento
+            </Button>
+            <Button variant="primary" icon={ShoppingBasket} onClick={() => setCompraFormOpen(true)}>
+              Registrar compra
+            </Button>
+          </>
+        }
+      />
 
       <div className="grid grid-cols-3 gap-3">
         {(
@@ -254,7 +246,7 @@ function StockPage() {
         titulo="Productos para vender"
         subtitulo="Nevera / mostrador"
         icono={ShoppingBag}
-        accento="border-t-warning-500"
+        accento="border-t-warning-600"
         badgeClass="bg-warning-50 text-warning-700"
         productos={vendibles}
         stockPorProducto={stockPorProducto}
@@ -613,7 +605,7 @@ function MovimientoForm({
         <button
           type="submit"
           disabled={saving}
-          className="rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
+          className="rounded-xl bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
         >
           {saving ? 'Guardando…' : 'Registrar movimiento'}
         </button>

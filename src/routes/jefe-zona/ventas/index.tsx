@@ -37,6 +37,8 @@ import { agruparPorSeccion } from '../../../lib/seccionProductos'
 import { METODO_PAGO_LABEL } from '../../../lib/metodoPago'
 import { queryKeys } from '../../../lib/queryKeys'
 import { toast } from '../../../lib/toast'
+import { PageHeader } from '../../../components/layout/PageHeader'
+import { Button } from '../../../components/layout/Button'
 
 async function loadVentas() {
   const [turno, productos, stock, ventasHoy, cuentasAbiertas, cuentasHoy, pendientes, lavadores] = await Promise.all([
@@ -245,38 +247,56 @@ function VenderPage() {
 
   return (
     <div className="flex flex-col gap-6 text-left">
-      <p className="px-1 text-sm text-neutral-500">
-        Venta de productos de nevera (agua, cerveza, etc.) — al mostrador con cobro inmediato, o cargados a una
-        cuenta abierta a nombre de alguien sin vehículo (lavador, acompañante, transeúnte) que se cobra completa al
-        cerrarla. Descuenta el stock automáticamente y suma al arqueo de caja, aparte de lo cobrado por lavados.
-      </p>
+      <PageHeader
+        title="Ventas"
+        description="Productos de nevera: al mostrador o cargados a una cuenta abierta."
+        help={{
+          body: 'Mostrador: se cobra en el momento, con pago partido si hace falta.\n\nCuentas abiertas: a nombre de alguien sin vehículo (lavador, acompañante, transeúnte). Se van cargando productos y se cobra completa al cerrarla, o se carga como deuda a un trabajador.\n\nToda venta descuenta el stock y suma al arqueo de caja, aparte de lo cobrado por lavados. Sin conteo de apertura del inventario no se puede vender.',
+        }}
+        actions={
+          turno && tab === 'cuentas' ? (
+            <Button variant="primary" icon={UserPlus} onClick={() => setAbriendoCuenta(true)}>
+              Abrir cuenta
+            </Button>
+          ) : undefined
+        }
+      />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-2 gap-3">
         <StatCard label="Ventas de hoy" value={String(ventasActivas.length)} icon={ShoppingCart} />
-        <StatCard label="Total vendido hoy" value={COP.format(totalVendidoHoy)} hint="Efectivo + transferencia" icon={Receipt} />
+        <StatCard label="Vendido hoy" value={COP.format(totalVendidoHoy)} icon={Receipt} />
       </div>
 
       {!turno ? (
         <AbrirTurnoPrompt miNombre={auth?.perfil.nombre?.trim() || 'tu cuenta'} onAbierto={refresh} />
       ) : (
         <>
-          <div className="flex rounded-lg border border-neutral-300 p-1">
+          <div className="grid grid-cols-2 gap-1 rounded-xl bg-neutral-200/60 p-1 sm:w-fit">
             {(
               [
-                { key: 'mostrador' as const, label: 'Mostrador', icon: ShoppingCart },
-                { key: 'cuentas' as const, label: `Cuentas abiertas${cuentasAbiertas.length > 0 ? ` (${cuentasAbiertas.length})` : ''}`, icon: Users },
+                { key: 'mostrador' as const, label: 'Mostrador', icon: ShoppingCart, count: 0 },
+                { key: 'cuentas' as const, label: 'Cuentas abiertas', icon: Users, count: cuentasAbiertas.length },
               ] as const
-            ).map(({ key, label, icon: Icon }) => (
+            ).map(({ key, label, icon: Icon, count }) => (
               <button
                 key={key}
                 type="button"
                 onClick={() => setTab(key)}
-                className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
-                  tab === key ? 'bg-primary-600 text-white shadow-nav-active' : 'text-neutral-600 hover:bg-neutral-50'
+                className={`flex items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors ${
+                  tab === key ? 'bg-white text-primary-700 shadow-sm' : 'text-neutral-500 hover:text-neutral-900'
                 }`}
               >
                 <Icon size={15} />
-                {label}
+                <span className="truncate">{label}</span>
+                {count > 0 ? (
+                  <span
+                    className={`rounded-full px-1.5 text-[11px] font-semibold ${
+                      tab === key ? 'bg-primary-100 text-primary-700' : 'bg-neutral-100 text-neutral-500'
+                    }`}
+                  >
+                    {count}
+                  </span>
+                ) : null}
               </button>
             ))}
           </div>
@@ -319,14 +339,17 @@ function VenderPage() {
             />
           ) : (
             <div className="flex flex-col gap-4">
-              <button
-                type="button"
-                onClick={() => setAbriendoCuenta(true)}
-                className="flex items-center justify-center gap-2 rounded-lg border border-dashed border-primary-300 bg-primary-50/50 py-3 text-sm font-semibold text-primary-700 transition-colors hover:bg-primary-50"
-              >
-                <UserPlus size={16} />
-                Abrir cuenta
-              </button>
+              {cuentasAbiertas.length === 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setAbriendoCuenta(true)}
+                  className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-neutral-300 bg-white px-4 py-10 text-center transition-colors hover:border-primary-300 hover:bg-primary-50/40"
+                >
+                  <UserPlus size={22} className="text-neutral-300" />
+                  <span className="text-sm text-neutral-500">No hay cuentas abiertas.</span>
+                  <span className="text-sm font-semibold text-primary-700">Abrir la primera</span>
+                </button>
+              ) : null}
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {cuentasAbiertas.map((cuenta) => {
@@ -370,7 +393,7 @@ function VenderPage() {
                                 <button
                                   type="button"
                                   onClick={() => setQuitandoDeCuenta(v)}
-                                  className="text-danger-500 transition-colors hover:text-danger-700"
+                                  className="text-danger-600 transition-colors hover:text-danger-700"
                                   aria-label={`Quitar ${productoNombre(v.productoId)}`}
                                 >
                                   <Trash2 size={13} />
@@ -385,7 +408,7 @@ function VenderPage() {
                         <button
                           type="button"
                           onClick={() => setAgregandoACuenta(cuenta)}
-                          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-neutral-300 py-2 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
+                          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 bg-white py-2 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
                         >
                           <PackagePlus size={14} /> Producto
                         </button>
@@ -393,7 +416,7 @@ function VenderPage() {
                           type="button"
                           disabled={items.length === 0}
                           onClick={() => setCerrandoCuenta(cuenta)}
-                          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary-600 py-2 text-xs font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-50"
+                          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary-600 py-2 text-xs font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-50"
                         >
                           <Wallet size={14} /> Cobrar y cerrar
                         </button>
@@ -789,7 +812,7 @@ function VentaCarrito({
         <button
           type="submit"
           disabled={saving || items.length === 0 || !cuadra}
-          className="flex items-center justify-center gap-2 rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
+          className="flex items-center justify-center gap-2 rounded-xl bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
         >
           {saving
             ? 'Registrando…'
@@ -845,8 +868,8 @@ function AnularVentaModal({
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-[2px]">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-card-hover sm:p-7">
+    <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
+      <div className="w-full max-w-md rounded-t-3xl sm:rounded-2xl custom-scroll max-h-[92vh] overflow-y-auto bg-white sm:max-h-[88vh] p-6 shadow-card-hover sm:p-7">
         <div className="mb-5 flex items-center justify-between">
           <h3 className="text-base font-semibold text-neutral-900">
             Anular venta VTA-{venta.consecutivo} · {productoNombre}
@@ -977,7 +1000,7 @@ function AbrirCuentaModal({
 
   return (
     <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="custom-scroll flex max-h-[90vh] w-full max-w-sm flex-col overflow-y-auto rounded-t-2xl bg-white p-5 shadow-card-hover sm:rounded-2xl sm:p-6">
+      <div className="custom-scroll flex max-h-[92vh] sm:max-h-[90vh] w-full max-w-sm flex-col overflow-y-auto rounded-t-2xl bg-white p-5 shadow-card-hover sm:rounded-t-3xl sm:rounded-2xl sm:p-6">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-base font-semibold text-neutral-900">Abrir cuenta</h3>
           <button
@@ -1073,7 +1096,7 @@ function AbrirCuentaModal({
           <button
             type="submit"
             disabled={saving}
-            className="rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
+            className="rounded-xl bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
           >
             {saving ? 'Abriendo…' : aCosto ? 'Abrir cuenta a costo' : 'Abrir cuenta'}
           </button>
@@ -1182,7 +1205,7 @@ function CerrarCuentaModal({
 
   return (
     <div className="fixed inset-0 z-30 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="custom-scroll flex max-h-[90vh] w-full max-w-sm flex-col overflow-y-auto rounded-t-2xl bg-white p-5 shadow-card-hover sm:rounded-2xl sm:p-6">
+      <div className="custom-scroll flex max-h-[92vh] sm:max-h-[90vh] w-full max-w-sm flex-col overflow-y-auto rounded-t-2xl bg-white p-5 shadow-card-hover sm:rounded-t-3xl sm:rounded-2xl sm:p-6">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-base font-semibold text-neutral-900">Cerrar cuenta — {cuenta.titular}</h3>
           <button
@@ -1274,7 +1297,7 @@ function CerrarCuentaModal({
           <button
             type="submit"
             disabled={saving || (modo === 'cobrar' && !cuadra) || (modo === 'lavador' && !cuenta.aCosto && !lavadorId)}
-            className="flex items-center justify-center gap-2 rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
+            className="flex items-center justify-center gap-2 rounded-xl bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
           >
             <Wallet size={16} />
             {saving ? 'Cerrando…' : modo === 'cobrar' ? `Cobrar ${COP.format(total)}` : `Cargar ${COP.format(total)} como deuda`}
@@ -1325,8 +1348,8 @@ function AnularCuentaModal({
   }
 
   return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-neutral-900/40 p-4 backdrop-blur-[2px]">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-card-hover">
+    <div className="fixed inset-0 z-30 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
+      <div className="w-full max-w-md rounded-t-3xl sm:rounded-2xl custom-scroll max-h-[92vh] overflow-y-auto bg-white sm:max-h-[88vh] p-6 shadow-card-hover">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-base font-semibold text-neutral-900">Anular cuenta — {cuenta.titular}</h3>
           <button

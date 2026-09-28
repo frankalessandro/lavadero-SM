@@ -24,6 +24,7 @@ import { ConteoInventario } from '../../../components/layout/ConteoInventario'
 import { ArqueoCaja } from '../../../components/layout/ArqueoCaja'
 import { IndicadorCuadrado } from '../../../components/layout/PantallaTarea'
 import { TurnoResponsableBanner } from '../../../components/layout/TurnoResponsableBanner'
+import { PageHeader } from '../../../components/layout/PageHeader'
 
 // Conteo de inventario encadenado (0068): apertura antes de vender (la base bloquea la venta sin
 // ella) y cierre antes del arqueo (trigger `turnos_caja_cierre_requiere_conteo`, sin excepciones).
@@ -222,7 +223,14 @@ function CajaJefeZona() {
 
   // ── Pantalla de estado ───────────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+      <PageHeader
+        title="Caja"
+        description="Abrir y cerrar el turno, paso a paso: caja, inventario y arqueo."
+        help={{
+          body: 'Apertura: abres la caja con la base inicial y cuentas el inventario. Sin ese conteo no se puede vender.\n\nCierre: primero cuentas el inventario (lo que falte queda a tu nombre) y después haces el arqueo ciego: cuentas el efectivo antes de ver cuánto espera el sistema. Toda diferencia pide justificación.\n\nSi entregas el turno a otra persona, se cuenta el inventario y el turno queda pendiente hasta que la otra cuenta lo acepte.',
+        }}
+      />
       {resumenCierre ? (
         <Card className="flex flex-col gap-3 border-l-4 border-l-primary-500 p-5">
           <div>
@@ -246,7 +254,7 @@ function CajaJefeZona() {
           <button
             type="button"
             onClick={() => setResumenCierre(null)}
-            className="mt-1 rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700"
+            className="mt-1 rounded-xl bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700"
           >
             Listo
           </button>
@@ -349,7 +357,7 @@ function CajaJefeZona() {
               <button
                 type="button"
                 onClick={() => setModoCierre(true)}
-                className="mt-2 rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700"
+                className="mt-2 rounded-xl bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700"
               >
                 Cerrar turno
               </button>
@@ -376,7 +384,7 @@ function CajaJefeZona() {
           <button
             type="button"
             onClick={() => setTarea('abrir-caja')}
-            className="rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700"
+            className="rounded-xl bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700"
           >
             Abrir caja
           </button>
@@ -501,7 +509,7 @@ function BotonItem({ children, onClick }: { children: ReactNode; onClick: () => 
     <button
       type="button"
       onClick={onClick}
-      className="rounded-lg bg-primary-600 px-3.5 py-2 text-xs font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700"
+      className="rounded-xl bg-primary-600 px-3.5 py-2 text-xs font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700"
     >
       {children}
     </button>
@@ -556,7 +564,7 @@ function AbrirCajaModal({
 
   return (
     <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="w-full max-w-sm rounded-t-2xl bg-white p-5 shadow-card-hover sm:rounded-2xl sm:p-6">
+      <div className="w-full max-w-sm rounded-t-2xl custom-scroll max-h-[92vh] overflow-y-auto bg-white sm:max-h-[88vh] p-5 shadow-card-hover sm:rounded-t-3xl sm:rounded-2xl sm:p-6">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <h3 className="text-base font-semibold text-neutral-900">Abrir caja</h3>
@@ -585,7 +593,7 @@ function AbrirCajaModal({
           <button
             type="submit"
             disabled={saving}
-            className="rounded-lg bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
+            className="rounded-xl bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
           >
             {saving ? 'Abriendo…' : 'Abrir caja y continuar'}
           </button>

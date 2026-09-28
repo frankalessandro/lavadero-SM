@@ -10,7 +10,8 @@ import { comisionParaLavador, fetchMontoPeriodo } from '../../../data/liquidacio
 import { fetchDeudaPendientePorLavador } from '../../../data/deudasPersonal'
 import type { Orden } from '../../../schemas/orden'
 import { Card } from '../../../components/layout/Card'
-import { CustomSelect } from '../../../components/layout/CustomSelect'
+import { PageHeader } from '../../../components/layout/PageHeader'
+import { FiltroMenu } from '../../../components/layout/Filtros'
 import { PeriodoSelector } from '../../../components/layout/PeriodoSelector'
 import { ReciboModal, type ReciboData } from '../../../components/layout/ReciboModal'
 import { ColillaLiquidacionModal, type ColillaLiquidacionData } from '../../../components/layout/ColillaLiquidacionModal'
@@ -173,26 +174,24 @@ function LiquidacionesJefeZona() {
 
   return (
     <div className="flex flex-col gap-6 text-left">
-      <div>
-        <h2 className="text-base font-semibold text-neutral-900">Liquidaciones</h2>
-        <p className="text-sm text-neutral-500">
-          Colilla informativa por día — no es la liquidación real (esa sigue siendo semanal desde Admin, regla de
-          negocio 4). Cada vehículo cuenta desde que se le asigna al lavador, aunque todavía no se haya cobrado.
-        </p>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-        <PeriodoSelector modo={modo} onModoChange={setModo} ancla={ancla} onAnclaChange={setAncla} rango={rango} />
-        <div className="w-full sm:w-64">
-          <CustomSelect
-            size="sm"
-            value={lavadorFiltro}
-            onChange={setLavadorFiltro}
-            placeholder="Todos los lavadores"
-            options={[{ value: 'todos', label: 'Todos los lavadores' }, ...lavadores.map((l) => ({ value: l.id, label: l.nombre }))]}
-          />
-        </div>
-      </div>
+      <PageHeader
+        title="Liquidaciones"
+        description="Cuánto va ganando cada lavador en el periodo, con su colilla para mostrarle."
+        help={{
+          body: 'Es una colilla informativa: no genera la liquidación real ni marca nada (el pago lo genera gerencia, regla de negocio 4).\n\nCada vehículo cuenta desde que se le asigna al lavador, aunque todavía no se haya cobrado. Si ves un día, la colilla es del día; una semana, de la semana; un mes, del mes.',
+        }}
+        actions={
+          <>
+            <FiltroMenu
+              label="Lavador"
+              value={lavadorFiltro === 'todos' ? '' : lavadorFiltro}
+              onChange={(v) => setLavadorFiltro(v || 'todos')}
+              options={lavadores.map((l) => ({ value: l.id, label: l.nombre }))}
+            />
+            <PeriodoSelector modo={modo} onModoChange={setModo} ancla={ancla} onAnclaChange={setAncla} rango={rango} />
+          </>
+        }
+      />
 
       <section className="flex flex-col gap-3">
         <h3 className="text-sm font-semibold text-neutral-900">Ganado por lavador · {rango.label}</h3>
@@ -238,7 +237,7 @@ function LiquidacionesJefeZona() {
                   type="button"
                   disabled={cargandoColilla === p.lavadorId}
                   onClick={() => handleVerColilla(p.lavadorId)}
-                  className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-neutral-300 py-2 text-xs font-medium text-neutral-600 transition-colors hover:border-warning-300 hover:text-warning-700 disabled:opacity-50"
+                  className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-neutral-300 py-2 text-xs font-medium text-neutral-600 transition-colors hover:border-warning-600/30 hover:text-warning-700 disabled:opacity-50"
                   title="Corte informativo de este periodo — no es un pago, se liquida semanal desde Admin"
                 >
                   <Receipt size={13} />
