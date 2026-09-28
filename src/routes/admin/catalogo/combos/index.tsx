@@ -16,6 +16,7 @@ import { fetchRendimientoCombos, type RendimientoCombo } from '../../../../data/
 import { Card } from '../../../../components/layout/Card'
 import { CustomSelect } from '../../../../components/layout/CustomSelect'
 import { ConfirmModal } from '../../../../components/layout/ConfirmModal'
+import { PageHeader } from '../../../../components/layout/PageHeader'
 import { toast } from '../../../../lib/toast'
 import { CurrencyInput } from '../../../../components/layout/CurrencyInput'
 import { BarChart } from '../../../../components/layout/BarChart'
@@ -100,32 +101,31 @@ function CombosPage() {
 
   return (
     <div className="flex flex-col gap-6 text-left">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold text-neutral-900">Combos</h2>
-          <p className="text-sm text-neutral-500">
-            Catálogo de combos — el precio se calcula sumando los servicios que incluyen, o se fija a mano
-            para combos que funcionan distinto (ej. motos).
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={openCreate}
-          className="flex shrink-0 items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700"
-        >
-          <Plus size={16} />
-          Nuevo combo
-        </button>
-      </div>
+      <PageHeader
+        title="Combos"
+        description={<>Catálogo de combos — el precio se calcula sumando los servicios que incluyen, o se fija a mano para combos que funcionan distinto (ej. motos).</>}
+        actions={
+          <>
+          <button
+            type="button"
+            onClick={openCreate}
+            className="flex shrink-0 items-center gap-2 rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700"
+          >
+            <Plus size={16} />
+            Nuevo combo
+          </button>
+          </>
+        }
+      />
 
-      <div className="flex w-fit rounded-lg border border-neutral-300 p-1">
+      <div className="flex w-fit rounded-xl bg-neutral-200/60 p-1">
         {(['precios', 'rendimiento'] as const).map((v) => (
           <button
             key={v}
             type="button"
             onClick={() => setVista(v)}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium capitalize transition-colors ${
-              vista === v ? 'bg-primary-600 text-white shadow-nav-active' : 'text-neutral-600 hover:bg-neutral-50'
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium capitalize transition-colors ${
+              vista === v ? 'bg-white text-primary-700 shadow-sm' : 'text-neutral-500 hover:text-neutral-900'
             }`}
           >
             {v}
@@ -314,14 +314,14 @@ function RendimientoView({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex w-fit rounded-lg border border-neutral-300 p-1">
+        <div className="flex w-fit rounded-xl bg-neutral-200/60 p-1">
           {RANGOS_REND.map((r) => (
             <button
               key={r.key}
               type="button"
               onClick={() => setDias(r.dias)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                dias === r.dias ? 'bg-primary-600 text-white shadow-nav-active' : 'text-neutral-600 hover:bg-neutral-50'
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                dias === r.dias ? 'bg-white text-primary-700 shadow-sm' : 'text-neutral-500 hover:text-neutral-900'
               }`}
             >
               {r.label}

@@ -19,6 +19,7 @@ import type { TarifaParqueadero } from '../../../../schemas/tarifaParqueadero'
 import { Card } from '../../../../components/layout/Card'
 import { CustomSelect } from '../../../../components/layout/CustomSelect'
 import { ConfirmModal } from '../../../../components/layout/ConfirmModal'
+import { PageHeader } from '../../../../components/layout/PageHeader'
 import { toast } from '../../../../lib/toast'
 import { CurrencyInput } from '../../../../components/layout/CurrencyInput'
 
@@ -82,12 +83,7 @@ function ParqueaderoPage() {
 
   return (
     <div className="flex flex-col gap-6 text-left">
-      <div>
-        <h2 className="text-base font-semibold text-neutral-900">Tarifas de parqueadero</h2>
-        <p className="text-sm text-neutral-500">
-          Las tres modalidades operan de forma independiente, cada una con su propia tarifa.
-        </p>
-      </div>
+      <PageHeader title="Tarifas de parqueadero" description={<>Las tres modalidades operan de forma independiente, cada una con su propia tarifa.</>} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {tarifas.map((tarifa) => (
@@ -107,7 +103,7 @@ function ParqueaderoPage() {
           <button
             type="button"
             onClick={() => setCreandoSus(true)}
-            className="flex items-center gap-1.5 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700"
+            className="flex items-center gap-1.5 rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700"
           >
             <Plus size={16} />
             Nueva suscripción

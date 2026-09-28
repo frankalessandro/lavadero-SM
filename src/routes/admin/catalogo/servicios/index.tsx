@@ -11,6 +11,7 @@ import type { PrecioServicio } from '../../../../schemas/precioServicio'
 import { Card } from '../../../../components/layout/Card'
 import { CustomSelect } from '../../../../components/layout/CustomSelect'
 import { ConfirmModal } from '../../../../components/layout/ConfirmModal'
+import { PageHeader } from '../../../../components/layout/PageHeader'
 import { toast } from '../../../../lib/toast'
 import { CurrencyInput } from '../../../../components/layout/CurrencyInput'
 
@@ -83,25 +84,22 @@ function ServiciosPage() {
 
   return (
     <div className="flex flex-col gap-6 text-left">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold text-neutral-900">Servicios</h2>
-          <p className="text-sm text-neutral-500">
-            Catálogo de servicios individuales (aspirado, brillado, lavado de motor…) — los combos se
-            arman eligiendo servicios de aquí. Cada servicio tiene dos precios: el de combo (lo que aporta
-            al total cuando va empaquetado) y el individual (cuando se vende solo o suelto encima de un
-            combo, normalmente más caro).
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={openCreate}
-          className="flex shrink-0 items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700"
-        >
-          <Plus size={16} />
-          Nuevo servicio
-        </button>
-      </div>
+      <PageHeader
+        title="Servicios"
+        description={<>Catálogo de servicios individuales (aspirado, brillado, lavado de motor…) — los combos se arman eligiendo servicios de aquí. Cada servicio tiene dos precios: el de combo (lo que aporta al total cuando va empaquetado) y el individual (cuando se vende solo o suelto encima de un combo, normalmente más caro).</>}
+        actions={
+          <>
+          <button
+            type="button"
+            onClick={openCreate}
+            className="flex shrink-0 items-center gap-2 rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700"
+          >
+            <Plus size={16} />
+            Nuevo servicio
+          </button>
+          </>
+        }
+      />
 
       <Card className="overflow-x-auto p-0">
         <table className="w-full min-w-[52rem] text-sm">

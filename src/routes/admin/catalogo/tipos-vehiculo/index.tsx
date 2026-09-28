@@ -15,6 +15,7 @@ import {
 import { Card } from '../../../../components/layout/Card'
 import { CustomSelect } from '../../../../components/layout/CustomSelect'
 import { ConfirmModal } from '../../../../components/layout/ConfirmModal'
+import { PageHeader } from '../../../../components/layout/PageHeader'
 import { toast } from '../../../../lib/toast'
 
 const CATEGORIA_LABEL: Record<CategoriaVehiculo, string> = {
@@ -57,22 +58,22 @@ function TiposVehiculoPage() {
 
   return (
     <div className="flex flex-col gap-6 text-left">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold text-neutral-900">Tipos de vehículo</h2>
-          <p className="text-sm text-neutral-500">
-            Base para la matriz de precios de combos — cada combo se cobra distinto según el tipo.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={openCreate}
-          className="flex shrink-0 items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700"
-        >
-          <Plus size={16} />
-          Nuevo tipo
-        </button>
-      </div>
+      <PageHeader
+        title="Tipos de vehículo"
+        description={<>Base para la matriz de precios de combos — cada combo se cobra distinto según el tipo.</>}
+        actions={
+          <>
+          <button
+            type="button"
+            onClick={openCreate}
+            className="flex shrink-0 items-center gap-2 rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700"
+          >
+            <Plus size={16} />
+            Nuevo tipo
+          </button>
+          </>
+        }
+      />
 
       <Card className="overflow-x-auto p-0">
         <table className="w-full min-w-[32rem] text-sm">

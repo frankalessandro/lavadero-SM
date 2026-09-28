@@ -13,6 +13,7 @@ import { fetchProductos } from '../../../../data/productos'
 import { lavadorInputSchema, type Lavador } from '../../../../schemas/lavador'
 import { Card } from '../../../../components/layout/Card'
 import { ConfirmModal } from '../../../../components/layout/ConfirmModal'
+import { PageHeader } from '../../../../components/layout/PageHeader'
 import { LavadorExpedienteModal } from '../../../../components/layout/LavadorExpedienteModal'
 import { toast } from '../../../../lib/toast'
 
@@ -60,23 +61,22 @@ function LavadoresPage() {
 
   return (
     <div className="flex flex-col gap-6 text-left">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold text-neutral-900">Lavadores</h2>
-          <p className="text-sm text-neutral-500">
-            Los lavadores nunca se eliminan (regla de negocio 5) — se inactivan para preservar el
-            histórico.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={openCreate}
-          className="flex shrink-0 items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700"
-        >
-          <Plus size={16} />
-          Nuevo lavador
-        </button>
-      </div>
+      <PageHeader
+        title="Lavadores"
+        description={<>Los lavadores nunca se eliminan (regla de negocio 5) — se inactivan para preservar el histórico.</>}
+        actions={
+          <>
+          <button
+            type="button"
+            onClick={openCreate}
+            className="flex shrink-0 items-center gap-2 rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700"
+          >
+            <Plus size={16} />
+            Nuevo lavador
+          </button>
+          </>
+        }
+      />
 
       <Card className="overflow-x-auto p-0">
         <table className="w-full min-w-[40rem] text-sm">

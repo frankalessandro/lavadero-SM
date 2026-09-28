@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { Pencil, X, Plus, UserPlus, KeyRound, Copy, Check, Loader2 } from 'lucide-react'
+import { Pencil, X, Plus, UserPlus, KeyRound, Copy, Check, Loader2, UserRound } from 'lucide-react'
 import {
   fetchPerfiles,
   fetchEmailUsuario,
@@ -19,9 +19,10 @@ import {
 } from '../../../../schemas/perfil'
 import { USE_LOCAL_DB } from '../../../../lib/db'
 import { Card } from '../../../../components/layout/Card'
-import { FilaFiltros, FiltroTexto, FiltroSelect, FiltroVacio } from '../../../../components/layout/TableHeadFilter'
+import { BarraFiltros, FiltroCombo, FiltroMenu } from '../../../../components/layout/Filtros'
 import { coincide } from '../../../../lib/tableFilters'
 import { toast } from '../../../../lib/toast'
+import { PageHeader } from '../../../../components/layout/PageHeader'
 
 const ESTADO_OPTIONS = [
   { value: 'activo', label: 'Activo' },
@@ -68,26 +69,51 @@ function UsuariosPage() {
 
   return (
     <div className="flex flex-col gap-6 text-left">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold text-neutral-900">Usuarios del sistema</h2>
-          <p className="text-sm text-neutral-500">
-            {USE_LOCAL_DB
-              ? 'Las cuentas reales (login) solo existen en Supabase — este sandbox local no tiene Auth.'
-              : 'Una cuenta por persona, con uno o varios roles. El usuario es nombreapellido@carwashsm.com y la contraseña es desechable: la persona la cambia en su primer ingreso.'}
-          </p>
-        </div>
-        {USE_LOCAL_DB ? null : (
-          <button
-            type="button"
-            onClick={() => setCreando(true)}
-            className="flex shrink-0 items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700"
-          >
-            <Plus size={16} />
-            Nuevo usuario
-          </button>
-        )}
-      </div>
+      <PageHeader
+        title="Usuarios del sistema"
+        description={<>{USE_LOCAL_DB ? 'Las cuentas reales (login) solo existen en Supabase — este sandbox local no tiene Auth.' : 'Una cuenta por persona, con uno o varios roles. El usuario es nombreapellido@carwashsm.com y la contraseña es desechable: la persona la cambia en su primer ingreso.'}</>}
+        actions={
+          <>
+          {USE_LOCAL_DB ? null : (
+            <button
+              type="button"
+              onClick={() => setCreando(true)}
+              className="flex shrink-0 items-center gap-2 rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700"
+            >
+              <Plus size={16} />
+              Nuevo usuario
+            </button>
+          )}
+          </>
+        }
+      />
+
+      <BarraFiltros
+        activos={[filtroNombre, filtroRol, filtroEstado].filter(Boolean).length}
+        onLimpiar={() => {
+          setFiltroNombre('')
+          setFiltroRol('')
+          setFiltroEstado('')
+        }}
+        resultado={`${visibles.length} de ${perfiles.length} cuentas`}
+      >
+        <FiltroCombo
+          value={filtroNombre}
+          onChange={setFiltroNombre}
+          options={perfiles.map((p) => p.nombre?.trim() ?? '').filter(Boolean)}
+          placeholder="Persona"
+          icon={UserRound}
+          ancho="sm:w-60"
+        />
+        <FiltroMenu
+          label="Rol"
+          value={filtroRol}
+          onChange={setFiltroRol}
+          options={ROLES.map((r) => ({ value: r.id, label: r.label }))}
+          todosLabel="Todos"
+        />
+        <FiltroMenu label="Estado" value={filtroEstado} onChange={setFiltroEstado} options={ESTADO_OPTIONS} />
+      </BarraFiltros>
 
       <Card className="overflow-x-auto p-0 md:overflow-visible">
         <table className="w-full min-w-[40rem] text-sm">
@@ -98,17 +124,6 @@ function UsuariosPage() {
               <th className="px-5 py-3">Estado</th>
               <th className="px-5 py-3 text-right">Acciones</th>
             </tr>
-            <FilaFiltros>
-              <FiltroTexto value={filtroNombre} onChange={setFiltroNombre} placeholder="Buscar por nombre…" />
-              <FiltroSelect
-                value={filtroRol}
-                onChange={setFiltroRol}
-                options={ROLES.map((r) => ({ value: r.id, label: r.label }))}
-                todosLabel="Todos los roles"
-              />
-              <FiltroSelect value={filtroEstado} onChange={setFiltroEstado} options={ESTADO_OPTIONS} todosLabel="Todos" />
-              <FiltroVacio />
-            </FilaFiltros>
           </thead>
           <tbody>
             {visibles.map((perfil) => (
