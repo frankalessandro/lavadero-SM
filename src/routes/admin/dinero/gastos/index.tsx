@@ -24,6 +24,9 @@ import { ConfirmModal } from '../../../../components/layout/ConfirmModal'
 import { CurrencyInput } from '../../../../components/layout/CurrencyInput'
 import { ComprobanteEgresoModal } from '../../../../components/layout/ComprobanteEgresoModal'
 import { toast } from '../../../../lib/toast'
+import { Modal } from '../../../../components/layout/Modal'
+import { Button } from '../../../../components/layout/Button'
+import { PageHeader, SectionHeader } from '../../../../components/layout/PageHeader'
 
 function inicioDelMesISO(): string {
   const now = new Date()
@@ -95,6 +98,7 @@ function GastosPage() {
   const [totalPrevio, setTotalPrevio] = useState<number | null>(null)
   const [categoriaFiltro, setCategoriaFiltro] = useState<string | null>(null)
   const [comprobante, setComprobante] = useState<GastoConCategoria | null>(null)
+  const [registrando, setRegistrando] = useState(false)
 
   async function refresh() {
     const r = rangoGasto(rango)
@@ -137,29 +141,32 @@ function GastosPage() {
 
   return (
     <div className="flex flex-col gap-6 text-left">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h2 className="text-base font-semibold text-neutral-900">Gastos</h2>
-          <p className="text-sm text-neutral-500">Registro de gastos operativos y su categorización.</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setCategoriasModalOpen(true)}
-          className="flex shrink-0 items-center gap-2 self-start rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50 sm:self-auto"
-        >
-          <Settings2 size={16} />
-          Gestionar categorías
-        </button>
-      </div>
+      <PageHeader
+        title="Gastos"
+        description="Lo que sale del negocio, por categoría."
+        help={{
+          body: 'Cada gasto lleva categoría, responsable y origen. Origen "Caja" se descuenta del arqueo del turno abierto; "Otro" se paga por fuera de caja.\n\nLa categoría decide a qué línea de negocio se imputa en Rentabilidad (lavadero, productos, parqueadero o gasto general). Se configura en "Categorías".',
+        }}
+        actions={
+          <>
+            <Button icon={Settings2} onClick={() => setCategoriasModalOpen(true)}>
+              Categorías
+            </Button>
+            <Button variant="primary" icon={Plus} onClick={() => setRegistrando(true)}>
+              Registrar gasto
+            </Button>
+          </>
+        }
+      />
 
-      <div className="flex w-fit rounded-lg border border-neutral-300 p-1">
+      <div className="flex w-full rounded-xl bg-neutral-200/60 p-1 sm:w-fit">
         {RANGOS_GASTO.map((r) => (
           <button
             key={r.key}
             type="button"
             onClick={() => cambiarRango(r.key)}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              rango === r.key ? 'bg-primary-600 text-white shadow-nav-active' : 'text-neutral-600 hover:bg-neutral-50'
+            className={`flex-1 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors sm:flex-none ${
+              rango === r.key ? 'bg-white text-primary-700 shadow-sm' : 'text-neutral-500 hover:text-neutral-900'
             }`}
           >
             {r.label}
@@ -167,7 +174,7 @@ function GastosPage() {
         ))}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <StatCard
           label="Total del rango"
           value={formatoMoneda.format(totalRango)}
@@ -212,53 +219,42 @@ function GastosPage() {
         </Card>
       ) : null}
 
-      <GastoForm
-        categorias={categoriasActivas}
-        onSaved={async (gasto) => {
-          await refresh()
-          setComprobante(gasto)
-        }}
-      />
-
-      {categoriaFiltro ? (
-        <button
-          type="button"
-          onClick={() => setCategoriaFiltro(null)}
-          className="w-fit rounded-lg bg-primary-50 px-3 py-1.5 text-xs font-medium text-primary-700 transition-colors hover:bg-primary-100"
-        >
-          Filtrando: {categoriaFiltro} · quitar filtro
-        </button>
-      ) : null}
-
-      <Card className="p-0">
-        <div className="overflow-x-auto">
-        <table className="w-full min-w-[40rem] text-sm">
-          <thead>
-            <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
-              <th className="px-5 py-3">Fecha</th>
-              <th className="px-5 py-3">Categoría</th>
-              <th className="px-5 py-3">Descripción</th>
-              <th className="px-5 py-3">Monto</th>
-              <th className="px-5 py-3">Responsable</th>
-              <th className="px-5 py-3">Origen</th>
-              <th className="px-5 py-3" />
-            </tr>
-          </thead>
-          <tbody>
+      <section className="flex flex-col gap-3">
+        <SectionHeader
+          title={categoriaFiltro ? `Gastos de ${categoriaFiltro}` : 'Gastos del rango'}
+          count={gastosVisibles.length}
+          action={
+            categoriaFiltro ? (
+              <Button size="sm" variant="ghost" icon={X} onClick={() => setCategoriaFiltro(null)}>
+                Quitar filtro
+              </Button>
+            ) : null
+          }
+        />
+        {gastosVisibles.length === 0 ? (
+          <p className="rounded-2xl border border-dashed border-neutral-200 bg-white px-4 py-10 text-center text-sm text-neutral-400">
+            {categoriaFiltro ? `Sin gastos de "${categoriaFiltro}" en el rango.` : 'No hay gastos en el rango.'}
+          </p>
+        ) : (
+          <ul className="flex flex-col divide-y divide-neutral-100 overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-card">
             {gastosVisibles.map((gasto) => (
               <GastoRow key={gasto.id} gasto={gasto} onImprimir={() => setComprobante(gasto)} />
             ))}
-            {gastosVisibles.length === 0 ? (
-              <tr>
-                <td className="px-5 py-6 text-center text-neutral-400" colSpan={7}>
-                  {categoriaFiltro ? `Sin gastos de "${categoriaFiltro}" en el rango.` : 'No hay gastos en el rango.'}
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-        </div>
-      </Card>
+          </ul>
+        )}
+      </section>
+
+      {registrando ? (
+        <GastoForm
+          categorias={categoriasActivas}
+          onClose={() => setRegistrando(false)}
+          onSaved={async (gasto) => {
+            setRegistrando(false)
+            await refresh()
+            setComprobante(gasto)
+          }}
+        />
+      ) : null}
 
       {categoriasModalOpen ? (
         <CategoriasModal
@@ -275,42 +271,49 @@ function GastosPage() {
 
 function GastoRow({ gasto, onImprimir }: { gasto: GastoConCategoria; onImprimir: () => void }) {
   return (
-    <tr className="border-b border-neutral-100 transition-colors last:border-0 hover:bg-primary-50/40">
-      <td className="px-5 py-3 text-neutral-700">{gasto.fecha}</td>
-      <td className="px-5 py-3 text-neutral-700">{gasto.categoriaNombre}</td>
-      <td className="px-5 py-3 font-medium text-neutral-900">{gasto.descripcion}</td>
-      <td className="px-5 py-3 text-neutral-700">{formatoMoneda.format(gasto.monto)}</td>
-      <td className="px-5 py-3 text-neutral-700">{gasto.responsable}</td>
-      <td className="px-5 py-3">
-        <span
-          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
-            gasto.origen === 'caja' ? 'bg-primary-50 text-primary-700' : 'bg-neutral-100 text-neutral-600'
-          }`}
-        >
-          {gasto.origen === 'caja' ? 'Caja' : 'Otro'}
-        </span>
-      </td>
-      <td className="px-5 py-3 text-right">
-        <button
-          type="button"
-          onClick={onImprimir}
-          title="Comprobante de egreso"
-          className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-neutral-500 transition-colors hover:bg-primary-50 hover:text-primary-700"
-        >
-          <Printer size={14} />
-          Comprobante
-        </button>
-      </td>
-    </tr>
+    <li className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-neutral-50 sm:px-5">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-danger-50 text-danger-600">
+        <Receipt size={16} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-neutral-900">{gasto.descripcion}</p>
+        <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-neutral-500">
+          <span>{gasto.fecha}</span>
+          <span className="text-neutral-300">·</span>
+          <span>{gasto.categoriaNombre}</span>
+          <span className="text-neutral-300">·</span>
+          <span className="truncate">{gasto.responsable}</span>
+          <span
+            className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+              gasto.origen === 'caja' ? 'bg-primary-50 text-primary-700' : 'bg-neutral-100 text-neutral-600'
+            }`}
+          >
+            {gasto.origen === 'caja' ? 'Caja' : 'Otro'}
+          </span>
+        </p>
+      </div>
+      <span className="shrink-0 text-sm font-semibold tabular-nums text-neutral-900">{formatoMoneda.format(gasto.monto)}</span>
+      <button
+        type="button"
+        onClick={onImprimir}
+        title="Comprobante de egreso"
+        aria-label="Comprobante de egreso"
+        className="flex size-8 shrink-0 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-primary-50 hover:text-primary-700"
+      >
+        <Printer size={15} />
+      </button>
+    </li>
   )
 }
 
 function GastoForm({
   categorias,
   onSaved,
+  onClose,
 }: {
   categorias: CategoriaGasto[]
   onSaved: (gasto: GastoConCategoria) => Promise<void>
+  onClose: () => void
 }) {
   const [fecha, setFecha] = useState(hoyISO())
   const [categoriaId, setCategoriaId] = useState('')
@@ -368,9 +371,24 @@ function GastoForm({
   }
 
   return (
-    <Card>
-      <h3 className="mb-4 text-sm font-semibold text-neutral-900">Registrar gasto</h3>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+    <Modal
+      title="Registrar gasto"
+      subtitle="Queda con su comprobante de egreso para imprimir."
+      icon={Receipt}
+      size="md"
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button variant="primary" type="submit" form="form-gasto" icon={Plus} loading={saving}>
+            Registrar gasto
+          </Button>
+        </>
+      }
+    >
+      <form id="form-gasto" onSubmit={handleSubmit} className="flex flex-col gap-5">
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-medium text-neutral-700">Fecha</span>
@@ -443,19 +461,8 @@ function GastoForm({
         </div>
 
         {error ? <p className="text-xs text-danger-600">{error}</p> : null}
-
-        <div className="flex justify-end">
-          <button
-            type="submit"
-            disabled={saving}
-            className="flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
-          >
-            <Plus size={16} />
-            {saving ? 'Guardando…' : 'Registrar gasto'}
-          </button>
-        </div>
       </form>
-    </Card>
+    </Modal>
   )
 }
 

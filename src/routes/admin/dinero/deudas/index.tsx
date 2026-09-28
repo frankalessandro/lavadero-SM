@@ -22,6 +22,7 @@ import { StatCard } from '../../../../components/layout/StatCard'
 import { CustomSelect } from '../../../../components/layout/CustomSelect'
 import { CurrencyInput } from '../../../../components/layout/CurrencyInput'
 import { toast } from '../../../../lib/toast'
+import { PageHeader } from '../../../../components/layout/PageHeader'
 
 async function loadDeudas() {
   const [lavadores, personas, porLavador, porPersona, faltantes] = await Promise.all([
@@ -85,15 +86,15 @@ function DeudasPage() {
 
   return (
     <div className="flex flex-col gap-6 text-left">
-      <div>
-        <h2 className="text-base font-semibold text-neutral-900">Deudas del personal</h2>
-        <p className="text-sm text-neutral-500">
-          Préstamos, consumo de nevera y faltantes de inventario de lavadores, jefes de patio y gerencia. Se saldan con
-          abonos o descontándolos al liquidar.
-        </p>
-      </div>
+      <PageHeader
+        title="Deudas del personal"
+        description="Quién le debe al negocio y por qué. Toca una persona para abonar o ver sus movimientos."
+        help={{
+          body: 'Préstamos en efectivo, consumo de nevera y faltantes de inventario de lavadores, jefes de patio y gerencia.\n\nSe saldan con abonos (a la caja del turno o por fuera) o descontándolos al generar la liquidación. Nunca queda saldo a favor.\n\nLos faltantes de conteo de inventario llegan acá para que gerencia decida: cobrarlos a alguien o descartarlos.',
+        }}
+      />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatCard label="Deuda pendiente total" value={COP.format(totalDeuda)} icon={HandCoins} />
         <StatCard label="Personas con deuda" value={String(conDeuda.length)} icon={Users} />
         <StatCard

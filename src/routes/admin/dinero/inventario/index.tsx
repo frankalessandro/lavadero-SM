@@ -23,7 +23,7 @@ import { ProductoExpedienteModal } from '../../../../components/layout/ProductoE
 import { NivelStockModal } from '../../../../components/layout/NivelStockModal'
 import { CompraForm, AnularCompraModal } from '../../../../components/layout/CompraForm'
 import type { Compra } from '../../../../schemas/compra'
-import { FilaFiltros, FiltroTexto, FiltroSelect, FiltroVacio } from '../../../../components/layout/TableHeadFilter'
+import { FiltroBusqueda, FiltroMenu } from '../../../../components/layout/Filtros'
 import { coincide } from '../../../../lib/tableFilters'
 import { productoInputSchema, SECCION_PRODUCTO_LABEL, type Producto } from '../../../../schemas/producto'
 import {
@@ -35,19 +35,19 @@ import { StatCard } from '../../../../components/layout/StatCard'
 import { CustomSelect } from '../../../../components/layout/CustomSelect'
 import { ConfirmModal } from '../../../../components/layout/ConfirmModal'
 import { CurrencyInput } from '../../../../components/layout/CurrencyInput'
-import { BarChart } from '../../../../components/layout/BarChart'
 import { METODO_PAGO_LABEL } from '../../../../lib/metodoPago'
 import {
   nivelStock,
   ordenarPorNivelStock,
   NIVEL_LABEL,
   NIVEL_BADGE_CLASS,
-  NIVEL_CHART_COLOR,
   STOCK_BAJO_MAX,
   STOCK_MEDIO_MAX,
   type NivelStock,
 } from '../../../../lib/nivelStock'
 import { toast } from '../../../../lib/toast'
+import { Button } from '../../../../components/layout/Button'
+import { PageHeader } from '../../../../components/layout/PageHeader'
 
 function hace30DiasISO(): string {
   const fecha = new Date()
@@ -105,6 +105,7 @@ function InventarioPage() {
   const [confirmando, setConfirmando] = useState<Producto | null>(null)
   const [expedienteDe, setExpedienteDe] = useState<Producto | null>(null)
   const [nivelModal, setNivelModal] = useState<NivelStock | null>(null)
+  const [vistaInv, setVistaInv] = useState<'stock' | 'movimientos' | 'ventas' | 'compras'>('stock')
 
   async function refresh() {
     const [nuevosProductos, nuevoStock, nuevosMovimientos, nuevasVentas, nuevasCompras, nuevoTurno] = await Promise.all([
@@ -160,53 +161,74 @@ function InventarioPage() {
 
   return (
     <div className="flex flex-col gap-6 text-left">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h2 className="text-base font-semibold text-neutral-900">Inventario</h2>
-          <p className="text-sm text-neutral-500">Insumos de lavado y productos de nevera, movimientos manuales y valorización.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setCompraFormOpen(true)}
-            className="flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700"
-          >
-            <ShoppingCart size={16} />
-            Registrar compra
-          </button>
-          <button
-            type="button"
-            onClick={() => setMovimientoFormOpen(true)}
-            className="flex items-center gap-2 rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
-          >
-            <PackageSearch size={16} />
-            Registrar movimiento
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setEditing(null)
-              setFormOpen(true)
-            }}
-            className="flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700"
-          >
-            <Plus size={16} />
-            Nuevo producto
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Inventario"
+        description="Insumos de lavado y productos de nevera: cuánto hay, cuánto vale y qué se movió."
+        help={{
+          body: 'La valorización usa el costo promedio ponderado de las entradas (o el costo oficial si no hay entradas).\n\nUn producto agotado se oculta de la venta pero nunca se inactiva solo. No se puede inactivar un producto con stock o con ventas pendientes.\n\nTodo movimiento manual exige justificación y queda en la lista "por revisar" de gerencia. Las compras registran proveedor, factura y si se pagaron con la caja del turno o por gerencia.',
+        }}
+        actions={
+          <>
+            <Button
+              icon={Plus}
+              onClick={() => {
+                setEditing(null)
+                setFormOpen(true)
+              }}
+            >
+              Producto
+            </Button>
+            <Button icon={PackageSearch} onClick={() => setMovimientoFormOpen(true)}>
+              Movimiento
+            </Button>
+            <Button variant="primary" icon={ShoppingCart} onClick={() => setCompraFormOpen(true)}>
+              Registrar compra
+            </Button>
+          </>
+        }
+      />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard label="Valorización" value={COP.format(valorizacionTotal)} hint="a costo promedio" icon={Coins} />
         <StatCard label="Productos activos" value={String(productosActivos.length)} icon={Boxes} />
-        <StatCard label="Valorización total" value={COP.format(valorizacionTotal)} hint="Costo promedio de entradas (o costo oficial si no hay)" icon={Coins} />
+        <StatCard
+          label="Ventas 30 días"
+          value={COP.format(ventas.filter((v) => v.estado === 'activa').reduce((t, v) => t + v.total, 0))}
+          hint={`${ventas.filter((v) => v.estado === 'activa').length} ventas`}
+          icon={ShoppingBag}
+        />
+        <StatCard label="En stock bajo" value={String(porNivel.bajo.length)} hint={`≤ ${STOCK_BAJO_MAX} unidades`} icon={AlertTriangle} onClick={() => setNivelModal('bajo')} />
       </div>
 
       <FaltantesPendientes faltantes={data.faltantes} />
 
       <MovimientosManuales movimientos={data.manuales} />
 
+      <nav className="flex w-full flex-wrap gap-1 border-b border-neutral-200">
+        {(
+          [
+            { id: 'stock', label: 'Stock' },
+            { id: 'movimientos', label: 'Movimientos' },
+            { id: 'ventas', label: 'Ventas' },
+            { id: 'compras', label: 'Compras' },
+          ] as const
+        ).map((v) => (
+          <button
+            key={v.id}
+            type="button"
+            onClick={() => setVistaInv(v.id)}
+            className={`-mb-px border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
+              vistaInv === v.id ? 'border-primary-600 text-primary-700' : 'border-transparent text-neutral-500 hover:text-neutral-800'
+            }`}
+          >
+            {v.label}
+          </button>
+        ))}
+      </nav>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      {vistaInv === 'stock' ? (
+      <>
+      <div className="grid grid-cols-3 gap-3">
         {(
           [
             { nivel: 'bajo' as const, hint: `≤ ${STOCK_BAJO_MAX} unidades` },
@@ -239,18 +261,6 @@ function InventarioPage() {
           }))}
           onClose={() => setNivelModal(null)}
         />
-      ) : null}
-
-      {productosActivos.length > 2 ? (
-        <Card className="text-left">
-          <h3 className="mb-3 text-sm font-semibold text-neutral-900">Stock actual por producto</h3>
-          <BarChart
-            labels={productosActivos.map((p) => p.nombre)}
-            data={productosActivos.map((p) => stockPorProducto.get(p.id)?.stock ?? 0)}
-            colors={productosActivos.map((p) => NIVEL_CHART_COLOR[nivelStock(stockPorProducto.get(p.id)?.stock ?? 0)])}
-            height={Math.max(120, productosActivos.length * 36)}
-          />
-        </Card>
       ) : null}
 
       <StockTable
@@ -287,10 +297,13 @@ function InventarioPage() {
         onVerExpediente={setExpedienteDe}
         vacio="No hay productos de nevera registrados. Usa «Nuevo producto» con precio de venta."
       />
+      </>
+      ) : null}
 
+      {vistaInv === 'movimientos' ? (
       <Card className="p-0">
         <div className="border-b border-neutral-100 px-5 py-4">
-          <h3 className="text-sm font-semibold text-neutral-900">Movimientos recientes</h3>
+          <h3 className="text-sm font-semibold text-neutral-900">Últimos 15 movimientos</h3>
         </div>
         <div className="overflow-x-auto">
         <table className="w-full min-w-[44rem] text-sm">
@@ -332,7 +345,9 @@ function InventarioPage() {
         </table>
         </div>
       </Card>
+      ) : null}
 
+      {vistaInv === 'ventas' ? (
       <Card className="p-0">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-100 px-5 py-4">
           <h3 className="flex items-center gap-1.5 text-sm font-semibold text-neutral-900">
@@ -388,7 +403,9 @@ function InventarioPage() {
         </table>
         </div>
       </Card>
+      ) : null}
 
+      {vistaInv === 'compras' ? (
       <Card className="p-0">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-100 px-5 py-4">
           <h3 className="flex items-center gap-1.5 text-sm font-semibold text-neutral-900">
@@ -466,6 +483,7 @@ function InventarioPage() {
           </table>
         </div>
       </Card>
+      ) : null}
 
       {movimientoFormOpen ? (
         <MovimientoForm
@@ -588,14 +606,30 @@ function StockTable({
   )
 
   return (
-    <Card className={`overflow-hidden border-t-4 p-0 ${accento}`}>
-      <div className="flex items-center gap-3 border-b border-neutral-100 px-5 py-4">
-        <span className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${badgeClass}`}>
-          <Icono size={16} />
-        </span>
-        <div>
-          <h3 className="text-sm font-semibold text-neutral-900">{titulo}</h3>
-          <p className="text-xs text-neutral-500">{subtitulo}</p>
+    <Card className={`border-t-4 p-0 ${accento}`}>
+      <div className="flex flex-col gap-3 border-b border-neutral-100 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center gap-3">
+          <span className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${badgeClass}`}>
+            <Icono size={16} />
+          </span>
+          <div>
+            <h3 className="text-sm font-semibold text-neutral-900">{titulo}</h3>
+            <p className="text-xs text-neutral-500">{subtitulo}</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-2 min-[480px]:grid-cols-2 lg:flex">
+          <FiltroBusqueda value={filtroNombre} onChange={setFiltroNombre} placeholder="Buscar producto" />
+          <FiltroMenu
+            label="Estado"
+            value={filtroEstado}
+            onChange={setFiltroEstado}
+            options={[
+              { value: 'bajo', label: NIVEL_LABEL.bajo },
+              { value: 'medio', label: NIVEL_LABEL.medio },
+              { value: 'bueno', label: NIVEL_LABEL.bueno },
+              { value: 'inactivo', label: 'Inactivo' },
+            ]}
+          />
         </div>
       </div>
       <div className="overflow-x-auto">
@@ -612,26 +646,6 @@ function StockTable({
             <th className="px-5 py-3">Estado</th>
             <th className="px-5 py-3 text-right">Acciones</th>
           </tr>
-          <FilaFiltros>
-            <FiltroTexto value={filtroNombre} onChange={setFiltroNombre} placeholder="Buscar producto…" />
-            <FiltroVacio />
-            <FiltroVacio />
-            <FiltroVacio />
-            <FiltroVacio />
-            {mostrarPrecio ? <FiltroVacio /> : null}
-            {mostrarPrecio ? <FiltroVacio /> : null}
-            <FiltroSelect
-              value={filtroEstado}
-              onChange={setFiltroEstado}
-              options={[
-                { value: 'bajo', label: NIVEL_LABEL.bajo },
-                { value: 'medio', label: NIVEL_LABEL.medio },
-                { value: 'bueno', label: NIVEL_LABEL.bueno },
-                { value: 'inactivo', label: 'Inactivo' },
-              ]}
-            />
-            <FiltroVacio />
-          </FilaFiltros>
         </thead>
         <tbody>
           {visibles.map((producto) => {

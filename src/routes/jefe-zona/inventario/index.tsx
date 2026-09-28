@@ -17,7 +17,7 @@ import { StatCard } from '../../../components/layout/StatCard'
 import { CustomSelect } from '../../../components/layout/CustomSelect'
 import { NivelStockModal } from '../../../components/layout/NivelStockModal'
 import { CompraForm, AnularCompraModal } from '../../../components/layout/CompraForm'
-import { FilaFiltros, FiltroTexto, FiltroSelect, FiltroVacio } from '../../../components/layout/TableHeadFilter'
+import { FiltroBusqueda, FiltroMenu } from '../../../components/layout/Filtros'
 import { coincide } from '../../../lib/tableFilters'
 import {
   nivelStock,
@@ -373,14 +373,29 @@ function StockTable({
   )
 
   return (
-    <Card className={`overflow-hidden border-t-4 p-0 ${accento}`}>
-      <div className="flex items-center gap-3 border-b border-neutral-100 px-5 py-4">
-        <span className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${badgeClass}`}>
-          <Icono size={16} />
-        </span>
-        <div>
-          <h3 className="text-sm font-semibold text-neutral-900">{titulo}</h3>
-          <p className="text-xs text-neutral-500">{subtitulo}</p>
+    <Card className={`border-t-4 p-0 ${accento}`}>
+      <div className="flex flex-col gap-3 border-b border-neutral-100 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center gap-3">
+          <span className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${badgeClass}`}>
+            <Icono size={16} />
+          </span>
+          <div>
+            <h3 className="text-sm font-semibold text-neutral-900">{titulo}</h3>
+            <p className="text-xs text-neutral-500">{subtitulo}</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-2 min-[480px]:grid-cols-2 lg:flex">
+          <FiltroBusqueda value={filtroNombre} onChange={setFiltroNombre} placeholder="Buscar producto" />
+          <FiltroMenu
+            label="Estado"
+            value={filtroEstado}
+            onChange={setFiltroEstado}
+            options={[
+              { value: 'bajo', label: NIVEL_LABEL.bajo },
+              { value: 'medio', label: NIVEL_LABEL.medio },
+              { value: 'bueno', label: NIVEL_LABEL.bueno },
+            ]}
+          />
         </div>
       </div>
       <div className="overflow-x-auto">
@@ -393,21 +408,6 @@ function StockTable({
             {mostrarPrecio ? <th className="px-5 py-3">Precio</th> : null}
             <th className="px-5 py-3">Estado</th>
           </tr>
-          <FilaFiltros>
-            <FiltroTexto value={filtroNombre} onChange={setFiltroNombre} placeholder="Buscar producto…" />
-            <FiltroVacio />
-            <FiltroVacio />
-            {mostrarPrecio ? <FiltroVacio /> : null}
-            <FiltroSelect
-              value={filtroEstado}
-              onChange={setFiltroEstado}
-              options={[
-                { value: 'bajo', label: NIVEL_LABEL.bajo },
-                { value: 'medio', label: NIVEL_LABEL.medio },
-                { value: 'bueno', label: NIVEL_LABEL.bueno },
-              ]}
-            />
-          </FilaFiltros>
         </thead>
         <tbody>
           {visibles.map((producto) => {
