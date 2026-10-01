@@ -2,6 +2,7 @@ import { fetchOrdenesEntregadasEnRango } from './ordenes'
 import { fetchSalidasParqueaderoEnRango } from './estanciasParqueadero'
 import { fetchVentasEnRango, fetchCostoMercanciaVendidaPorVenta } from './ventas'
 import { fetchGastos, type GastoConCategoria } from './gastos'
+import { fetchIngresosOtros, type IngresoOtroConCategoria } from './ingresosOtros'
 import type { LineaNegocio } from '../schemas/gasto'
 import { fetchCombos } from './combos'
 import { fetchLavadores } from './lavadores'
@@ -28,6 +29,8 @@ export interface RentabilidadDia {
   ingresosLavadero: number
   ingresosParqueadero: number
   ingresosVentas: number
+  /** Otros ingresos (0078): alquiler del carro de comidas, patrocinios… Sin costo directo ni comisión. */
+  ingresosOtros: number
   descuentos: number
   comisionLavadores: number
   comisionJefeZona: number
@@ -202,6 +205,7 @@ export function totalesVacio(): RentabilidadTotales {
     ingresosLavadero: 0,
     ingresosParqueadero: 0,
     ingresosVentas: 0,
+    ingresosOtros: 0,
     descuentos: 0,
     comisionLavadores: 0,
     comisionJefeZona: 0,
@@ -228,6 +232,7 @@ const CAMPOS_ACUMULABLES = [
   'ingresosLavadero',
   'ingresosParqueadero',
   'ingresosVentas',
+  'ingresosOtros',
   'descuentos',
   'comisionLavadores',
   'comisionJefeZona',
@@ -255,16 +260,27 @@ function diaVacio(fecha: string): RentabilidadDia {
   return { fecha, ...totalesVacio() }
 }
 
+/** Ingresos totales del periodo: las tres líneas operativas más otros ingresos (0078). */
+export function ingresosTotalesDe(t: {
+  ingresosLavadero: number
+  ingresosParqueadero: number
+  ingresosVentas: number
+  ingresosOtros: number
+}): number {
+  return t.ingresosLavadero + t.ingresosParqueadero + t.ingresosVentas + t.ingresosOtros
+}
+
 function recalcular(d: RentabilidadDia | RentabilidadTotales) {
   d.utilidadNeta =
     d.ingresosLavadero +
     d.ingresosParqueadero +
-    d.ingresosVentas -
+    d.ingresosVentas +
+    d.ingresosOtros -
     d.comisionLavadores -
     d.comisionJefeZona -
     d.costoMercancia -
     d.gastos
-  const ingresos = d.ingresosLavadero + d.ingresosParqueadero + d.ingresosVentas
+  const ingresos = ingresosTotalesDe(d)
   d.margen = ingresos > 0 ? (d.utilidadNeta / ingresos) * 100 : 0
 }
 
@@ -292,6 +308,8 @@ export interface ResultadoPorLinea {
   lavadero: LineaResultado & { comisionLavadores: number; comisionJefeZona: number; descuentos: number }
   productos: LineaResultado & { costoMercancia: number; porSeccion: SeccionResultado[] }
   parqueadero: LineaResultado
+  /** Otros ingresos (0078): margen 100 % — sin comisión, costo de mercancía ni gastos atribuidos. */
+  otros: LineaResultado
   /** Gastos que no se atribuyen a ninguna línea — se restan una sola vez, acá abajo. */
   gastosGenerales: number
   /** Suma de la utilidad de las tres líneas, antes de gastos generales. */
@@ -364,15 +382,18 @@ export function resultadoPorLinea(t: RentabilidadTotales): ResultadoPorLinea {
 
   const parqueadero = linea(t.ingresosParqueadero, 0, t.gastosParqueadero)
 
-  const margenBrutoTotal = lavadero.utilidad + productos.utilidad + parqueadero.utilidad
+  const otros = linea(t.ingresosOtros, 0, 0)
+
+  const margenBrutoTotal = lavadero.utilidad + productos.utilidad + parqueadero.utilidad + otros.utilidad
   return {
     lavadero,
     productos,
     parqueadero,
+    otros,
     gastosGenerales: t.gastosGenerales,
     margenBrutoTotal,
     utilidadNeta: margenBrutoTotal - t.gastosGenerales,
-    ingresosTotales: t.ingresosLavadero + t.ingresosParqueadero + t.ingresosVentas,
+    ingresosTotales: ingresosTotalesDe(t),
   }
 }
 
@@ -400,6 +421,7 @@ interface DatosRango {
   ventasActivas: Awaited<ReturnType<typeof fetchVentasEnRango>>
   costoPorVenta: Awaited<ReturnType<typeof fetchCostoMercanciaVendidaPorVenta>>
   gastos: GastoConCategoria[]
+  ingresosOtros: IngresoOtroConCategoria[]
   productos: Awaited<ReturnType<typeof fetchProductos>>
 }
 
@@ -407,16 +429,26 @@ async function cargarDatosRango(periodoInicio: string, periodoFin: string): Prom
   const [desdeISO, hastaISO] = limitesISO(periodoInicio, periodoFin)
   // `fetchProductos` entra al núcleo (antes solo lo pedía el reporte completo) porque el desglose
   // bebidas/snacks necesita `producto.seccion` también en la serie por día del dashboard.
-  const [ordenes, salidasParqueadero, ventas, gastos, productos] = await Promise.all([
+  const [ordenes, salidasParqueadero, ventas, gastos, ingresosOtros, productos] = await Promise.all([
     fetchOrdenesEntregadasEnRango(desdeISO, hastaISO),
     fetchSalidasParqueaderoEnRango(desdeISO, hastaISO),
     fetchVentasEnRango(desdeISO, hastaISO),
     fetchGastos(periodoInicio, periodoFin),
+    fetchIngresosOtros(periodoInicio, periodoFin),
     fetchProductos(),
   ])
   const ventasActivas = ventas.filter((v) => v.estado === 'activa')
   const costoPorVenta = await fetchCostoMercanciaVendidaPorVenta(ventasActivas.map((v) => v.id))
-  return { ordenes, salidasParqueadero, ventasActivas, costoPorVenta, gastos, productos }
+  return {
+    ordenes,
+    salidasParqueadero,
+    ventasActivas,
+    costoPorVenta,
+    gastos,
+    // Anulados no suman (regla 13: siguen visibles en su pantalla, no en la plata).
+    ingresosOtros: ingresosOtros.filter((i) => i.estado === 'activa'),
+    productos,
+  }
 }
 
 function agregarPorDia(datos: DatosRango): RentabilidadPeriodo {
@@ -465,6 +497,9 @@ function agregarPorDia(datos: DatosRango): RentabilidadPeriodo {
       d.ingresosSinSeccion += venta.total
       d.costoSinSeccion += costoVenta
     }
+  }
+  for (const ingreso of datos.ingresosOtros) {
+    dia(ingreso.fecha).ingresosOtros += ingreso.monto
   }
   for (const gasto of datos.gastos) {
     const d = dia(gasto.fecha)

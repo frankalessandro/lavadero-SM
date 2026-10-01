@@ -48,6 +48,8 @@ export const ENTIDAD_LABEL: Record<string, string> = {
   tarifas_parqueadero: 'Tarifa de parqueadero',
   configuracion: 'Configuración',
   compras: 'Compra de inventario',
+  ingresos_otros: 'Otro ingreso',
+  categorias_ingreso: 'Categoría de ingreso',
 }
 
 // Las cuatro acciones que el Plan nombra como no negociables, más la edición del histórico que

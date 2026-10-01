@@ -36,6 +36,7 @@ import { fetchAlertas } from '../../data/alertas'
 import {
   fetchRentabilidadEnRango,
   resultadoPorLinea,
+  ingresosTotalesDe,
   totalesVacio,
   bucketGasto,
 } from '../../data/rentabilidad'
@@ -177,7 +178,10 @@ function AdminDashboard() {
   const ingresosLavadero = entregadasHoy.reduce((total, o) => total + o.precio - o.descuento, 0)
   const ingresosParqueadero = resumenParqueadero.dineroHoy
   const ingresosVentas = ventasActivasHoy.reduce((total, v) => total + v.total, 0)
-  const ingresosTotales = ingresosLavadero + ingresosParqueadero + ingresosVentas
+  // Otros ingresos de hoy (0078): vienen del mismo agregado por día de rentabilidad que ya trae el
+  // loader (`ultimos7` incluye hoy), así el dashboard y /admin/rentabilidad no pueden divergir.
+  const ingresosOtros = ultimos7.porDia.find((d) => d.fecha === hoyISO())?.ingresosOtros ?? 0
+  const ingresosTotales = ingresosLavadero + ingresosParqueadero + ingresosVentas + ingresosOtros
 
   // Ingresos por método reales = suma de las LÍNEAS DE PAGO vigentes (tabla `pagos`, 0036), no la
   // columna-resumen `metodo_pago` — un cobro repartido tiene parte en efectivo y parte no. Se
@@ -226,6 +230,10 @@ function AdminDashboard() {
       total: ingresosVentas,
     },
     { linea: 'Parqueadero', efectivo: undefined, transferencia: undefined, datafono: undefined, total: ingresosParqueadero },
+    // Solo aparece el día que entró algo (alquiler, patrocinio…): no es operación diaria.
+    ...(ingresosOtros > 0
+      ? [{ linea: 'Otros ingresos', efectivo: undefined, transferencia: undefined, datafono: undefined, total: ingresosOtros }]
+      : []),
   ]
   const totalEfectivo = ingresosPorMetodo.efectivo + ventasPorMetodo.efectivo
   const totalTransferencia = ingresosPorMetodo.transferencia + ventasPorMetodo.transferencia
@@ -242,12 +250,12 @@ function AdminDashboard() {
     return {
       fecha,
       esHoy: fecha === hoy,
-      ingresos: d ? d.ingresosLavadero + d.ingresosParqueadero + d.ingresosVentas : 0,
+      ingresos: d ? ingresosTotalesDe(d) : 0,
       utilidad: d?.utilidadNeta ?? 0,
     }
   })
   const ayer = porDiaMap.get(hace(1))
-  const ingresosAyer = ayer ? ayer.ingresosLavadero + ayer.ingresosParqueadero + ayer.ingresosVentas : 0
+  const ingresosAyer = ayer ? ingresosTotalesDe(ayer) : 0
   const utilidadAyer = ayer?.utilidadNeta ?? 0
   const margenHoy = ingresosTotales > 0 ? (utilidadNetaHoy / ingresosTotales) * 100 : 0
 
@@ -309,6 +317,7 @@ function AdminDashboard() {
     ingresosLavadero,
     ingresosParqueadero,
     ingresosVentas,
+    ingresosOtros,
     descuentos: descuentosHoy,
     comisionLavadores: comisionesHoy,
     comisionJefeZona: comisionesJefeZonaHoy,
@@ -726,9 +735,17 @@ function AdminDashboard() {
             ) : null}
             <SubtotalLinea label="Margen del parqueadero" valor={lineaHoy.parqueadero.utilidad} margen={lineaHoy.parqueadero.margen} vacio={lineaHoy.parqueadero.ingresos === 0} />
 
+            {ingresosOtros > 0 ? (
+              <>
+                <EtiquetaLinea texto="Otros ingresos" margen={100} />
+                <FilaResultado label="Alquileres, patrocinios…" valor={ingresosOtros} pct={100} tipo="ingreso" />
+                <SubtotalLinea label="Margen de otros ingresos" valor={lineaHoy.otros.utilidad} margen={lineaHoy.otros.margen} vacio={false} />
+              </>
+            ) : null}
+
             <div className="mt-2 flex flex-col gap-1.5 px-5 py-3 text-sm">
               <div className="flex items-center justify-between gap-3">
-                <span className="text-neutral-500">Margen bruto de las 3 líneas</span>
+                <span className="text-neutral-500">Margen bruto{ingresosOtros > 0 ? ' de las líneas' : ' de las 3 líneas'}</span>
                 <span className="font-medium tabular-nums text-neutral-900">{COP.format(lineaHoy.margenBrutoTotal)}</span>
               </div>
               <div className="flex items-center justify-between gap-3">

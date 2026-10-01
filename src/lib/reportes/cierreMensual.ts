@@ -32,6 +32,9 @@ export async function exportarCierreMensual(reporte: RentabilidadReporte, rango:
       ['Lavadero', linea.lavadero.ingresos, linea.lavadero.costosDirectos, linea.lavadero.gastos, linea.lavadero.utilidad, `${linea.lavadero.margen.toFixed(1)}%`],
       ['Productos', linea.productos.ingresos, linea.productos.costosDirectos, linea.productos.gastos, linea.productos.utilidad, `${linea.productos.margen.toFixed(1)}%`],
       ['Parqueadero', linea.parqueadero.ingresos, 0, linea.parqueadero.gastos, linea.parqueadero.utilidad, `${linea.parqueadero.margen.toFixed(1)}%`],
+      ...(linea.otros.ingresos > 0
+        ? [['Otros ingresos', linea.otros.ingresos, 0, 0, linea.otros.utilidad, `${linea.otros.margen.toFixed(1)}%`] as (string | number | null)[]]
+        : []),
       ['Gastos generales', null, null, linea.gastosGenerales, -linea.gastosGenerales, ''],
       ['UTILIDAD NETA', ingresos, null, null, t.utilidadNeta, `${t.margen.toFixed(1)}%`],
     ],

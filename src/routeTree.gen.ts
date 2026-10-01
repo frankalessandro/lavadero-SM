@@ -45,6 +45,7 @@ import { Route as AdminCatalogoServiciosIndexRouteImport } from './routes/admin/
 import { Route as AdminCatalogoTiposVehiculoIndexRouteImport } from './routes/admin/catalogo/tipos-vehiculo/index'
 import { Route as AdminDineroDeudasIndexRouteImport } from './routes/admin/dinero/deudas/index'
 import { Route as AdminDineroGastosIndexRouteImport } from './routes/admin/dinero/gastos/index'
+import { Route as AdminDineroIngresosIndexRouteImport } from './routes/admin/dinero/ingresos/index'
 import { Route as AdminDineroInventarioIndexRouteImport } from './routes/admin/dinero/inventario/index'
 import { Route as AdminDineroLiquidacionesIndexRouteImport } from './routes/admin/dinero/liquidaciones/index'
 import { Route as AdminOperacionAuditoriaIndexRouteImport } from './routes/admin/operacion/auditoria/index'
@@ -240,6 +241,12 @@ const AdminDineroGastosIndexRoute = AdminDineroGastosIndexRouteImport.update({
   path: '/gastos/',
   getParentRoute: () => AdminDineroRouteRoute,
 } as any)
+const AdminDineroIngresosIndexRoute =
+  AdminDineroIngresosIndexRouteImport.update({
+    id: '/ingresos/',
+    path: '/ingresos/',
+    getParentRoute: () => AdminDineroRouteRoute,
+  } as any)
 const AdminDineroInventarioIndexRoute =
   AdminDineroInventarioIndexRouteImport.update({
     id: '/inventario/',
@@ -332,6 +339,7 @@ export interface FileRoutesByFullPath {
   '/admin/catalogo/tipos-vehiculo/': typeof AdminCatalogoTiposVehiculoIndexRoute
   '/admin/dinero/deudas/': typeof AdminDineroDeudasIndexRoute
   '/admin/dinero/gastos/': typeof AdminDineroGastosIndexRoute
+  '/admin/dinero/ingresos/': typeof AdminDineroIngresosIndexRoute
   '/admin/dinero/inventario/': typeof AdminDineroInventarioIndexRoute
   '/admin/dinero/liquidaciones/': typeof AdminDineroLiquidacionesIndexRoute
   '/admin/operacion/auditoria/': typeof AdminOperacionAuditoriaIndexRoute
@@ -371,6 +379,7 @@ export interface FileRoutesByTo {
   '/admin/catalogo/tipos-vehiculo': typeof AdminCatalogoTiposVehiculoIndexRoute
   '/admin/dinero/deudas': typeof AdminDineroDeudasIndexRoute
   '/admin/dinero/gastos': typeof AdminDineroGastosIndexRoute
+  '/admin/dinero/ingresos': typeof AdminDineroIngresosIndexRoute
   '/admin/dinero/inventario': typeof AdminDineroInventarioIndexRoute
   '/admin/dinero/liquidaciones': typeof AdminDineroLiquidacionesIndexRoute
   '/admin/operacion/auditoria': typeof AdminOperacionAuditoriaIndexRoute
@@ -419,6 +428,7 @@ export interface FileRoutesById {
   '/admin/catalogo/tipos-vehiculo/': typeof AdminCatalogoTiposVehiculoIndexRoute
   '/admin/dinero/deudas/': typeof AdminDineroDeudasIndexRoute
   '/admin/dinero/gastos/': typeof AdminDineroGastosIndexRoute
+  '/admin/dinero/ingresos/': typeof AdminDineroIngresosIndexRoute
   '/admin/dinero/inventario/': typeof AdminDineroInventarioIndexRoute
   '/admin/dinero/liquidaciones/': typeof AdminDineroLiquidacionesIndexRoute
   '/admin/operacion/auditoria/': typeof AdminOperacionAuditoriaIndexRoute
@@ -468,6 +478,7 @@ export interface FileRouteTypes {
     | '/admin/catalogo/tipos-vehiculo/'
     | '/admin/dinero/deudas/'
     | '/admin/dinero/gastos/'
+    | '/admin/dinero/ingresos/'
     | '/admin/dinero/inventario/'
     | '/admin/dinero/liquidaciones/'
     | '/admin/operacion/auditoria/'
@@ -507,6 +518,7 @@ export interface FileRouteTypes {
     | '/admin/catalogo/tipos-vehiculo'
     | '/admin/dinero/deudas'
     | '/admin/dinero/gastos'
+    | '/admin/dinero/ingresos'
     | '/admin/dinero/inventario'
     | '/admin/dinero/liquidaciones'
     | '/admin/operacion/auditoria'
@@ -554,6 +566,7 @@ export interface FileRouteTypes {
     | '/admin/catalogo/tipos-vehiculo/'
     | '/admin/dinero/deudas/'
     | '/admin/dinero/gastos/'
+    | '/admin/dinero/ingresos/'
     | '/admin/dinero/inventario/'
     | '/admin/dinero/liquidaciones/'
     | '/admin/operacion/auditoria/'
@@ -832,6 +845,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminDineroGastosIndexRouteImport
       parentRoute: typeof AdminDineroRouteRoute
     }
+    '/admin/dinero/ingresos/': {
+      id: '/admin/dinero/ingresos/'
+      path: '/ingresos'
+      fullPath: '/admin/dinero/ingresos/'
+      preLoaderRoute: typeof AdminDineroIngresosIndexRouteImport
+      parentRoute: typeof AdminDineroRouteRoute
+    }
     '/admin/dinero/inventario/': {
       id: '/admin/dinero/inventario/'
       path: '/inventario'
@@ -921,6 +941,7 @@ interface AdminDineroRouteRouteChildren {
   AdminDineroIndexRoute: typeof AdminDineroIndexRoute
   AdminDineroDeudasIndexRoute: typeof AdminDineroDeudasIndexRoute
   AdminDineroGastosIndexRoute: typeof AdminDineroGastosIndexRoute
+  AdminDineroIngresosIndexRoute: typeof AdminDineroIngresosIndexRoute
   AdminDineroInventarioIndexRoute: typeof AdminDineroInventarioIndexRoute
   AdminDineroLiquidacionesIndexRoute: typeof AdminDineroLiquidacionesIndexRoute
 }
@@ -929,6 +950,7 @@ const AdminDineroRouteRouteChildren: AdminDineroRouteRouteChildren = {
   AdminDineroIndexRoute: AdminDineroIndexRoute,
   AdminDineroDeudasIndexRoute: AdminDineroDeudasIndexRoute,
   AdminDineroGastosIndexRoute: AdminDineroGastosIndexRoute,
+  AdminDineroIngresosIndexRoute: AdminDineroIngresosIndexRoute,
   AdminDineroInventarioIndexRoute: AdminDineroInventarioIndexRoute,
   AdminDineroLiquidacionesIndexRoute: AdminDineroLiquidacionesIndexRoute,
 }

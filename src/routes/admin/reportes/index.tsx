@@ -104,7 +104,7 @@ function Reportes() {
         title="Reportes"
         description="Descarga el histórico del periodo en Excel o PDF."
         help={{
-          body: 'Histórico de la operación por día, semana, mes o un rango de fechas: órdenes, pagos, ventas, gastos, compras, inventario, turnos, liquidaciones, deudas, asistencia y parqueadero.\n\nCada reporte se descarga en Excel (todas las columnas) o en PDF (hoja A4 horizontal). También hay un reporte completo con todo el periodo en un solo archivo.',
+          body: 'Histórico de la operación por día, semana, mes o un rango de fechas: órdenes, pagos, ventas, gastos, otros ingresos, compras, inventario, turnos, liquidaciones, deudas, asistencia y parqueadero.\n\nCada reporte se descarga en Excel (todas las columnas) o en PDF (hoja A4 horizontal). También hay un reporte completo con todo el periodo en un solo archivo.',
         }}
       />
 

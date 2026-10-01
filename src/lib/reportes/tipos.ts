@@ -33,6 +33,7 @@ export type ReporteKey =
   | 'pagos'
   | 'ventas'
   | 'gastos'
+  | 'ingresos_otros'
   | 'compras'
   | 'movimientos'
   | 'turnos'

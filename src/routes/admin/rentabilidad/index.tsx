@@ -17,10 +17,12 @@ import {
   CalendarDays,
   Sparkles,
   Layers,
+  Banknote,
 } from 'lucide-react'
 import {
   fetchRentabilidad,
   resultadoPorLinea,
+  ingresosTotalesDe,
   acumularTotales,
   totalesVacio,
   type RentabilidadReporte,
@@ -168,9 +170,9 @@ function RentabilidadPage() {
   }, [rango.periodoInicio, rango.periodoFin])
 
   const { porDia, totales, comparativa } = reporte
-  const ingresosTotales = totales.ingresosLavadero + totales.ingresosParqueadero + totales.ingresosVentas
+  const ingresosTotales = ingresosTotalesDe(totales)
   const egresosTotales = totales.comisionLavadores + totales.comisionJefeZona + totales.costoMercancia + totales.gastos
-  const ingresosPrev = comparativa.ingresosLavadero + comparativa.ingresosParqueadero + comparativa.ingresosVentas
+  const ingresosPrev = ingresosTotalesDe(comparativa)
   const egresosPrev =
     comparativa.comisionLavadores + comparativa.comisionJefeZona + comparativa.costoMercancia + comparativa.gastos
 
@@ -203,7 +205,7 @@ function RentabilidadPage() {
     }
     return Array.from(map.values())
       .map((v) => {
-        const ing = v.ingresosLavadero + v.ingresosParqueadero + v.ingresosVentas
+        const ing = ingresosTotalesDe(v)
         return { ...v, margen: ing > 0 ? (v.utilidadNeta / ing) * 100 : 0 }
       })
       .sort((a, b) => a.semana.localeCompare(b.semana))
@@ -498,12 +500,38 @@ function RentabilidadPage() {
             tipo="margen"
           />
 
+          {/* --- Línea 4: Otros ingresos (0078) — solo aparece si hubo en el periodo --- */}
+          {totales.ingresosOtros > 0 ? (
+            <>
+              <BloqueEtiqueta texto="Otros ingresos" margen={linea.otros.margen} />
+              <CascadaFila
+                label="Alquileres, patrocinios…"
+                icon={Banknote}
+                sub="no paga comisión ni tiene costo; se registra en Dinero › Otros ingresos"
+                valor={linea.otros.ingresos}
+                pct={100}
+                pctSufijo="de otros ingresos"
+                tipo="ingreso"
+              />
+              <CascadaSubtotal
+                label="Margen de otros ingresos"
+                valor={linea.otros.utilidad}
+                pctTexto={PCT(linea.otros.margen)}
+                tipo="margen"
+              />
+            </>
+          ) : null}
+
           {/* --- Consolidado --- */}
           <BloqueEtiqueta texto="Consolidado" />
           <CascadaFila
-            label="Margen bruto de las tres líneas"
+            label={totales.ingresosOtros > 0 ? 'Margen bruto de las líneas' : 'Margen bruto de las tres líneas'}
             icon={Layers}
-            sub="lavadero + productos + parqueadero, ya con sus costos y gastos propios"
+            sub={
+              totales.ingresosOtros > 0
+                ? 'lavadero + productos + parqueadero + otros ingresos, ya con sus costos y gastos propios'
+                : 'lavadero + productos + parqueadero, ya con sus costos y gastos propios'
+            }
             valor={linea.margenBrutoTotal}
             pct={porcentaje(linea.margenBrutoTotal, ingresosTotales)}
             tipo="ingreso"
@@ -616,7 +644,7 @@ function RentabilidadPage() {
             <h3 className="mb-3 text-sm font-semibold text-neutral-900">Ingresos por día</h3>
             <BarChart
               labels={porDia.map((d) => FECHA_CORTA.format(dateFromISO(d.fecha)))}
-              data={porDia.map((d) => d.ingresosLavadero + d.ingresosParqueadero + d.ingresosVentas)}
+              data={porDia.map((d) => ingresosTotalesDe(d))}
               valueFormatter={COP.format}
               height={Math.max(160, porDia.length * 32)}
             />
@@ -636,6 +664,7 @@ function RentabilidadPage() {
                   <th className="px-4 py-3 text-right">Lavadero</th>
                   <th className="px-4 py-3 text-right">Parq.</th>
                   <th className="px-4 py-3 text-right">Productos</th>
+                  <th className="px-4 py-3 text-right">Otros</th>
                   <th className="px-4 py-3 text-right">Ingresos</th>
                   <th className="px-4 py-3 text-right">Comisiones</th>
                   <th className="px-4 py-3 text-right">Costo prod.</th>
@@ -647,7 +676,7 @@ function RentabilidadPage() {
               </thead>
               <tbody>
                 {porDia.map((d) => {
-                  const ingresos = d.ingresosLavadero + d.ingresosParqueadero + d.ingresosVentas
+                  const ingresos = ingresosTotalesDe(d)
                   return (
                     <tr
                       key={d.fecha}
@@ -665,6 +694,7 @@ function RentabilidadPage() {
                       <td className="px-4 py-3 text-right text-neutral-600">{COP.format(d.ingresosLavadero)}</td>
                       <td className="px-4 py-3 text-right text-neutral-600">{COP.format(d.ingresosParqueadero)}</td>
                       <td className="px-4 py-3 text-right text-neutral-600">{COP.format(d.ingresosVentas)}</td>
+                      <td className="px-4 py-3 text-right text-neutral-600">{COP.format(d.ingresosOtros)}</td>
                       <td className="px-4 py-3 text-right font-medium text-neutral-900">{COP.format(ingresos)}</td>
                       <td className="px-4 py-3 text-right text-danger-600">
                         {COP.format(d.comisionLavadores + d.comisionJefeZona)}
@@ -687,7 +717,7 @@ function RentabilidadPage() {
                 })}
                 {porDia.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="px-4 py-8 text-center text-neutral-400">
+                    <td colSpan={12} className="px-4 py-8 text-center text-neutral-400">
                       Sin movimientos en {rango.label}.
                     </td>
                   </tr>
@@ -697,6 +727,7 @@ function RentabilidadPage() {
                     <td className="px-4 py-3 text-right text-neutral-700">{COP.format(totales.ingresosLavadero)}</td>
                     <td className="px-4 py-3 text-right text-neutral-700">{COP.format(totales.ingresosParqueadero)}</td>
                     <td className="px-4 py-3 text-right text-neutral-700">{COP.format(totales.ingresosVentas)}</td>
+                    <td className="px-4 py-3 text-right text-neutral-700">{COP.format(totales.ingresosOtros)}</td>
                     <td className="px-4 py-3 text-right text-neutral-900">{COP.format(ingresosTotales)}</td>
                     <td className="px-4 py-3 text-right text-danger-600">
                       {COP.format(totales.comisionLavadores + totales.comisionJefeZona)}
@@ -740,7 +771,7 @@ function RentabilidadPage() {
                 </thead>
                 <tbody>
                   {porSemana.map((s) => {
-                    const ingresos = s.ingresosLavadero + s.ingresosParqueadero + s.ingresosVentas
+                    const ingresos = ingresosTotalesDe(s)
                     return (
                       <tr key={s.semana} className="border-b border-neutral-100 last:border-0">
                         <td className="whitespace-nowrap px-4 py-3 font-medium capitalize text-neutral-900">{s.label}</td>
@@ -1373,13 +1404,16 @@ function DetalleModal({
     const filas: Record<string, ReactNode>[] = [
       { concepto: 'Ingresos lavadero', detalle: `${ordenesDia.length} lavado(s) entregado(s)`, valor: COP.format(dia.ingresosLavadero) },
       { concepto: 'Ingresos parqueadero', detalle: '—', valor: COP.format(dia.ingresosParqueadero) },
+      ...(dia.ingresosOtros > 0
+        ? [{ concepto: 'Otros ingresos', detalle: 'alquileres, patrocinios…', valor: COP.format(dia.ingresosOtros) }]
+        : []),
       { concepto: 'Ingresos productos', detalle: `${ventasDia.length} venta(s)`, valor: COP.format(dia.ingresosVentas) },
       { concepto: '− Comisión lavadores', detalle: '40%', valor: <span className="text-danger-600">− {COP.format(dia.comisionLavadores)}</span> },
       { concepto: '− Comisión jefe de patio', detalle: '2,5–3,5%', valor: <span className="text-danger-600">− {COP.format(dia.comisionJefeZona)}</span> },
       { concepto: '− Costo productos', detalle: '—', valor: <span className="text-danger-600">− {COP.format(dia.costoMercancia)}</span> },
       { concepto: '− Gastos', detalle: `${gastosDia.length} movimiento(s)`, valor: <span className="text-danger-600">− {COP.format(dia.gastos)}</span> },
     ]
-    const ingresosDia = dia.ingresosLavadero + dia.ingresosParqueadero + dia.ingresosVentas
+    const ingresosDia = ingresosTotalesDe(dia)
     const egresosDia = dia.comisionLavadores + dia.comisionJefeZona + dia.costoMercancia + dia.gastos
     return (
       <TablaDetalleModal
@@ -1516,7 +1550,7 @@ function DetalleModal({
             valor: PCT(
               porcentaje(
                 reporte.totales.comisionLavadores,
-                reporte.totales.ingresosLavadero + reporte.totales.ingresosParqueadero + reporte.totales.ingresosVentas,
+                ingresosTotalesDe(reporte.totales),
               ),
             ),
           },

@@ -13,6 +13,7 @@ import {
   fetchVentasReporte,
   type NombresReporte,
 } from '../../data/reportes'
+import { fetchIngresosOtros } from '../../data/ingresosOtros'
 import { METODO_PAGO_LABEL } from '../metodoPago'
 import type { MetodoPago } from '../../schemas/orden'
 import { CLASE_VEHICULO_LABEL, type ClaseVehiculoParqueadero } from '../../schemas/estanciaParqueadero'
@@ -33,6 +34,7 @@ export const REPORTES: ReporteInfo[] = [
   { key: 'pagos', label: 'Pagos', descripcion: 'Cada línea de pago por método (efectivo, transferencia, datáfono).' },
   { key: 'ventas', label: 'Ventas de productos', descripcion: 'Nevera y vitrina: cobradas, pendientes y anuladas.' },
   { key: 'gastos', label: 'Gastos', descripcion: 'Gastos por categoría, con su origen (caja o gerencia).' },
+  { key: 'ingresos_otros', label: 'Otros ingresos', descripcion: 'Alquileres, patrocinios y otros ingresos fuera de la operación diaria, con su estado.' },
   { key: 'compras', label: 'Compras de inventario', descripcion: 'Compras a proveedores y de dónde salió el pago.' },
   { key: 'movimientos', label: 'Movimientos de inventario', descripcion: 'Entradas, salidas y ajustes de cada producto.' },
   { key: 'turnos', label: 'Turnos y arqueos', descripcion: 'Apertura, cierre, conteo físico y diferencia de cada turno.' },
@@ -270,6 +272,40 @@ async function gastos(p: PeriodoReporte): Promise<TablaReporte> {
       resumen('Total', suma(filas.map((g) => g.monto)), 'moneda'),
       resumen('De caja', suma(filas.filter((g) => g.origen === 'caja').map((g) => g.monto)), 'moneda'),
       resumen('Otros', suma(filas.filter((g) => g.origen !== 'caja').map((g) => g.monto)), 'moneda'),
+    ],
+  }
+}
+
+async function ingresosOtros(p: PeriodoReporte): Promise<TablaReporte> {
+  const filas = await fetchIngresosOtros(p.periodoInicio, p.periodoFin)
+  const vigentes = filas.filter((i) => i.estado === 'activa')
+  return {
+    columnas: [
+      col('Consec.', 'numero', 8),
+      col('Fecha', 'fecha', 12),
+      col('Categoría', 'texto', 20),
+      col('Descripción', 'texto', 32),
+      col('Monto', 'moneda', 12),
+      col('Método', 'texto', 13),
+      col('Estado', 'texto', 11),
+      col('Registrado por', 'texto', 18),
+      col('Motivo anulación', 'texto', 26, false),
+    ],
+    filas: filas.map((i): Celda[] => [
+      i.consecutivo,
+      dia(i.fecha),
+      i.categoriaNombre,
+      i.descripcion,
+      i.monto,
+      METODO_PAGO_LABEL[i.metodoPago],
+      i.estado === 'anulada' ? 'Anulado' : 'Vigente',
+      i.registradoPor,
+      i.motivoAnulacion ?? '',
+    ]),
+    resumen: [
+      resumen('Ingresos vigentes', vigentes.length),
+      resumen('Total vigente', suma(vigentes.map((i) => i.monto)), 'moneda'),
+      resumen('Anulados', filas.length - vigentes.length),
     ],
   }
 }
@@ -538,6 +574,8 @@ async function armar(key: ReporteKey, p: PeriodoReporte, n: NombresReporte): Pro
       return ventas(p, n)
     case 'gastos':
       return gastos(p)
+    case 'ingresos_otros':
+      return ingresosOtros(p)
     case 'compras':
       return compras(p)
     case 'movimientos':

@@ -4,7 +4,7 @@
 import type { ComponentType, ReactNode } from 'react'
 import { Banknote, CalendarRange, CreditCard, Landmark, Scale, TrendingDown, TrendingUp } from 'lucide-react'
 import type { AcumuladoAnual, RentabilidadReporte } from '../../../data/rentabilidad'
-import { resultadoPorLinea } from '../../../data/rentabilidad'
+import { ingresosTotalesDe, resultadoPorLinea } from '../../../data/rentabilidad'
 import { CLASE_VEHICULO_LABEL } from '../../../schemas/estanciaParqueadero'
 import { Card } from '../../../components/layout/Card'
 import { BarChart } from '../../../components/layout/BarChart'
@@ -106,7 +106,7 @@ export function AcumuladoAnualCard({ anual }: { anual: AcumuladoAnual | null }) 
       <Card className="flex items-center justify-center p-5 text-sm text-neutral-400">Calculando el acumulado del año…</Card>
     )
   }
-  const ingresos = (t: AcumuladoAnual['actual']) => t.ingresosLavadero + t.ingresosParqueadero + t.ingresosVentas
+  const ingresos = (t: AcumuladoAnual['actual']) => ingresosTotalesDe(t)
   const sinAnterior = ingresos(anual.anterior) === 0 && anual.anterior.lavados === 0
   const sufijo = `vs. ${anual.anio - 1}`
   return (
