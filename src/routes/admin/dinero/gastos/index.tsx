@@ -375,7 +375,7 @@ function GastoForm({
       title="Registrar gasto"
       subtitle="Queda con su comprobante de egreso para imprimir."
       icon={Receipt}
-      size="md"
+      size="lg"
       onClose={onClose}
       footer={
         <>
@@ -389,34 +389,34 @@ function GastoForm({
       }
     >
       <form id="form-gasto" onSubmit={handleSubmit} className="flex flex-col gap-5">
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-medium text-neutral-700">Fecha</span>
             <input
               type="date"
               value={fecha}
               onChange={(event) => setFecha(event.target.value)}
-              className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-            />
-          </label>
-
-          <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium text-neutral-700">Categoría</span>
-            <CustomSelect
-              size="sm"
-              value={categoriaId}
-              onChange={setCategoriaId}
-              options={categorias.map((c) => ({ value: c.id, label: c.nombre }))}
-              placeholder="Selecciona una categoría"
-              emptyLabel="No hay categorías activas"
+              className="rounded-lg border border-neutral-300 px-3 py-3 text-base outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
             />
           </label>
 
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-medium text-neutral-700">Monto</span>
-            <CurrencyInput size="sm" prefix="$" value={monto} onChange={setMonto} />
+            <CurrencyInput size="md" prefix="$" value={monto} onChange={setMonto} />
           </label>
         </div>
+
+        <label className="flex flex-col gap-1.5 text-sm">
+          <span className="font-medium text-neutral-700">Categoría</span>
+          <CustomSelect
+            size="md"
+            value={categoriaId}
+            onChange={setCategoriaId}
+            options={categorias.map((c) => ({ value: c.id, label: c.nombre }))}
+            placeholder="Selecciona una categoría"
+            emptyLabel="No hay categorías activas"
+          />
+        </label>
 
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="font-medium text-neutral-700">Descripción</span>
@@ -424,7 +424,7 @@ function GastoForm({
             value={descripcion}
             onChange={(event) => setDescripcion(event.target.value)}
             placeholder="p. ej. Compra de jabón y cera"
-            className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+            className="rounded-lg border border-neutral-300 px-3 py-3 text-base outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
           />
         </label>
 
@@ -435,7 +435,7 @@ function GastoForm({
               value={responsable}
               onChange={(event) => setResponsable(event.target.value)}
               placeholder="Nombre de quien registra"
-              className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+              className="rounded-lg border border-neutral-300 px-3 py-3 text-base outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
             />
           </label>
 
@@ -447,7 +447,7 @@ function GastoForm({
                   key={option.value}
                   type="button"
                   onClick={() => setOrigen(option.value)}
-                  className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                  className={`flex-1 rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
                     origen === option.value
                       ? 'bg-primary-600 text-white shadow-nav-active'
                       : 'text-neutral-600 hover:bg-neutral-50'
@@ -534,31 +534,26 @@ function CategoriasModal({
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="max-h-[92vh] sm:max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-3xl sm:rounded-2xl bg-white p-6 shadow-card-hover sm:p-7">
-        <div className="mb-5 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-neutral-900">Categorías de gasto</h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <p className="mb-3 text-xs leading-relaxed text-neutral-500">
+    <>
+      <Modal
+        title="Categorías de gasto"
+        subtitle="Cada categoría decide a qué línea de negocio se imputan sus gastos."
+        icon={Settings2}
+        size="lg"
+        onClose={onClose}
+      >
+        <p className="mb-4 text-xs leading-relaxed text-neutral-500">
           La <span className="font-medium text-neutral-700">línea</span> decide en qué P&amp;L de rentabilidad se
           descuenta el gasto. Deja <span className="font-medium text-neutral-700">General</span> lo que sirve a todo el
           negocio (arriendo, servicios, nómina admin): eso se resta una sola vez del consolidado, no de una línea.
         </p>
 
-        <ul className="mb-4 flex max-h-72 flex-col gap-1 overflow-y-auto">
+        <ul className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
           {categorias.map((categoria) => (
-            <li key={categoria.id} className="flex flex-col gap-2 rounded-lg px-2 py-2 text-sm hover:bg-neutral-50">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  <span className="font-medium text-neutral-900">{categoria.nombre}</span>
+            <li key={categoria.id} className="flex flex-col gap-3 rounded-xl border border-neutral-200 p-3.5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex min-w-0 flex-col items-start gap-1">
+                  <span className="break-words text-sm font-semibold text-neutral-900">{categoria.nombre}</span>
                   <span
                     className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
                       categoria.activo ? 'bg-success-50 text-success-700' : 'bg-neutral-100 text-neutral-500'
@@ -587,38 +582,37 @@ function CategoriasModal({
           ))}
         </ul>
 
-        <form onSubmit={handleCrear} className="flex flex-col gap-3 border-t border-neutral-100 pt-4">
-          <label className="flex flex-col gap-1.5 text-left text-sm">
-            <span className="font-medium text-neutral-700">Nueva categoría</span>
-            <input
-              value={nombre}
-              onChange={(event) => setNombre(event.target.value)}
-              placeholder="p. ej. Publicidad"
-              className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-            />
-          </label>
-          <label className="flex flex-col gap-1.5 text-left text-sm">
-            <span className="font-medium text-neutral-700">Línea de negocio</span>
-            <CustomSelect
-              size="sm"
-              placeholder="General (no se atribuye a una línea)"
-              value={linea}
-              onChange={setLinea}
-              options={LINEA_NEGOCIO_OPCIONES.map((o) => ({ value: o.valor, label: o.label }))}
-            />
-          </label>
+        <form onSubmit={handleCrear} className="flex flex-col gap-4 border-t border-neutral-100 pt-5">
+          <h4 className="text-sm font-semibold text-neutral-900">Nueva categoría</h4>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <label className="flex flex-col gap-1.5 text-left text-sm">
+              <span className="font-medium text-neutral-700">Nombre</span>
+              <input
+                value={nombre}
+                onChange={(event) => setNombre(event.target.value)}
+                placeholder="p. ej. Publicidad"
+                className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 text-left text-sm">
+              <span className="font-medium text-neutral-700">Línea de negocio</span>
+              <CustomSelect
+                size="sm"
+                placeholder="General (no se atribuye a una línea)"
+                value={linea}
+                onChange={setLinea}
+                options={LINEA_NEGOCIO_OPCIONES.map((o) => ({ value: o.valor, label: o.label }))}
+              />
+            </label>
+          </div>
           {error ? <p className="text-xs text-danger-600">{error}</p> : null}
           <div className="flex justify-end">
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-xl bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
-            >
-              {saving ? 'Guardando…' : 'Crear categoría'}
-            </button>
+            <Button variant="primary" type="submit" icon={Plus} loading={saving}>
+              Crear categoría
+            </Button>
           </div>
         </form>
-      </div>
+      </Modal>
 
       {confirmando ? (
         <ConfirmModal
@@ -638,6 +632,6 @@ function CategoriasModal({
           onCancel={() => setConfirmando(null)}
         />
       ) : null}
-    </div>
+    </>
   )
 }

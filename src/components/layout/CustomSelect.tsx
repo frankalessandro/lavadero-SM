@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown, Check } from 'lucide-react'
 
 export interface SelectOption {
@@ -28,6 +29,19 @@ const SIZE_CLASSNAME: Record<'sm' | 'md', string> = {
   md: 'px-3 py-3 text-base',
 }
 
+interface PosicionPanel {
+  left: number
+  width: number
+  /** Distancia al borde superior del viewport (abre hacia abajo)… */
+  top?: number
+  /** …o al inferior (abre hacia arriba). */
+  bottom?: number
+  maxHeight: number
+}
+
+const ALTO_MAX_PANEL = 256
+const ALTO_MIN_ABAJO = 200
+
 // Reemplaza el <select> nativo del sistema operativo por un panel propio,
 // consistente con el resto del sistema de diseño (tokens de color, sombras, tipografía).
 export function CustomSelect({
@@ -42,6 +56,8 @@ export function CustomSelect({
 }: CustomSelectProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
+  const [pos, setPos] = useState<PosicionPanel | null>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const selected = options.find((o) => o.value === value)
@@ -56,7 +72,8 @@ export function CustomSelect({
   // Va en fase de CAPTURA: los paneles scrollean dentro de su propio contenedor
   // (`fixed inset-0 overflow-y-auto` en cada route.tsx), no en `window`, y el evento
   // `scroll` de un elemento no burbujea — sin `capture` este listener nunca se disparaba.
-  // Se ignora el scroll de la propia lista de opciones (`max-h-64 overflow-y-auto`).
+  // Se ignora el scroll de la propia lista de opciones (`overflow-y-auto`).
+  // También cierra al redimensionar: el panel tiene posición fija calculada al abrir.
   useEffect(() => {
     if (!open) return
     const close = (e: Event) => {
@@ -64,8 +81,34 @@ export function CustomSelect({
       setOpen(false)
     }
     window.addEventListener('scroll', close, { capture: true, passive: true })
-    return () => window.removeEventListener('scroll', close, { capture: true })
+    window.addEventListener('resize', close)
+    return () => {
+      window.removeEventListener('scroll', close, { capture: true })
+      window.removeEventListener('resize', close)
+    }
   }, [open])
+
+  // El panel se pinta en un portal sobre `document.body` con posición fija calculada desde el
+  // botón. Antes era `absolute` dentro del propio campo: en un modal con scroll el contenedor lo
+  // recortaba (overflow) y se cruzaba con las capas del modal. En un portal queda siempre por
+  // encima de todo, y abre hacia arriba si abajo no hay espacio (ej. el último campo de un modal
+  // en celular).
+  function abrir() {
+    const rect = wrapRef.current?.getBoundingClientRect()
+    if (rect) {
+      const abajo = window.innerHeight - rect.bottom - 12
+      const arriba = rect.top - 12
+      const haciaArriba = abajo < ALTO_MIN_ABAJO && arriba > abajo
+      setPos({
+        left: rect.left,
+        width: rect.width,
+        ...(haciaArriba
+          ? { bottom: window.innerHeight - rect.top + 6, maxHeight: Math.min(ALTO_MAX_PANEL, arriba) }
+          : { top: rect.bottom + 6, maxHeight: Math.min(ALTO_MAX_PANEL, Math.max(abajo, 120)) }),
+      })
+    }
+    setOpen(true)
+  }
 
   function seleccionar(v: string) {
     onChange(v)
@@ -74,7 +117,7 @@ export function CustomSelect({
   }
 
   return (
-    <div className="relative">
+    <div ref={wrapRef} className="relative">
       {searchable ? (
         <input
           ref={inputRef}
@@ -83,12 +126,12 @@ export function CustomSelect({
           value={open ? query : (selected?.label ?? '')}
           placeholder={selected && !open ? selected.label : placeholder}
           onFocus={() => {
-            setOpen(true)
+            abrir()
             setQuery('')
           }}
           onChange={(e) => {
             setQuery(e.target.value)
-            setOpen(true)
+            if (!open) abrir()
           }}
           onKeyDown={(e) => {
             if (e.key === 'Escape') {
@@ -103,7 +146,7 @@ export function CustomSelect({
         <button
           type="button"
           disabled={disabled}
-          onClick={() => setOpen((o) => !o)}
+          onClick={() => (open ? setOpen(false) : abrir())}
           className={`flex w-full items-center justify-between gap-2 rounded-lg border border-neutral-300 bg-white text-left outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500 disabled:bg-neutral-50 disabled:text-neutral-400 ${SIZE_CLASSNAME[size]}`}
         >
           <span className={`min-w-0 truncate ${selected ? 'text-neutral-900' : 'text-neutral-400'}`}>
@@ -119,53 +162,60 @@ export function CustomSelect({
         />
       ) : null}
 
-      {open ? (
-        <>
-          <button
-            type="button"
-            aria-label="Cerrar"
-            onClick={() => setOpen(false)}
-            // Arrastrar el dedo sobre el backdrop no genera `click` (y si no hay nada que
-            // scrollear tampoco hay evento `scroll`): cerrar en cuanto el dedo se mueve.
-            onTouchMove={() => setOpen(false)}
-            className="fixed inset-0 z-20 cursor-default"
-          />
-          <div ref={panelRef} className="absolute z-30 mt-1.5 max-h-64 w-full overflow-y-auto rounded-lg border border-neutral-200 bg-white p-1 shadow-card-hover">
-            {opciones.length === 0 ? (
-              <p className="px-3 py-2.5 text-sm text-neutral-400">
-                {searchable && query.trim() ? `Sin resultados para "${query.trim()}"` : (emptyLabel ?? 'Sin opciones')}
-              </p>
-            ) : (
-              opciones.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  // `onMouseDown` con preventDefault: en el input buscable, un `click` normal
-                  // dispara primero el `blur` del input (que ya cerró el panel) y el botón
-                  // desaparece antes de registrar el click. mousedown ocurre antes del blur.
-                  onMouseDown={(e) => {
-                    e.preventDefault()
-                    seleccionar(option.value)
-                  }}
-                  className={`flex w-full items-center justify-between gap-2 rounded-md px-3 py-2.5 text-left text-sm transition-colors ${
-                    option.value === value
-                      ? 'bg-primary-50 text-primary-700'
-                      : 'text-neutral-700 hover:bg-neutral-50'
-                  }`}
-                >
-                  <span className="flex min-w-0 flex-col gap-0.5">
-                    <span className="truncate">{option.label}</span>
-                    {option.description ? (
-                      <span className="text-xs font-normal text-neutral-400">{option.description}</span>
-                    ) : null}
-                  </span>
-                  {option.value === value ? <Check size={15} className="shrink-0" /> : null}
-                </button>
-              ))
-            )}
-          </div>
-        </>
-      ) : null}
+      {open && pos
+        ? createPortal(
+            <>
+              <button
+                type="button"
+                aria-label="Cerrar"
+                onClick={() => setOpen(false)}
+                // Arrastrar el dedo sobre el backdrop no genera `click` (y si no hay nada que
+                // scrollear tampoco hay evento `scroll`): cerrar en cuanto el dedo se mueve.
+                onTouchMove={() => setOpen(false)}
+                className="fixed inset-0 z-[60] cursor-default"
+              />
+              <div
+                ref={panelRef}
+                style={{ left: pos.left, width: pos.width, top: pos.top, bottom: pos.bottom, maxHeight: pos.maxHeight }}
+                className="fixed z-[61] overflow-y-auto rounded-lg border border-neutral-200 bg-white p-1 text-left shadow-card-hover"
+              >
+                {opciones.length === 0 ? (
+                  <p className="px-3 py-2.5 text-sm text-neutral-400">
+                    {searchable && query.trim() ? `Sin resultados para "${query.trim()}"` : (emptyLabel ?? 'Sin opciones')}
+                  </p>
+                ) : (
+                  opciones.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      // `onMouseDown` con preventDefault: en el input buscable, un `click` normal
+                      // dispara primero el `blur` del input (que ya cerró el panel) y el botón
+                      // desaparece antes de registrar el click. mousedown ocurre antes del blur.
+                      onMouseDown={(e) => {
+                        e.preventDefault()
+                        seleccionar(option.value)
+                      }}
+                      className={`flex w-full items-center justify-between gap-2 rounded-md px-3 py-2.5 text-left text-sm transition-colors ${
+                        option.value === value
+                          ? 'bg-primary-50 text-primary-700'
+                          : 'text-neutral-700 hover:bg-neutral-50'
+                      }`}
+                    >
+                      <span className="flex min-w-0 flex-col gap-0.5">
+                        <span className="truncate">{option.label}</span>
+                        {option.description ? (
+                          <span className="text-xs font-normal text-neutral-400">{option.description}</span>
+                        ) : null}
+                      </span>
+                      {option.value === value ? <Check size={15} className="shrink-0" /> : null}
+                    </button>
+                  ))
+                )}
+              </div>
+            </>,
+            document.body,
+          )
+        : null}
     </div>
   )
 }
