@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { X } from 'lucide-react'
+import { ShieldAlert, X } from 'lucide-react'
 import { fetchExpedienteTurno, type ExpedienteTurno } from '../../data/expedienteTurno'
 import { METODO_PAGO_LABEL } from '../../lib/metodoPago'
 import type { TurnoCaja } from '../../schemas/turnoCaja'
+import { Button } from './Button'
 import { Card } from './Card'
+import { CorregirTurnoModal } from './CorregirTurnoModal'
 import { OrdenDetalleCard } from './OrdenDetalleCard'
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
@@ -20,12 +22,15 @@ interface Props {
   comboNombre: (id: string | undefined) => string
   lavadorNombre: (id: string | undefined) => string | undefined
   productoNombre: (id: string) => string
+  /** Solo gerencia: habilita "Corregir arqueo" en turnos cerrados (regla 14 revisada). */
+  onCorregido?: (turno: TurnoCaja) => void
   onClose: () => void
 }
 
 // Expediente del turno: reconstruye el arqueo linea por linea, el reparto de pagos por metodo,
 // los conteos de inventario, y lista ordenes/ventas/gastos/traspasos del turno.
-export function TurnoExpedienteModal({ turno, comboNombre, lavadorNombre, productoNombre, onClose }: Props) {
+export function TurnoExpedienteModal({ turno, comboNombre, lavadorNombre, productoNombre, onCorregido, onClose }: Props) {
+  const [corrigiendo, setCorrigiendo] = useState(false)
   const [data, setData] = useState<ExpedienteTurno | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -128,6 +133,19 @@ export function TurnoExpedienteModal({ turno, comboNombre, lavadorNombre, produc
                   Cerró: {turno.cerradoPor ?? '—'}
                   {turno.recibidoPor ? ` · Recibió: ${turno.recibidoPor}` : ''}
                 </p>
+              ) : null}
+              {turno.corregidoEn ? (
+                <p className="rounded-lg bg-warning-50 px-3 py-2 text-xs text-warning-700">
+                  Arqueo corregido por gerencia ({turno.corregidoPor ?? '—'}, {FECHA_HORA.format(new Date(turno.corregidoEn))}):{' '}
+                  {turno.motivoCorreccion}. El detalle de antes/después está en Auditoría.
+                </p>
+              ) : null}
+              {turno.cerrado && onCorregido ? (
+                <div>
+                  <Button size="sm" variant="secondary" icon={ShieldAlert} onClick={() => setCorrigiendo(true)}>
+                    Corregir arqueo
+                  </Button>
+                </div>
               ) : null}
             </Card>
 
@@ -309,6 +327,16 @@ export function TurnoExpedienteModal({ turno, comboNombre, lavadorNombre, produc
           </div>
         )}
       </div>
+      {corrigiendo && onCorregido ? (
+        <CorregirTurnoModal
+          turno={turno}
+          onClose={() => setCorrigiendo(false)}
+          onCorregido={(t) => {
+            setCorrigiendo(false)
+            onCorregido(t)
+          }}
+        />
+      ) : null}
     </div>
   )
 }

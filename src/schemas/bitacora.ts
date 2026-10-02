@@ -32,6 +32,7 @@ export const ACCION_LABEL: Record<string, string> = {
   cambiar_precio: 'Cambio de precio',
   ajustar_inventario: 'Movimiento de inventario',
   cambiar_configuracion: 'Cambio de configuración',
+  corregir_turno: 'Corrección de turno cerrado',
 }
 
 export const ENTIDAD_LABEL: Record<string, string> = {
@@ -61,4 +62,5 @@ export const ACCIONES_FILTRO = [
   'cambiar_precio',
   'ajustar_inventario',
   'cambiar_configuracion',
+  'corregir_turno',
 ] as const

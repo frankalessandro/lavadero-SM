@@ -47,6 +47,11 @@ export const turnoCajaSchema = z.object({
   cerradoPor: nullableTrimmedString,
   cerradoEn: nullableTimestamp,
   recibidoPor: nullableTrimmedString,
+  // Corrección de gerencia sobre un turno ya cerrado (0079). Solo guarda la última; el historial
+  // completo con antes/después vive en la bitácora (acción 'corregir_turno').
+  corregidoEn: nullableTimestamp,
+  corregidoPor: nullableTrimmedString,
+  motivoCorreccion: nullableTrimmedString,
 })
 
 // El responsable ya NO se elige — es siempre la cuenta autenticada que abre el turno (0072, RPC
@@ -66,6 +71,25 @@ export const cerrarTurnoInputSchema = z.object({
   recibidoPor: z.string().trim().optional(),
 })
 
+// Corrección de gerencia a un turno cerrado (regla 14 revisada, 0079). El motivo es obligatorio;
+// las cifras son opcionales (undefined = no se toca) y la diferencia la recalcula la base.
+export const corregirTurnoInputSchema = z
+  .object({
+    motivo: z.string().trim().min(10, 'Explica la causa de la corrección (mínimo 10 caracteres)'),
+    baseInicial: z.number().int().nonnegative().optional(),
+    conteoFisico: z.number().int().nonnegative().optional(),
+    valorEsperado: z.number().int().nonnegative().optional(),
+    justificacionDiferencia: z.string().trim().optional(),
+  })
+  .refine(
+    (v) =>
+      v.baseInicial !== undefined ||
+      v.conteoFisico !== undefined ||
+      v.valorEsperado !== undefined ||
+      !!v.justificacionDiferencia,
+    { message: 'No cambiaste ninguna cifra' },
+  )
+
 // Log append-only de traspasos de responsabilidad (regla antifraude: bitácora de auditoría).
 export const traspasoTurnoSchema = z.object({
   id: z.string(),
@@ -83,4 +107,5 @@ export type RolCaja = z.infer<typeof rolCajaSchema>
 export type TurnoCaja = z.infer<typeof turnoCajaSchema>
 export type AbrirTurnoInput = z.infer<typeof abrirTurnoInputSchema>
 export type CerrarTurnoInput = z.infer<typeof cerrarTurnoInputSchema>
+export type CorregirTurnoInput = z.infer<typeof corregirTurnoInputSchema>
 export type TraspasoTurno = z.infer<typeof traspasoTurnoSchema>

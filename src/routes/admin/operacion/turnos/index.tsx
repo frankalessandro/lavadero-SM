@@ -222,7 +222,7 @@ function TurnosPage() {
         description="Cada caja abierta y cerrada, con su diferencia de arqueo. Toca un turno para ver su expediente."
         help={{
           body:
-            'Histórico de turnos de caja de jefe de patio y vigilante. Solo lectura: un turno cerrado es inmodificable (regla 14).\n\n' +
+            'Histórico de turnos de caja de jefe de patio y vigilante. Un turno cerrado es inmodificable (regla 14); solo gerencia puede corregir su arqueo desde el expediente, con causa justificada y registro en Auditoría.\n\n' +
             'Diferencia = conteo físico − valor esperado por el sistema. Negativa = faltó plata (rojo); positiva = sobró (ámbar). Toda diferencia exige justificación al cerrar.\n\n' +
             '"General" resume todo el historial mes a mes; al elegir un mes aparece su calendario, donde cada día muestra el neto de diferencias de sus turnos (la fecha del turno es la de su apertura). Toca un día para ver solo sus turnos.\n\n' +
             'Las correcciones de reparto de pago (cambiar cuánto fue efectivo, transferencia o datáfono sin cambiar el total) se ven en su propio botón.',
@@ -505,6 +505,10 @@ function TurnosPage() {
           comboNombre={(id) => (id ? comboNombrePorId.get(id) ?? '—' : 'Sin combo')}
           lavadorNombre={(id) => (id ? lavadorNombrePorId.get(id) : undefined)}
           productoNombre={(id) => productoNombrePorId.get(id) ?? 'Producto'}
+          onCorregido={(t) => {
+            setTurnos((prev) => prev.map((x) => (x.id === t.id ? t : x)))
+            setExpedienteDe(t)
+          }}
           onClose={() => setExpedienteDe(null)}
         />
       ) : null}

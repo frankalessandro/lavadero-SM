@@ -552,3 +552,13 @@ Pantalla `Dinero › Otros ingresos` (`src/routes/admin/dinero/ingresos/index.ts
 - **Rentabilidad**: `ingresosOtros` es un campo nuevo de `RentabilidadDia`/`Totales` (entra a `CAMPOS_ACUMULABLES` y a `recalcular`), y `resultadoPorLinea` devuelve `otros` (margen 100 %: sin comisión, costo ni gastos atribuidos) que suma al margen bruto. Los anulados no suman. El total de ingresos se calcula con `ingresosTotalesDe()`; los usos sueltos de `lavadero + parqueadero + ventas` se reemplazaron en rentabilidad, acumulado del año y dashboard. El dashboard toma los otros ingresos de hoy del mismo agregado por día (`ultimos7`).
 - **Reportes**: conjunto nuevo `ingresos_otros` (Excel/PDF) y fila "Otros ingresos" en el cierre mensual cuando hubo en el mes.
 - **Aplicada solo a producción por MCP** (Supabase). Si se reactiva el sandbox local hay que correrla ahí también.
+
+## Corrección de turno cerrado por gerencia (regla 14 revisada)
+
+Migración `0079_corregir_turno_cerrado.sql`. Decisión de Alessandro (2026-10-02): el turno cerrado sigue siendo inmodificable por defecto, pero gerencia puede corregir su arqueo con causa justificada y todo queda en la auditoría.
+
+- **Una sola puerta**: RPC `corregir_turno_cerrado(turno, motivo, base_inicial, conteo_fisico, valor_esperado, justificacion)` — solo `rol_actual() = 'admin'` activo; parámetros de cifras opcionales (null = no tocar); motivo ≥ 10 caracteres; `diferencia = conteo − esperado` la calcula la base; si queda diferencia ≠ 0 exige justificación. El turno debe estar cerrado.
+- **El trigger de 0045 no se quitó**: `interno.turno_cerrado_inmutable` ahora deja pasar solo si `app.corrigiendo_turno` (puesto con `set_config(..., true)` dentro de la RPC, local a la transacción) es el id del turno. PostgREST no expone `set_config`, así que un PATCH a mano no puede levantarla.
+- **Auditoría**: una fila `corregir_turno` en `bitacora` (antes/después de las 5 cifras + `motivo` dentro de `despues`). El trigger genérico `bitacora_turnos_update` se recreó con `WHEN` para no dejar además una fila `editar` durante la corrección. `turnos_caja` guarda la última (`corregido_en/por`, `motivo_correccion`) para señalarla en el expediente; el historial completo está en la bitácora.
+- UI: botón "Corregir arqueo" en `TurnoExpedienteModal` (solo si la pantalla pasa `onCorregido`, hoy solo admin) → `CorregirTurnoModal`. Filtro "Corrección de turno cerrado" en Auditoría.
+- Alcance: solo las cifras del arqueo. NO reabre el turno ni mueve órdenes/pagos/gastos de un turno a otro.

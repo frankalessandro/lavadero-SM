@@ -41,6 +41,7 @@ const ACCION_TONO: Record<string, string> = {
   cambiar_precio: 'bg-warning-50 text-warning-700',
   ajustar_inventario: 'bg-warning-50 text-warning-700',
   cambiar_configuracion: 'bg-danger-50 text-danger-700',
+  corregir_turno: 'bg-danger-50 text-danger-700',
 }
 
 // Registros fuera del horario habitual (Plan M11 · control). El horario sale del Plan §1: el

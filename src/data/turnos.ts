@@ -7,13 +7,15 @@ import {
   turnoCajaSchema,
   traspasoTurnoSchema,
   type AbrirTurnoInput,
+  corregirTurnoInputSchema,
+  type CorregirTurnoInput,
   type RolCaja,
   type TurnoCaja,
   type TraspasoTurno,
 } from '../schemas/turnoCaja'
 
 const TURNO_SELECT =
-  'id, rol, responsable, responsableActual:responsable_actual, responsablePersonaId:responsable_persona_id, responsableActualPersonaId:responsable_actual_persona_id, traspasoPendienteAPersonaId:traspaso_pendiente_a_persona_id, traspasoPendienteANombre:traspaso_pendiente_a_nombre, baseInicial:base_inicial, abiertoEn:abierto_en, cerrado, conteoFisico:conteo_fisico, valorEsperado:valor_esperado, diferencia, justificacionDiferencia:justificacion_diferencia, cerradoPor:cerrado_por, cerradoEn:cerrado_en, recibidoPor:recibido_por'
+  'id, rol, responsable, responsableActual:responsable_actual, responsablePersonaId:responsable_persona_id, responsableActualPersonaId:responsable_actual_persona_id, traspasoPendienteAPersonaId:traspaso_pendiente_a_persona_id, traspasoPendienteANombre:traspaso_pendiente_a_nombre, baseInicial:base_inicial, abiertoEn:abierto_en, cerrado, conteoFisico:conteo_fisico, valorEsperado:valor_esperado, diferencia, justificacionDiferencia:justificacion_diferencia, cerradoPor:cerrado_por, cerradoEn:cerrado_en, recibidoPor:recibido_por, corregidoEn:corregido_en, corregidoPor:corregido_por, motivoCorreccion:motivo_correccion'
 
 const TRASPASO_SELECT =
   'id, turnoId:turno_id, de, a, dePersonaId:de_persona_id, aPersonaId:a_persona_id, hechoEn:hecho_en, conteoId:conteo_id'
@@ -210,6 +212,25 @@ export async function desgloseEsperado(turno: TurnoCaja): Promise<DesgloseEspera
       ? turno.baseInicial + ingresosLavados + ingresosVentas + abonos - gastos - compras - prestamos
       : await calcularValorEsperado(turno)
   return { base: turno.baseInicial, ingresosLavados, ingresosVentas, gastos, compras, prestamos, abonos, total }
+}
+
+// Regla 14 revisada (0079): solo gerencia corrige un turno cerrado, con motivo obligatorio. La RPC
+// recalcula la diferencia y deja una fila 'corregir_turno' en la bitácora con antes/después.
+export async function corregirTurnoCerrado(turnoId: string, input: CorregirTurnoInput): Promise<TurnoCaja> {
+  const parsed = corregirTurnoInputSchema.parse(input)
+  const { data, error } = await db
+    .rpc('corregir_turno_cerrado', {
+      p_turno_id: turnoId,
+      p_motivo: parsed.motivo,
+      p_base_inicial: parsed.baseInicial ?? null,
+      p_conteo_fisico: parsed.conteoFisico ?? null,
+      p_valor_esperado: parsed.valorEsperado ?? null,
+      p_justificacion: parsed.justificacionDiferencia || null,
+    })
+    .select(TURNO_SELECT)
+    .single()
+  if (error) throw new Error(error.message)
+  return turnoCajaSchema.parse(data)
 }
 
 export async function cerrarTurno(
