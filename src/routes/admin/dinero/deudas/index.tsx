@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, HandCoins, Users, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, HandCoins, Users, X } from 'lucide-react'
 import { fetchLavadores } from '../../../../data/lavadores'
 import {
   anularDeuda,
@@ -272,6 +272,19 @@ function DetalleDeudaModal({ fila, onClose, onCambio }: { fila: FilaDeudor; onCl
 
   const saldo = (movimientos ?? []).filter((m) => m.estado === 'activo').reduce((s, m) => s + m.monto, 0)
 
+  // Saldo corrido: un abono (o descuento de liquidación) que lo deja en $0 es "quedó al día" ese
+  // día. Si después vuelve a pedir prestado, es otra deuda — el badge se queda en el día que se saldó.
+  const alDia = useMemo(() => {
+    const ids = new Set<string>()
+    let corrido = 0
+    for (const m of [...(movimientos ?? [])].reverse()) {
+      if (m.estado !== 'activo') continue
+      corrido += m.monto
+      if (m.monto < 0 && corrido <= 0) ids.add(m.id)
+    }
+    return ids
+  }, [movimientos])
+
   async function recargar() {
     await movimientosQuery.refetch()
     await onCambio()
@@ -345,6 +358,11 @@ function DetalleDeudaModal({ fila, onClose, onCambio }: { fila: FilaDeudor; onCl
                       {m.tipo === 'abono' ? (m.metodoAbono === 'efectivo' ? ' · efectivo a caja' : ' · por fuera') : ''}
                       {m.estado === 'anulado' ? <span className="text-danger-600"> · anulado</span> : null}
                     </p>
+                    {alDia.has(m.id) ? (
+                      <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-success-50 px-2 py-0.5 text-xs font-semibold text-success-700">
+                        <CheckCircle2 size={12} /> ¡Quedó al día!
+                      </span>
+                    ) : null}
                     <p className="text-xs text-neutral-500">
                       {m.motivo ?? 'Sin motivo'} · {m.registradoPor} · {FECHA_HORA.format(new Date(m.creadoEn))}
                     </p>

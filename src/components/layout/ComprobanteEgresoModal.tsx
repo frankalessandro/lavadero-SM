@@ -125,7 +125,7 @@ function ComprobanteEgresoPrint({ gasto }: { gasto: GastoConCategoria }) {
 }
 
 // Emite: Nombre / C.C. ____ / Firma / raya completa. Sin nombre, el nombre también queda en raya.
-function BloqueFirma({ rol, nombre }: { rol: string; nombre?: string }) {
+export function BloqueFirma({ rol, nombre }: { rol: string; nombre?: string }) {
   return (
     <div className="tiquete-58__firma">
       <div className="tiquete-58__firma-campo">
@@ -146,7 +146,7 @@ function BloqueFirma({ rol, nombre }: { rol: string; nombre?: string }) {
   )
 }
 
-function Fila({ label, valor }: { label: string; valor: string }) {
+export function Fila({ label, valor }: { label: string; valor: string }) {
   return (
     <div className="tiquete-58__fila">
       <span className="tiquete-58__fila-label">{label}</span>

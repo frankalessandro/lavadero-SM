@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type FormEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { HandCoins, Plus, X } from 'lucide-react'
+import { HandCoins, Plus, Printer, X } from 'lucide-react'
 import {
   fetchDeudaPendiente,
   fetchPersonasDeudoras,
@@ -12,6 +12,7 @@ import { abonoInputSchema, prestamoInputSchema, type Deudor, type MetodoAbono } 
 import type { Lavador } from '../../schemas/lavador'
 import type { TurnoCaja } from '../../schemas/turnoCaja'
 import { Card } from './Card'
+import { ComprobantePrestamoModal, type ComprobantePrestamoData } from './ComprobantePrestamoModal'
 import { CustomSelect } from './CustomSelect'
 import { CurrencyInput } from './CurrencyInput'
 import { toast } from '../../lib/toast'
@@ -45,6 +46,7 @@ export function PrestamosDeTurno({ turno, lavadores, prestamos, onRegistrado, si
   const [motivo, setMotivo] = useState('')
   const [errores, setErrores] = useState<Record<string, string>>({})
   const [guardando, setGuardando] = useState(false)
+  const [comprobante, setComprobante] = useState<ComprobantePrestamoData | null>(null)
   const enVueloRef = useRef(false)
 
   const personasQuery = useQuery({ queryKey: ['perfiles', 'deudores'], queryFn: fetchPersonasDeudoras })
@@ -74,6 +76,24 @@ export function PrestamosDeTurno({ turno, lavadores, prestamos, onRegistrado, si
     m.lavadorId
       ? (lavadores.find((l) => l.id === m.lavadorId)?.nombre ?? '—')
       : (personas.find((p) => p.id === m.personaId)?.nombre ?? '—')
+
+  const rolDeudor = (m: DeudaPersonal) =>
+    m.lavadorId
+      ? 'lavador'
+      : personas.find((p) => p.id === m.personaId)?.roles.includes('admin')
+        ? 'gerencia'
+        : 'jefe de patio'
+
+  // El jefe de patio que entrega es quien está a cargo del turno AHORA (responsableActual).
+  const datosComprobante = (m: DeudaPersonal): ComprobantePrestamoData => ({
+    id: m.id,
+    monto: m.monto,
+    creadoEn: m.creadoEn,
+    prestatarioNombre: nombreDeudor(m),
+    prestatarioRol: rolDeudor(m),
+    jefePatioNombre: turno.responsableActual,
+    motivo: m.motivo,
+  })
 
   const activos = prestamos.filter((p) => p.estado === 'activo')
   const salio = activos.filter((p) => p.tipo === 'prestamo').reduce((s, p) => s + p.monto, 0)
@@ -118,6 +138,8 @@ export function PrestamosDeTurno({ turno, lavadores, prestamos, onRegistrado, si
           : await registrarAbono(abonoInputSchema.parse({ ...base, metodo }))
       // Un abono por fuera no toca esta caja: no se lista acá.
       if (creado.turnoId) onRegistrado(creado)
+      // El préstamo se firma: se abre el comprobante para imprimir con las dos firmas.
+      if (modo === 'prestamo') setComprobante(datosComprobante(creado))
       toast.exito(modo === 'prestamo' ? 'Préstamo registrado' : 'Abono registrado')
       cerrar()
     } catch (error) {
@@ -170,6 +192,16 @@ export function PrestamosDeTurno({ turno, lavadores, prestamos, onRegistrado, si
                   {p.motivo ?? 'Sin motivo'} · {p.registradoPor} · {formatHora(p.creadoEn)}
                 </span>
               </div>
+              {p.tipo === 'prestamo' && p.estado === 'activo' ? (
+                <button
+                  type="button"
+                  onClick={() => setComprobante(datosComprobante(p))}
+                  aria-label="Imprimir comprobante del préstamo"
+                  className="flex size-8 shrink-0 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-200 hover:text-neutral-700"
+                >
+                  <Printer size={16} />
+                </button>
+              ) : null}
               <span
                 className={`shrink-0 font-mono text-sm font-semibold ${p.tipo === 'abono' ? 'text-success-700' : 'text-neutral-800'}`}
               >
@@ -310,6 +342,7 @@ export function PrestamosDeTurno({ turno, lavadores, prestamos, onRegistrado, si
           </button>
         </div>
       )}
+      {comprobante ? <ComprobantePrestamoModal data={comprobante} onClose={() => setComprobante(null)} /> : null}
     </Card>
   )
 }
