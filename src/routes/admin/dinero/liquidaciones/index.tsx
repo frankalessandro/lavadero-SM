@@ -6,6 +6,7 @@ import {
   fetchLiquidaciones,
   fetchMontoPeriodo,
   fetchDesgloseLiquidacion,
+  fetchDeudaTrasLiquidacion,
   fetchResumenPeriodoLavadores,
   generarLiquidacion,
   marcarLiquidacionPagada,
@@ -358,7 +359,10 @@ function LiquidacionesPage() {
   // (handleVerColilla) — el desglose siempre sale de `ordenes.liquidacion_id`, exacto a lo que
   // quedó liquidado de verdad, no del rango de fechas.
   async function abrirColilla(liquidacion: Liquidacion, lavadorNombre: string) {
-    const desglose = await fetchDesgloseLiquidacion(liquidacion.id, tiposVehiculo, combos)
+    const [desglose, deudaRestante] = await Promise.all([
+      fetchDesgloseLiquidacion(liquidacion.id, tiposVehiculo, combos),
+      fetchDeudaTrasLiquidacion(liquidacion),
+    ])
     setColilla({
       lavadorNombre,
       periodoInicio: liquidacion.periodoInicio,
@@ -368,6 +372,7 @@ function LiquidacionesPage() {
       generadaEn: liquidacion.creadoEn,
       comisionBruta: liquidacion.comisionBruta,
       deudaDescontada: liquidacion.deudaDescontada,
+      deudaRestante,
     })
   }
 

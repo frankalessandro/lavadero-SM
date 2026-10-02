@@ -440,3 +440,26 @@ export async function marcarLiquidacionPagada(id: string): Promise<Liquidacion> 
   if (error) throw new Error(error.message)
   return liquidacionSchema.parse(data)
 }
+
+// Lo que el lavador seguía debiendo justo después de un corte: suma del ledger activo hasta el
+// momento en que ese corte registró su descuento (o hasta su creación si no descontó nada). No es
+// la deuda de hoy — una colilla reimpresa semanas después debe mostrar lo que decía el día del corte.
+export async function fetchDeudaTrasLiquidacion(liquidacion: { id: string; lavadorId: string; creadoEn: string }): Promise<number> {
+  const { data: descuento, error: errorDescuento } = await db
+    .from('deudas_personal')
+    .select('creado_en')
+    .eq('liquidacion_id', liquidacion.id)
+    .eq('tipo', 'liquidacion')
+    .eq('estado', 'activo')
+    .maybeSingle()
+  if (errorDescuento) throw new Error(errorDescuento.message)
+  const hasta = (descuento?.creado_en as string | undefined) ?? liquidacion.creadoEn
+  const { data, error } = await db
+    .from('deudas_personal')
+    .select('monto')
+    .eq('lavador_id', liquidacion.lavadorId)
+    .eq('estado', 'activo')
+    .lte('creado_en', hasta)
+  if (error) throw new Error(error.message)
+  return Math.max(0, (data ?? []).reduce((total, d) => total + (d.monto as number), 0))
+}
