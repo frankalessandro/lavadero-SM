@@ -1,11 +1,11 @@
 import { db } from '../lib/db'
 import { productoInputSchema, productoSchema, type Producto, type ProductoInput } from '../schemas/producto'
 
-const PRODUCTO_SELECT = 'id, nombre, unidadMedida:unidad_medida, stockMinimo:stock_minimo, activo, precioVenta:precio_venta, costo, seccion'
+const PRODUCTO_SELECT = 'id, nombre, unidadMedida:unidad_medida, activo, precioVenta:precio_venta, costo, seccion'
 
 // Sin la columna `costo` — jefe de zona no ve costos (CLAUDE.md §Roles). Es lo que expone la
 // vista productos_operativo (0034, ampliada con `seccion` en 0058).
-const PRODUCTO_OPERATIVO_SELECT = 'id, nombre, unidadMedida:unidad_medida, stockMinimo:stock_minimo, activo, precioVenta:precio_venta, seccion'
+const PRODUCTO_OPERATIVO_SELECT = 'id, nombre, unidadMedida:unidad_medida, activo, precioVenta:precio_venta, seccion'
 
 // Catálogo completo, con `costo` — solo lo llama el panel de admin. RLS deja leer `productos`
 // (tabla base) a admin y a jefe_zona, así que el candado real del costo es que jefe_zona use
@@ -32,7 +32,6 @@ export async function createProducto(input: ProductoInput): Promise<Producto> {
     .insert({
       nombre: parsed.nombre,
       unidad_medida: parsed.unidadMedida,
-      stock_minimo: parsed.stockMinimo,
       precio_venta: parsed.precioVenta ?? null,
       costo: parsed.costo ?? null,
       seccion: parsed.seccion ?? null,
@@ -50,7 +49,6 @@ export async function updateProducto(id: string, input: ProductoInput): Promise<
     .update({
       nombre: parsed.nombre,
       unidad_medida: parsed.unidadMedida,
-      stock_minimo: parsed.stockMinimo,
       precio_venta: parsed.precioVenta ?? null,
       costo: parsed.costo ?? null,
       seccion: parsed.seccion ?? null,

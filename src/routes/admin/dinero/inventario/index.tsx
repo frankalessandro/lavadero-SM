@@ -257,7 +257,6 @@ function InventarioPage() {
             nombre: p.nombre,
             unidad: p.unidadMedida,
             stock: stockDeProducto(p),
-            stockMinimo: p.stockMinimo,
           }))}
           onClose={() => setNivelModal(null)}
         />
@@ -638,7 +637,6 @@ function StockTable({
           <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
             <th className="px-5 py-3">Producto</th>
             <th className="px-5 py-3">Stock</th>
-            <th className="px-5 py-3">Mínimo</th>
             <th className="px-5 py-3">Costo prom.</th>
             <th className="px-5 py-3">Valorización</th>
             {mostrarPrecio ? <th className="px-5 py-3">Precio venta</th> : null}
@@ -672,7 +670,6 @@ function StockTable({
                     <p className="text-xs text-warning-700">{s.comprometido} cargadas sin cobrar</p>
                   ) : null}
                 </td>
-                <td className="px-5 py-3 text-neutral-500">{producto.stockMinimo}</td>
                 <td className="px-5 py-3 text-neutral-700">{COP.format(Math.round(s?.costoPromedio ?? 0))}</td>
                 <td className="px-5 py-3 text-neutral-700">{COP.format(s?.valorizacion ?? 0)}</td>
                 {mostrarPrecio ? (
@@ -971,7 +968,6 @@ function ProductoForm({
 }) {
   const [nombre, setNombre] = useState(producto?.nombre ?? '')
   const [unidadMedida, setUnidadMedida] = useState(producto?.unidadMedida ?? '')
-  const [stockMinimo, setStockMinimo] = useState(String(producto?.stockMinimo ?? 0))
   const [seccion, setSeccion] = useState<string>(producto?.seccion ?? '')
   const [precioVenta, setPrecioVenta] = useState(producto?.precioVenta != null ? String(producto.precioVenta) : '')
   const [costo, setCosto] = useState(producto?.costo != null ? String(producto.costo) : '')
@@ -985,7 +981,6 @@ function ProductoForm({
     const parsed = productoInputSchema.safeParse({
       nombre,
       unidadMedida,
-      stockMinimo: Number(stockMinimo) || 0,
       seccion: seccion || undefined,
       precioVenta: precioVenta ? Number(precioVenta) : undefined,
       costo: costo ? Number(costo) : undefined,
@@ -1042,23 +1037,13 @@ function ProductoForm({
             />
           </label>
 
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <label className="flex flex-col gap-1.5 text-left text-sm">
               <span className="font-medium text-neutral-700">Unidad de medida</span>
               <input
                 value={unidadMedida}
                 onChange={(event) => setUnidadMedida(event.target.value)}
                 placeholder="p. ej. galón, unidad, kg"
-                className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-              />
-            </label>
-            <label className="flex flex-col gap-1.5 text-left text-sm">
-              <span className="font-medium text-neutral-700">Stock mínimo</span>
-              <input
-                type="number"
-                min={0}
-                value={stockMinimo}
-                onChange={(event) => setStockMinimo(event.target.value)}
                 className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
               />
             </label>

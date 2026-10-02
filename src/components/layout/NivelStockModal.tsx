@@ -6,7 +6,6 @@ export interface ProductoNivelFila {
   nombre: string
   unidad: string
   stock: number
-  stockMinimo: number
 }
 
 // Detalle de un nivel de stock (bajo/medio/bueno) — antes era solo el `title` (tooltip) de la
@@ -58,9 +57,7 @@ export function NivelStockModal({
                 <li key={p.id} className="flex items-center justify-between gap-3 py-2.5">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-neutral-900">{p.nombre}</p>
-                    <p className="text-xs text-neutral-500">
-                      Mínimo: {p.stockMinimo} {p.unidad}
-                    </p>
+                    <p className="text-xs text-neutral-500">{p.unidad}</p>
                   </div>
                   <span
                     className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${NIVEL_BADGE_CLASS[nivel]}`}

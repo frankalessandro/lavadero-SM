@@ -720,7 +720,7 @@ function JefeZonaDashboard() {
             label="Lavador"
             value={lavadorFiltro === 'todos' ? '' : lavadorFiltro}
             onChange={(v) => setLavadorFiltro(v || 'todos')}
-            options={[{ value: 'sin_asignar', label: 'Sin asignar' }, ...lavadores.map((l) => ({ value: l.id, label: l.nombre }))]}
+            options={[{ value: 'sin_asignar', label: 'Sin asignar' }, ...lavadores.filter((l) => l.activo).map((l) => ({ value: l.id, label: l.nombre }))]}
           />
         </BarraFiltros>
       </div>

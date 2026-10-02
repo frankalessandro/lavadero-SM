@@ -6,6 +6,7 @@ import type { StockProducto } from '../../data/movimientosInventario'
 import type { MovimientoInventario } from '../../schemas/movimientoInventario'
 import type { Venta } from '../../schemas/venta'
 import type { Producto } from '../../schemas/producto'
+import { nivelStock } from '../../lib/nivelStock'
 import { Card } from './Card'
 import { BarChart } from './BarChart'
 
@@ -72,7 +73,7 @@ export function ProductoExpedienteModal({ producto, stock, onClose }: Props) {
           <div>
             <h2 className="text-lg font-semibold text-neutral-900">{producto.nombre}</h2>
             <p className="text-sm text-neutral-500">
-              {producto.unidadMedida} · stock mínimo {producto.stockMinimo}
+              {producto.unidadMedida}
               {!producto.activo ? ' · inactivo' : ''}
             </p>
           </div>
@@ -89,7 +90,7 @@ export function ProductoExpedienteModal({ producto, stock, onClose }: Props) {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Card className="flex flex-col gap-0.5 p-3">
               <p className="text-xs font-medium text-neutral-500">Stock actual</p>
-              <p className={`text-lg font-semibold ${stockActual < producto.stockMinimo ? 'text-danger-600' : 'text-neutral-900'}`}>
+              <p className={`text-lg font-semibold ${nivelStock(stockActual) === 'bajo' ? 'text-danger-600' : 'text-neutral-900'}`}>
                 {stockActual}
               </p>
             </Card>

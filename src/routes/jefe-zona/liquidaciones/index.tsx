@@ -186,7 +186,7 @@ function LiquidacionesJefeZona() {
               label="Lavador"
               value={lavadorFiltro === 'todos' ? '' : lavadorFiltro}
               onChange={(v) => setLavadorFiltro(v || 'todos')}
-              options={lavadores.map((l) => ({ value: l.id, label: l.nombre }))}
+              options={lavadores.filter((l) => l.activo).map((l) => ({ value: l.id, label: l.nombre }))}
             />
             <PeriodoSelector modo={modo} onModoChange={setModo} ancla={ancla} onAnclaChange={setAncla} rango={rango} />
           </>

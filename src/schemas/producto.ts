@@ -21,7 +21,6 @@ export const productoSchema = z.object({
   id: z.string(),
   nombre: z.string(),
   unidadMedida: z.string(),
-  stockMinimo: z.number().int().nonnegative(),
   activo: z.boolean(),
   // Precio de venta al público (distinto de costo_unitario, que solo vive en las entradas de
   // movimientos_inventario) — nullable a propósito, mismo criterio "Sin definir" que

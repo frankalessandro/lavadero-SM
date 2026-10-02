@@ -186,7 +186,6 @@ function StockPage() {
             nombre: p.nombre,
             unidad: p.unidadMedida,
             stock: stockPorProducto.get(p.id) ?? 0,
-            stockMinimo: p.stockMinimo,
           }))}
           onClose={() => setNivelModal(null)}
         />
@@ -396,7 +395,6 @@ function StockTable({
           <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
             <th className="px-5 py-3">Producto</th>
             <th className="px-5 py-3">Stock</th>
-            <th className="px-5 py-3">Mínimo</th>
             {mostrarPrecio ? <th className="px-5 py-3">Precio</th> : null}
             <th className="px-5 py-3">Estado</th>
           </tr>
@@ -419,7 +417,6 @@ function StockTable({
                     <p className="text-xs font-normal text-warning-700">{comprometido} cargadas sin cobrar</p>
                   ) : null}
                 </td>
-                <td className="px-5 py-3 text-neutral-500">{producto.stockMinimo}</td>
                 {mostrarPrecio ? (
                   <td className="px-5 py-3 text-neutral-700">
                     {producto.precioVenta != null ? COP.format(producto.precioVenta) : '—'}
