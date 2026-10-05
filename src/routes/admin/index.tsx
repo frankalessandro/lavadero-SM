@@ -830,16 +830,14 @@ function AdminDashboard() {
 
 // --- Piezas locales del dashboard ---
 
-// Estado de una caja: verde con responsable si hay turno abierto, ámbar si no.
+// Estado de una caja: verde con responsable si hay turno abierto, gris si no. Solo informativo
+// (no es un enlace ni un botón).
 function ChipCaja({ label, turno }: { label: string; turno: TurnoCaja | undefined }) {
   const abierta = Boolean(turno)
   return (
-    <Link
-      to="/admin/operacion/turnos"
-      className={`inline-flex min-w-0 items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-medium transition-colors ${
-        abierta
-          ? 'border-success-600/25 bg-success-50 text-success-700 hover:bg-success-600/10'
-          : 'border-neutral-200 bg-white text-neutral-500 hover:bg-neutral-50'
+    <div
+      className={`inline-flex min-w-0 items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-medium ${
+        abierta ? 'border-success-600/25 bg-success-50 text-success-700' : 'border-neutral-200 bg-white text-neutral-500'
       }`}
       title={
         turno
@@ -850,7 +848,7 @@ function ChipCaja({ label, turno }: { label: string; turno: TurnoCaja | undefine
       {abierta ? <LockOpen size={13} className="shrink-0" /> : <Lock size={13} className="shrink-0" />}
       <span className="shrink-0">{label}</span>
       <span className="truncate font-normal opacity-80">{turno ? `· ${turno.responsableActual}` : '· cerrada'}</span>
-    </Link>
+    </div>
   )
 }
 
