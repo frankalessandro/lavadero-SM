@@ -36,9 +36,12 @@ import { CurrencyInput } from '../../components/layout/CurrencyInput'
 import { CustomSelect } from '../../components/layout/CustomSelect'
 import { ReciboModal, type ReciboData } from '../../components/layout/ReciboModal'
 import { toast } from '../../lib/toast'
+import { fechaLocalISO } from '../../lib/periodo'
+import { fetchPermisos } from '../../data/cronograma'
+import type { PermisoLavador } from '../../schemas/cronograma'
 
 function hoyISO(): string {
-  return new Date().toISOString().slice(0, 10)
+  return fechaLocalISO(new Date())
 }
 
 async function loadRecepcion(corrigeId?: string) {
@@ -61,6 +64,7 @@ async function loadRecepcion(corrigeId?: string) {
     configuracion,
     descansosHoy,
     asistenciasHoy,
+    permisosHoy,
   ] = await Promise.all([
     fetchTiposVehiculo(),
     fetchCombos(),
@@ -75,6 +79,7 @@ async function loadRecepcion(corrigeId?: string) {
     fetchConfiguracion(),
     fetchDiasDescanso(hoyISO(), hoyISO()),
     fetchAsistenciasDelDia(hoyISO()),
+    fetchPermisos(hoyISO(), hoyISO()),
   ])
   // Orden a corregir (?corrige=<id>): se trae aparte porque depende del search param, no del
   // estado general de la pantalla.
@@ -82,6 +87,7 @@ async function loadRecepcion(corrigeId?: string) {
   return {
     corrigiendo,
     asistenciasHoy,
+    permisosHoy,
     tipos,
     combos,
     servicios,
@@ -164,6 +170,7 @@ function RecepcionPage() {
           ordenesHoy={ordenesHoy}
           descansosHoy={data.descansosHoy}
           asistenciasHoy={data.asistenciasHoy}
+          permisosHoy={data.permisosHoy}
           configuracion={data.configuracion}
           corrigiendo={data.corrigiendo}
           responsableTurno={data.turno.responsableActual}
@@ -255,6 +262,7 @@ function ReceptionForm({
   ordenesHoy,
   descansosHoy,
   asistenciasHoy,
+  permisosHoy,
   configuracion,
   corrigiendo,
   responsableTurno,
@@ -271,6 +279,8 @@ function ReceptionForm({
   ordenesHoy: Orden[]
   descansosHoy: DiaDescanso[]
   asistenciasHoy: AsistenciaLavador[]
+  /** Lavadores con permiso hoy: no trabajan, no se les asigna ni se les marca asistencia. */
+  permisosHoy: PermisoLavador[]
   configuracion: Configuracion
   /** Orden que se está corrigiendo (?corrige=<id>) — precarga el formulario y, al guardar,
    *  encadena la nueva con la anulación de esta. */
@@ -344,6 +354,10 @@ function ReceptionForm({
   // lavan dos vehículos a la vez — solo se marca para que quien recibe decida con esa información.
   // El que descansa hoy (M9) sí se oculta del todo: no tiene sentido asignarle nada ese día.
   const descansaHoyId = descansosHoy[0]?.lavadorId
+  const conPermisoIds = useMemo(
+    () => new Set(permisosHoy.filter((p) => !p.anulado).map((p) => p.lavadorId)),
+    [permisosHoy],
+  )
   const ocupadosIds = useMemo(
     () =>
       new Set(
@@ -366,7 +380,7 @@ function ReceptionForm({
     [asistenciasHoy],
   )
   const lavadorOptions = useMemo(() => {
-    const disponibles = lavadores.filter((l) => l.activo && l.id !== descansaHoyId)
+    const disponibles = lavadores.filter((l) => l.activo && l.id !== descansaHoyId && !conPermisoIds.has(l.id))
     return [
       { value: '', label: 'Sin asignar', description: 'Se asigna después desde el tablero de seguimiento' },
       ...[...disponibles]
@@ -386,7 +400,7 @@ function ReceptionForm({
           }
         }),
     ]
-  }, [lavadores, ocupadosIds, presentesIds, descansaHoyId])
+  }, [lavadores, ocupadosIds, presentesIds, descansaHoyId, conPermisoIds])
   // lavadorOptions[0] es siempre "Sin asignar" (value ''), no cuenta como lavador real acá.
   const lavadoresReales = lavadorOptions.filter((o) => o.value !== '')
   const todosOcupados = lavadoresReales.length > 0 && lavadoresReales.every((o) => ocupadosIds.has(o.value))

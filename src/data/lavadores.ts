@@ -1,9 +1,11 @@
 import { db } from '../lib/db'
 import { lavadorInputSchema, lavadorSchema, type Lavador, type LavadorInput } from '../schemas/lavador'
-import { fetchAsistenciasDelDia, fetchDiasDescanso } from './asistenciaLavadores'
+import { fetchAsistenciasDelDia, fetchDiasDescanso, sincronizarRotacionDesde } from './asistenciaLavadores'
+import { fetchPermisos } from './cronograma'
+import { fechaLocalISO } from '../lib/periodo'
 
 const LAVADOR_SELECT =
-  'id, nombre, telefono, fechaIngreso:fecha_ingreso, fechaCumpleanos:fecha_cumpleanos, activo, ultimaAsignacion:ultima_asignacion'
+  'id, nombre, telefono, fechaIngreso:fecha_ingreso, fechaCumpleanos:fecha_cumpleanos, activo, ultimaAsignacion:ultima_asignacion, posicionCronograma:posicion_cronograma_base'
 
 export async function fetchLavadores(): Promise<Lavador[]> {
   const { data, error } = await db
@@ -12,6 +14,13 @@ export async function fetchLavadores(): Promise<Lavador[]> {
     .order('nombre')
   if (error) throw new Error(error.message)
   return lavadorSchema.array().parse(data)
+}
+
+// El índice único del lugar en la rotación (0020) dispara 23505 si otro lavador ya lo tiene.
+function mensajeDeLavador(error: { code?: string; message: string }): string {
+  return error.code === '23505'
+    ? 'Ese lugar de la rotación ya lo tiene otro lavador — inactívalo o cámbiale el lugar primero.'
+    : error.message
 }
 
 // Regla de negocio 5: los lavadores nunca se eliminan, solo se crean/editan/inactivan.
@@ -24,10 +33,12 @@ export async function createLavador(input: LavadorInput): Promise<Lavador> {
       telefono: parsed.telefono,
       fecha_ingreso: parsed.fechaIngreso,
       fecha_cumpleanos: parsed.fechaCumpleanos,
+      posicion_cronograma_base: parsed.posicionCronograma ?? null,
     })
     .select(LAVADOR_SELECT)
     .single()
-  if (error) throw new Error(error.message)
+  if (error) throw new Error(mensajeDeLavador(error))
+  await sincronizarRotacionDesde(fechaLocalISO(new Date()))
   return lavadorSchema.parse(data)
 }
 
@@ -40,22 +51,27 @@ export async function updateLavador(id: string, input: LavadorInput): Promise<La
       telefono: parsed.telefono,
       fecha_ingreso: parsed.fechaIngreso,
       fecha_cumpleanos: parsed.fechaCumpleanos,
+      posicion_cronograma_base: parsed.posicionCronograma ?? null,
     })
     .eq('id', id)
     .select(LAVADOR_SELECT)
     .single()
-  if (error) throw new Error(error.message)
+  if (error) throw new Error(mensajeDeLavador(error))
+  await sincronizarRotacionDesde(fechaLocalISO(new Date()))
   return lavadorSchema.parse(data)
 }
 
+// Inactivar libera su lugar en la rotación de descansos para que lo tome quien lo reemplace;
+// activar de nuevo no se lo devuelve solo (puede que ya lo tenga otro) — se elige en el formulario.
 export async function setLavadorActivo(id: string, activo: boolean): Promise<Lavador> {
   const { data, error } = await db
     .from('lavadores')
-    .update({ activo })
+    .update(activo ? { activo } : { activo, posicion_cronograma_base: null })
     .eq('id', id)
     .select(LAVADOR_SELECT)
     .single()
   if (error) throw new Error(error.message)
+  await sincronizarRotacionDesde(fechaLocalISO(new Date()))
   return lavadorSchema.parse(data)
 }
 
@@ -81,10 +97,11 @@ export function asignacionDeHoy(ultimaAsignacion: string | null | undefined): nu
 }
 
 export async function suggestNextLavador(): Promise<string | undefined> {
-  const hoy = new Date().toISOString().slice(0, 10)
-  const [asistenciasHoy, descansosHoy, { data: ocupados, error: errorOcupados }, { data, error }] = await Promise.all([
+  const hoy = fechaLocalISO(new Date())
+  const [asistenciasHoy, descansosHoy, permisosHoy, { data: ocupados, error: errorOcupados }, { data, error }] = await Promise.all([
     fetchAsistenciasDelDia(hoy),
     fetchDiasDescanso(hoy, hoy),
+    fetchPermisos(hoy, hoy),
     db.from('ordenes').select('lavador_id, lavador_id_2').eq('estado', 'en_proceso'),
     db.from('lavadores').select('id, ultimaAsignacion:ultima_asignacion').eq('activo', true),
   ])
@@ -94,6 +111,7 @@ export async function suggestNextLavador(): Promise<string | undefined> {
   const presentesIds = new Set(asistenciasHoy.map((a) => a.lavadorId))
   const horaEntradaPorId = new Map(asistenciasHoy.map((a) => [a.lavadorId, a.horaEntrada]))
   const descansaHoyId = descansosHoy[0]?.lavadorId
+  const conPermisoIds = new Set(permisosHoy.filter((p) => !p.anulado).map((p) => p.lavadorId))
   const ocupadosIds = new Set(
     (ocupados as { lavador_id: string | null; lavador_id_2: string | null }[]).flatMap((o) =>
       [o.lavador_id, o.lavador_id_2].filter((id): id is string => !!id),
@@ -101,7 +119,7 @@ export async function suggestNextLavador(): Promise<string | undefined> {
   )
 
   const elegibles = (data as { id: string; ultimaAsignacion: string | null }[]).filter(
-    (l) => presentesIds.has(l.id) && l.id !== descansaHoyId && !ocupadosIds.has(l.id),
+    (l) => presentesIds.has(l.id) && l.id !== descansaHoyId && !conPermisoIds.has(l.id) && !ocupadosIds.has(l.id),
   )
   elegibles.sort((a, b) => {
     const asigA = asignacionDeHoy(a.ultimaAsignacion)

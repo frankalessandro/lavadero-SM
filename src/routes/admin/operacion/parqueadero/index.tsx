@@ -15,6 +15,7 @@ import { PeriodoSelector } from '../../../../components/layout/PeriodoSelector'
 import { BarraFiltros, FiltroBusqueda, FiltroMenu } from '../../../../components/layout/Filtros'
 import { Modal } from '../../../../components/layout/Modal'
 import { Button } from '../../../../components/layout/Button'
+import { SuscriptoresParqueadero } from '../../../../components/parqueadero/SuscriptoresParqueadero'
 import { ReciboParqueaderoModal } from '../../../../components/layout/ReciboParqueaderoModal'
 import { METODO_PAGO_LABEL } from '../../../../lib/metodoPago'
 import { huecosEntre, formatearHuecos } from '../../../../lib/consecutivo'
@@ -120,6 +121,8 @@ function ParqueaderoOperacionPage() {
           />
         }
       />
+
+      <SuscriptoresParqueadero puedeFecharAtras />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard label="Cobrado" value={COP.format(totalCobrado)} hint={`${salidasVigentes.length} salidas en el rango`} icon={Banknote} />

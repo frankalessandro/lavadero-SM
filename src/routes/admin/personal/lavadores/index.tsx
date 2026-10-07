@@ -12,6 +12,7 @@ import { fetchCombos } from '../../../../data/combos'
 import { fetchProductos } from '../../../../data/productos'
 import { lavadorInputSchema, type Lavador } from '../../../../schemas/lavador'
 import { Card } from '../../../../components/layout/Card'
+import { CustomSelect } from '../../../../components/layout/CustomSelect'
 import { ConfirmModal } from '../../../../components/layout/ConfirmModal'
 import { PageHeader } from '../../../../components/layout/PageHeader'
 import { LavadorExpedienteModal } from '../../../../components/layout/LavadorExpedienteModal'
@@ -85,6 +86,7 @@ function LavadoresPage() {
               <th className="px-5 py-3">Nombre</th>
               <th className="px-5 py-3">Contacto</th>
               <th className="px-5 py-3">Ingreso</th>
+              <th className="px-5 py-3">Rotación</th>
               <th className="px-5 py-3">Estado</th>
               <th className="px-5 py-3 text-right">Acciones</th>
             </tr>
@@ -103,6 +105,9 @@ function LavadoresPage() {
                 <td className="px-5 py-3 text-neutral-600">{lavador.telefono || '—'}</td>
                 <td className="px-5 py-3 text-neutral-600">
                   {new Date(lavador.fechaIngreso).toLocaleDateString('es-CO')}
+                </td>
+                <td className="px-5 py-3 text-neutral-600">
+                  {lavador.posicionCronograma !== undefined ? `Lugar ${lavador.posicionCronograma + 1}` : '—'}
                 </td>
                 <td className="px-5 py-3">
                   <span
@@ -136,7 +141,7 @@ function LavadoresPage() {
             ))}
             {lavadores.length === 0 ? (
               <tr>
-                <td className="px-5 py-6 text-center text-neutral-400" colSpan={5}>
+                <td className="px-5 py-6 text-center text-neutral-400" colSpan={6}>
                   No hay lavadores registrados.
                 </td>
               </tr>
@@ -158,6 +163,7 @@ function LavadoresPage() {
       {formOpen ? (
         <LavadorForm
           lavador={editing}
+          lavadores={lavadores}
           onClose={() => setFormOpen(false)}
           onSaved={async () => {
             setFormOpen(false)
@@ -171,7 +177,11 @@ function LavadoresPage() {
           title={confirmando.activo ? `¿Inactivar ${confirmando.nombre}?` : `¿Activar ${confirmando.nombre}?`}
           message={
             confirmando.activo
-              ? `Ya no aparecerá disponible en recepción ni en la cola de rotación.`
+              ? `Ya no aparecerá disponible en recepción ni en la cola de rotación.${
+                  confirmando.posicionCronograma !== undefined
+                    ? ` Su lugar en el cronograma de descansos (Lugar ${confirmando.posicionCronograma + 1}) queda libre: asígnaselo a quien lo reemplace desde "Nuevo lavador" o "Editar".`
+                    : ''
+                }`
               : `Volverá a estar disponible en recepción y en la cola de rotación.`
           }
           confirmLabel={confirmando.activo ? 'Inactivar' : 'Activar'}
@@ -188,12 +198,16 @@ function LavadoresPage() {
   )
 }
 
+const LUGARES_ROTACION = [0, 1, 2, 3]
+
 function LavadorForm({
   lavador,
+  lavadores,
   onClose,
   onSaved,
 }: {
   lavador: Lavador | null
+  lavadores: Lavador[]
   onClose: () => void
   onSaved: () => void
 }) {
@@ -203,6 +217,7 @@ function LavadorForm({
     lavador?.fechaIngreso ?? new Date().toISOString().slice(0, 10),
   )
   const [fechaCumpleanos, setFechaCumpleanos] = useState(lavador?.fechaCumpleanos ?? '')
+  const [lugar, setLugar] = useState(lavador?.posicionCronograma !== undefined ? String(lavador.posicionCronograma) : '')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -213,6 +228,7 @@ function LavadorForm({
       telefono: telefono || undefined,
       fechaIngreso,
       fechaCumpleanos: fechaCumpleanos || undefined,
+      posicionCronograma: lugar === '' ? undefined : Number(lugar),
     })
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Datos inválidos')
@@ -304,6 +320,34 @@ function LavadorForm({
               />
             </label>
           </div>
+
+          <label className="flex flex-col gap-1.5 text-left text-sm">
+            <span className="font-medium text-neutral-700">
+              Lugar en la rotación de descansos <span className="font-normal text-neutral-400">(opcional)</span>
+            </span>
+            <CustomSelect
+              size="sm"
+              value={lugar}
+              onChange={setLugar}
+              placeholder="No entra en la rotación"
+              options={[
+                { value: '', label: 'No entra en la rotación', description: 'Trabaja todos los días, sin descanso fijo' },
+                ...LUGARES_ROTACION.map((n) => {
+                  const dueno = lavadores.find((l) => l.activo && l.posicionCronograma === n && l.id !== lavador?.id)
+                  return {
+                    value: String(n),
+                    label: `Lugar ${n + 1}`,
+                    description: dueno ? `Lo tiene ${dueno.nombre} — libéralo primero` : 'Libre',
+                  }
+                }),
+              ]}
+            />
+            <span className="text-xs text-neutral-400">
+              Quién descansa cada lunes-jueves, quién entra a las 7am y quién sale a las 7pm sale de estos cuatro
+              lugares. Al inactivar a alguien su lugar queda libre: ponle ese mismo lugar a quien lo reemplace y el
+              cronograma de hoy en adelante pasa a esa persona.
+            </span>
+          </label>
 
           {error ? <p className="text-xs text-danger-600">{error}</p> : null}
 

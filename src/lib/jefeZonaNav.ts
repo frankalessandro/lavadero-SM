@@ -1,4 +1,4 @@
-import { LayoutDashboard, Wallet, ShoppingCart, Boxes, Coins, CalendarCheck } from 'lucide-react'
+import { LayoutDashboard, Wallet, ShoppingCart, Boxes, Coins, CalendarCheck, CircleParking } from 'lucide-react'
 import { ubicacionEn, type AdminSeccion, type UbicacionAdmin } from './adminNav'
 
 // Menú del jefe de patio, mismo formato que el de gerencia (src/lib/adminNav.ts) para que las dos
@@ -9,6 +9,7 @@ export const JEFE_ZONA_SECCIONES: AdminSeccion[] = [
   { to: '/jefe-zona', label: 'Seguimiento', icon: LayoutDashboard, grupo: 'Turno' },
   { to: '/jefe-zona/caja', label: 'Caja', icon: Wallet, grupo: 'Turno' },
   { to: '/jefe-zona/ventas', label: 'Ventas', icon: ShoppingCart, grupo: 'Turno' },
+  { to: '/jefe-zona/parqueadero', label: 'Parqueadero', icon: CircleParking, grupo: 'Turno' },
   { to: '/jefe-zona/inventario', label: 'Inventario', icon: Boxes, grupo: 'Control' },
   { to: '/jefe-zona/asistencia', label: 'Asistencia', icon: CalendarCheck, grupo: 'Control' },
   { to: '/jefe-zona/liquidaciones', label: 'Liquidaciones', icon: Coins, grupo: 'Control' },

@@ -28,7 +28,7 @@ function toFechaISO(utcMs: number): string {
 }
 
 // undefined = ese día nadie descansa (viernes a domingo, o antes de que existiera el cronograma).
-function posicionQueDescansa(utcMs: number): number | undefined {
+export function posicionQueDescansa(utcMs: number): number | undefined {
   const diffDias = Math.round((utcMs - EPOCA_LUNES_UTC) / UN_DIA_MS)
   if (diffDias < 0) return undefined
   const diaSemana = diffDias % 7 // 0 = lunes ... 6 = domingo (la fecha ancla es un lunes)
@@ -38,25 +38,22 @@ function posicionQueDescansa(utcMs: number): number | undefined {
   return (diaSemana + CANTIDAD_ORDEN_BASE - rotacion) % CANTIDAD_ORDEN_BASE
 }
 
-// La posición 0-3 vive en `lavadores.posicion_cronograma_base` (migración 0020), asignada una
-// sola vez al lavador por `id` — renombrar o inactivar ya no rompe la búsqueda, a diferencia de
-// la versión anterior que resolvía por nombre exacto en cada visita a la pantalla.
-async function resolverIdsOrdenBase(): Promise<string[]> {
+// La posición 0-3 vive en `lavadores.posicion_cronograma_base` (migración 0020) y se elige en
+// Personal › Lavadores: es la fuente única, no una lista aparte. Solo cuentan los lavadores
+// ACTIVOS; si falta alguien en un lugar (se fue y aún no entra su reemplazo) ese lugar queda
+// vacío (`undefined`) y esos días nadie descansa en vez de romper las pantallas.
+export async function resolverIdsOrdenBase(): Promise<(string | undefined)[]> {
   const { data, error } = await db
     .from('lavadores')
     .select('id, posicionCronogramaBase:posicion_cronograma_base')
+    .eq('activo', true)
     .not('posicion_cronograma_base', 'is', null)
-    .order('posicion_cronograma_base')
   if (error) throw new Error(error.message)
 
-  const filas = data as { id: string; posicionCronogramaBase: number }[]
-  if (filas.length !== CANTIDAD_ORDEN_BASE) {
-    throw new Error(
-      `El cronograma base necesita ${CANTIDAD_ORDEN_BASE} lavadores con posición asignada y hay ${filas.length} — revisa "posicion_cronograma_base" en /admin/lavadores.`,
-    )
+  const ids = new Array<string | undefined>(CANTIDAD_ORDEN_BASE).fill(undefined)
+  for (const fila of data as { id: string; posicionCronogramaBase: number }[]) {
+    ids[fila.posicionCronogramaBase] = fila.id
   }
-  const ids = new Array<string>(CANTIDAD_ORDEN_BASE)
-  for (const fila of filas) ids[fila.posicionCronogramaBase] = fila.id
   return ids
 }
 
@@ -84,12 +81,43 @@ export async function ensureDiasDescansoGenerados(hastaISO: string): Promise<voi
   for (let ms = EPOCA_LUNES_UTC; ms <= hastaMs; ms += UN_DIA_MS) {
     const posicion = posicionQueDescansa(ms)
     if (posicion === undefined) continue
-    filas.push({ fecha: toFechaISO(ms), lavador_id: ordenBaseIds[posicion] })
+    const lavadorId = ordenBaseIds[posicion]
+    if (!lavadorId) continue
+    filas.push({ fecha: toFechaISO(ms), lavador_id: lavadorId })
   }
   if (filas.length === 0) return
 
   const { error } = await db.from('dias_descanso').upsert(filas, { onConflict: 'fecha', ignoreDuplicates: true })
   if (error) throw new Error(error.message)
+}
+
+// Alinea con la rotación los descansos de `desdeISO` en adelante que nadie cambió a mano. Se
+// llama cuando cambia el equipo (alguien entra, sale o toma otro lugar), así los días futuros
+// siguen a la persona que hoy ocupa cada lugar. El pasado no se reescribe.
+export async function sincronizarRotacionDesde(desdeISO: string): Promise<void> {
+  const { data, error } = await db
+    .from('dias_descanso')
+    .select('fecha, lavadorId:lavador_id')
+    .gte('fecha', desdeISO)
+    .is('actualizado_por', null)
+  if (error) throw new Error(error.message)
+
+  const ids = await resolverIdsOrdenBase()
+  const porLavador = new Map<string, string[]>()
+  for (const fila of data as { fecha: string; lavadorId: string }[]) {
+    const [y, m, d] = fila.fecha.split('-').map(Number)
+    const posicion = posicionQueDescansa(Date.UTC(y, m - 1, d))
+    const lavadorId = posicion === undefined ? undefined : ids[posicion]
+    if (!lavadorId || lavadorId === fila.lavadorId) continue
+    porLavador.set(lavadorId, [...(porLavador.get(lavadorId) ?? []), fila.fecha])
+  }
+  for (const [lavadorId, fechas] of porLavador) {
+    const { error: errorUpd } = await db
+      .from('dias_descanso')
+      .update({ lavador_id: lavadorId, actualizado_en: new Date().toISOString() })
+      .in('fecha', fechas)
+    if (errorUpd) throw new Error(errorUpd.message)
+  }
 }
 
 // Cambio entre trabajadores (swap): corrige quién descansa una fecha puntual ya generada.

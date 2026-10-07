@@ -38,6 +38,7 @@ import { Route as JefeZonaAsistenciaIndexRouteImport } from './routes/jefe-zona/
 import { Route as JefeZonaCajaIndexRouteImport } from './routes/jefe-zona/caja/index'
 import { Route as JefeZonaInventarioIndexRouteImport } from './routes/jefe-zona/inventario/index'
 import { Route as JefeZonaLiquidacionesIndexRouteImport } from './routes/jefe-zona/liquidaciones/index'
+import { Route as JefeZonaParqueaderoIndexRouteImport } from './routes/jefe-zona/parqueadero/index'
 import { Route as JefeZonaVentasIndexRouteImport } from './routes/jefe-zona/ventas/index'
 import { Route as AdminCatalogoCombosIndexRouteImport } from './routes/admin/catalogo/combos/index'
 import { Route as AdminCatalogoParqueaderoIndexRouteImport } from './routes/admin/catalogo/parqueadero/index'
@@ -53,6 +54,7 @@ import { Route as AdminOperacionClientesIndexRouteImport } from './routes/admin/
 import { Route as AdminOperacionOrdenesIndexRouteImport } from './routes/admin/operacion/ordenes/index'
 import { Route as AdminOperacionParqueaderoIndexRouteImport } from './routes/admin/operacion/parqueadero/index'
 import { Route as AdminOperacionTurnosIndexRouteImport } from './routes/admin/operacion/turnos/index'
+import { Route as AdminPersonalCronogramaIndexRouteImport } from './routes/admin/personal/cronograma/index'
 import { Route as AdminPersonalLavadoresIndexRouteImport } from './routes/admin/personal/lavadores/index'
 import { Route as AdminPersonalUsuariosIndexRouteImport } from './routes/admin/personal/usuarios/index'
 
@@ -202,6 +204,12 @@ const JefeZonaLiquidacionesIndexRoute =
     path: '/liquidaciones/',
     getParentRoute: () => JefeZonaRouteRoute,
   } as any)
+const JefeZonaParqueaderoIndexRoute =
+  JefeZonaParqueaderoIndexRouteImport.update({
+    id: '/parqueadero/',
+    path: '/parqueadero/',
+    getParentRoute: () => JefeZonaRouteRoute,
+  } as any)
 const JefeZonaVentasIndexRoute = JefeZonaVentasIndexRouteImport.update({
   id: '/ventas/',
   path: '/ventas/',
@@ -289,6 +297,12 @@ const AdminOperacionTurnosIndexRoute =
     path: '/turnos/',
     getParentRoute: () => AdminOperacionRouteRoute,
   } as any)
+const AdminPersonalCronogramaIndexRoute =
+  AdminPersonalCronogramaIndexRouteImport.update({
+    id: '/cronograma/',
+    path: '/cronograma/',
+    getParentRoute: () => AdminPersonalRouteRoute,
+  } as any)
 const AdminPersonalLavadoresIndexRoute =
   AdminPersonalLavadoresIndexRouteImport.update({
     id: '/lavadores/',
@@ -332,6 +346,7 @@ export interface FileRoutesByFullPath {
   '/jefe-zona/caja/': typeof JefeZonaCajaIndexRoute
   '/jefe-zona/inventario/': typeof JefeZonaInventarioIndexRoute
   '/jefe-zona/liquidaciones/': typeof JefeZonaLiquidacionesIndexRoute
+  '/jefe-zona/parqueadero/': typeof JefeZonaParqueaderoIndexRoute
   '/jefe-zona/ventas/': typeof JefeZonaVentasIndexRoute
   '/admin/catalogo/combos/': typeof AdminCatalogoCombosIndexRoute
   '/admin/catalogo/parqueadero/': typeof AdminCatalogoParqueaderoIndexRoute
@@ -347,6 +362,7 @@ export interface FileRoutesByFullPath {
   '/admin/operacion/ordenes/': typeof AdminOperacionOrdenesIndexRoute
   '/admin/operacion/parqueadero/': typeof AdminOperacionParqueaderoIndexRoute
   '/admin/operacion/turnos/': typeof AdminOperacionTurnosIndexRoute
+  '/admin/personal/cronograma/': typeof AdminPersonalCronogramaIndexRoute
   '/admin/personal/lavadores/': typeof AdminPersonalLavadoresIndexRoute
   '/admin/personal/usuarios/': typeof AdminPersonalUsuariosIndexRoute
 }
@@ -372,6 +388,7 @@ export interface FileRoutesByTo {
   '/jefe-zona/caja': typeof JefeZonaCajaIndexRoute
   '/jefe-zona/inventario': typeof JefeZonaInventarioIndexRoute
   '/jefe-zona/liquidaciones': typeof JefeZonaLiquidacionesIndexRoute
+  '/jefe-zona/parqueadero': typeof JefeZonaParqueaderoIndexRoute
   '/jefe-zona/ventas': typeof JefeZonaVentasIndexRoute
   '/admin/catalogo/combos': typeof AdminCatalogoCombosIndexRoute
   '/admin/catalogo/parqueadero': typeof AdminCatalogoParqueaderoIndexRoute
@@ -387,6 +404,7 @@ export interface FileRoutesByTo {
   '/admin/operacion/ordenes': typeof AdminOperacionOrdenesIndexRoute
   '/admin/operacion/parqueadero': typeof AdminOperacionParqueaderoIndexRoute
   '/admin/operacion/turnos': typeof AdminOperacionTurnosIndexRoute
+  '/admin/personal/cronograma': typeof AdminPersonalCronogramaIndexRoute
   '/admin/personal/lavadores': typeof AdminPersonalLavadoresIndexRoute
   '/admin/personal/usuarios': typeof AdminPersonalUsuariosIndexRoute
 }
@@ -421,6 +439,7 @@ export interface FileRoutesById {
   '/jefe-zona/caja/': typeof JefeZonaCajaIndexRoute
   '/jefe-zona/inventario/': typeof JefeZonaInventarioIndexRoute
   '/jefe-zona/liquidaciones/': typeof JefeZonaLiquidacionesIndexRoute
+  '/jefe-zona/parqueadero/': typeof JefeZonaParqueaderoIndexRoute
   '/jefe-zona/ventas/': typeof JefeZonaVentasIndexRoute
   '/admin/catalogo/combos/': typeof AdminCatalogoCombosIndexRoute
   '/admin/catalogo/parqueadero/': typeof AdminCatalogoParqueaderoIndexRoute
@@ -436,6 +455,7 @@ export interface FileRoutesById {
   '/admin/operacion/ordenes/': typeof AdminOperacionOrdenesIndexRoute
   '/admin/operacion/parqueadero/': typeof AdminOperacionParqueaderoIndexRoute
   '/admin/operacion/turnos/': typeof AdminOperacionTurnosIndexRoute
+  '/admin/personal/cronograma/': typeof AdminPersonalCronogramaIndexRoute
   '/admin/personal/lavadores/': typeof AdminPersonalLavadoresIndexRoute
   '/admin/personal/usuarios/': typeof AdminPersonalUsuariosIndexRoute
 }
@@ -471,6 +491,7 @@ export interface FileRouteTypes {
     | '/jefe-zona/caja/'
     | '/jefe-zona/inventario/'
     | '/jefe-zona/liquidaciones/'
+    | '/jefe-zona/parqueadero/'
     | '/jefe-zona/ventas/'
     | '/admin/catalogo/combos/'
     | '/admin/catalogo/parqueadero/'
@@ -486,6 +507,7 @@ export interface FileRouteTypes {
     | '/admin/operacion/ordenes/'
     | '/admin/operacion/parqueadero/'
     | '/admin/operacion/turnos/'
+    | '/admin/personal/cronograma/'
     | '/admin/personal/lavadores/'
     | '/admin/personal/usuarios/'
   fileRoutesByTo: FileRoutesByTo
@@ -511,6 +533,7 @@ export interface FileRouteTypes {
     | '/jefe-zona/caja'
     | '/jefe-zona/inventario'
     | '/jefe-zona/liquidaciones'
+    | '/jefe-zona/parqueadero'
     | '/jefe-zona/ventas'
     | '/admin/catalogo/combos'
     | '/admin/catalogo/parqueadero'
@@ -526,6 +549,7 @@ export interface FileRouteTypes {
     | '/admin/operacion/ordenes'
     | '/admin/operacion/parqueadero'
     | '/admin/operacion/turnos'
+    | '/admin/personal/cronograma'
     | '/admin/personal/lavadores'
     | '/admin/personal/usuarios'
   id:
@@ -559,6 +583,7 @@ export interface FileRouteTypes {
     | '/jefe-zona/caja/'
     | '/jefe-zona/inventario/'
     | '/jefe-zona/liquidaciones/'
+    | '/jefe-zona/parqueadero/'
     | '/jefe-zona/ventas/'
     | '/admin/catalogo/combos/'
     | '/admin/catalogo/parqueadero/'
@@ -574,6 +599,7 @@ export interface FileRouteTypes {
     | '/admin/operacion/ordenes/'
     | '/admin/operacion/parqueadero/'
     | '/admin/operacion/turnos/'
+    | '/admin/personal/cronograma/'
     | '/admin/personal/lavadores/'
     | '/admin/personal/usuarios/'
   fileRoutesById: FileRoutesById
@@ -796,6 +822,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof JefeZonaLiquidacionesIndexRouteImport
       parentRoute: typeof JefeZonaRouteRoute
     }
+    '/jefe-zona/parqueadero/': {
+      id: '/jefe-zona/parqueadero/'
+      path: '/parqueadero'
+      fullPath: '/jefe-zona/parqueadero/'
+      preLoaderRoute: typeof JefeZonaParqueaderoIndexRouteImport
+      parentRoute: typeof JefeZonaRouteRoute
+    }
     '/jefe-zona/ventas/': {
       id: '/jefe-zona/ventas/'
       path: '/ventas'
@@ -901,6 +934,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminOperacionTurnosIndexRouteImport
       parentRoute: typeof AdminOperacionRouteRoute
     }
+    '/admin/personal/cronograma/': {
+      id: '/admin/personal/cronograma/'
+      path: '/cronograma'
+      fullPath: '/admin/personal/cronograma/'
+      preLoaderRoute: typeof AdminPersonalCronogramaIndexRouteImport
+      parentRoute: typeof AdminPersonalRouteRoute
+    }
     '/admin/personal/lavadores/': {
       id: '/admin/personal/lavadores/'
       path: '/lavadores'
@@ -981,12 +1021,14 @@ const AdminOperacionRouteRouteWithChildren =
 
 interface AdminPersonalRouteRouteChildren {
   AdminPersonalIndexRoute: typeof AdminPersonalIndexRoute
+  AdminPersonalCronogramaIndexRoute: typeof AdminPersonalCronogramaIndexRoute
   AdminPersonalLavadoresIndexRoute: typeof AdminPersonalLavadoresIndexRoute
   AdminPersonalUsuariosIndexRoute: typeof AdminPersonalUsuariosIndexRoute
 }
 
 const AdminPersonalRouteRouteChildren: AdminPersonalRouteRouteChildren = {
   AdminPersonalIndexRoute: AdminPersonalIndexRoute,
+  AdminPersonalCronogramaIndexRoute: AdminPersonalCronogramaIndexRoute,
   AdminPersonalLavadoresIndexRoute: AdminPersonalLavadoresIndexRoute,
   AdminPersonalUsuariosIndexRoute: AdminPersonalUsuariosIndexRoute,
 }
@@ -1026,6 +1068,7 @@ interface JefeZonaRouteRouteChildren {
   JefeZonaCajaIndexRoute: typeof JefeZonaCajaIndexRoute
   JefeZonaInventarioIndexRoute: typeof JefeZonaInventarioIndexRoute
   JefeZonaLiquidacionesIndexRoute: typeof JefeZonaLiquidacionesIndexRoute
+  JefeZonaParqueaderoIndexRoute: typeof JefeZonaParqueaderoIndexRoute
   JefeZonaVentasIndexRoute: typeof JefeZonaVentasIndexRoute
 }
 
@@ -1035,6 +1078,7 @@ const JefeZonaRouteRouteChildren: JefeZonaRouteRouteChildren = {
   JefeZonaCajaIndexRoute: JefeZonaCajaIndexRoute,
   JefeZonaInventarioIndexRoute: JefeZonaInventarioIndexRoute,
   JefeZonaLiquidacionesIndexRoute: JefeZonaLiquidacionesIndexRoute,
+  JefeZonaParqueaderoIndexRoute: JefeZonaParqueaderoIndexRoute,
   JefeZonaVentasIndexRoute: JefeZonaVentasIndexRoute,
 }
 

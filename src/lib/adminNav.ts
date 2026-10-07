@@ -20,6 +20,7 @@ import {
   Car,
   CircleParking,
   UserCog,
+  CalendarDays,
 } from 'lucide-react'
 
 type Icono = ComponentType<{ size?: number; strokeWidth?: number }>
@@ -84,6 +85,7 @@ export const ADMIN_SECCIONES: AdminSeccion[] = [
     exact: false,
     tabs: [
       { to: '/admin/personal/lavadores', label: 'Lavadores', icon: Users },
+      { to: '/admin/personal/cronograma', label: 'Cronograma', icon: CalendarDays },
       { to: '/admin/personal/usuarios', label: 'Usuarios', icon: UserCog },
     ],
   },

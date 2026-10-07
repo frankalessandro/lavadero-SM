@@ -51,6 +51,11 @@ export const ENTIDAD_LABEL: Record<string, string> = {
   compras: 'Compra de inventario',
   ingresos_otros: 'Otro ingreso',
   categorias_ingreso: 'Categoría de ingreso',
+  suscripciones_parqueadero: 'Suscripción de parqueadero',
+  pagos_suscripcion_parqueadero: 'Pago de suscripción',
+  dias_descanso: 'Descanso de lavador',
+  cronograma_dias: 'Cronograma del día',
+  permisos_lavadores: 'Permiso de lavador',
 }
 
 // Las cuatro acciones que el Plan nombra como no negociables, más la edición del histórico que

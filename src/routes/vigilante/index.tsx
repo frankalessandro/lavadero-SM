@@ -24,6 +24,7 @@ import {
   CLASE_VEHICULO_LABEL,
 } from '../../schemas/estanciaParqueadero'
 import { METODO_PAGO_LABEL } from '../../lib/metodoPago'
+import { SuscriptoresParqueadero } from '../../components/parqueadero/SuscriptoresParqueadero'
 import { fetchSuscripcionActivaPorPlaca } from '../../data/suscripcionesParqueadero'
 import { estadoVigencia, ESTADO_VIGENCIA_LABEL, type SuscripcionParqueadero } from '../../schemas/suscripcionParqueadero'
 import { fetchTurnoAbierto, abrirTurno, calcularValorEsperado, cerrarTurno } from '../../data/turnos'
@@ -214,6 +215,8 @@ function VigilanteHome() {
           ) : null}
         </div>
       </section>
+
+      <SuscriptoresParqueadero />
 
       {modal === 'entrada' ? (
         <EntradaModal

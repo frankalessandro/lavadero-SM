@@ -22,6 +22,15 @@ export const lavadorSchema = z.object({
   // poder mostrar el orden completo en el dashboard, no solo el siguiente (suggestNextLavador
   // sigue siendo la fuente de verdad al momento de asignar en /recepcion).
   ultimaAsignacion: nullableDate,
+  // Lugar en la rotación de descansos (0-3): quién descansa cada lunes-jueves sale de acá, no de
+  // una lista aparte. Se libera al inactivar; quien entre a cubrir ese lugar hereda su turno.
+  posicionCronograma: z
+    .number()
+    .int()
+    .min(0)
+    .max(3)
+    .nullish()
+    .transform((value) => value ?? undefined),
 })
 
 export const lavadorInputSchema = z.object({
@@ -29,6 +38,7 @@ export const lavadorInputSchema = z.object({
   telefono: z.string().trim().optional(),
   fechaIngreso: z.string().min(1, 'La fecha de ingreso es obligatoria'),
   fechaCumpleanos: z.string().trim().optional(),
+  posicionCronograma: z.number().int().min(0).max(3).optional(),
 })
 
 export type Lavador = z.infer<typeof lavadorSchema>
