@@ -474,7 +474,7 @@ function ComboForm({
   )
 
   const tiposDeCategoria = useMemo(
-    () => tipos.filter((t) => t.categoria === categoria && t.activo),
+    () => tipos.filter((t) => t.categoria === categoria && t.activo && !t.precioAbierto),
     [tipos, categoria],
   )
 

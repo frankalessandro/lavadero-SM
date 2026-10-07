@@ -164,8 +164,11 @@ export const ordenInputSchema = z
     observaciones: z.string().trim().optional(),
     // Servicios individuales — sea que acompañen al combo o que sean todo lo que lleva la orden.
     serviciosAdicionales: z.array(z.string()).optional().default([]),
+    // Solo para tipos de vehículo sin precio de lista (moto eléctrica): el valor acordado lo
+    // digita el jefe de patio. createOrden lo exige en esos tipos y lo ignora en los demás.
+    precioAbierto: z.number().int().positive('Digita el precio acordado').optional(),
   })
-  .refine((data) => !!data.comboId || data.serviciosAdicionales.length > 0, {
+  .refine((data) => !!data.precioAbierto || !!data.comboId || data.serviciosAdicionales.length > 0, {
     message: 'Selecciona un combo o al menos un servicio individual',
     path: ['comboId'],
   })

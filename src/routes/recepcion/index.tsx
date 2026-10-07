@@ -32,6 +32,7 @@ import type { PrecioCombo } from '../../schemas/precioCombo'
 import type { Configuracion } from '../../schemas/configuracion'
 import { Card } from '../../components/layout/Card'
 import { AccordionSection } from '../../components/layout/Accordion'
+import { CurrencyInput } from '../../components/layout/CurrencyInput'
 import { CustomSelect } from '../../components/layout/CustomSelect'
 import { ReciboModal, type ReciboData } from '../../components/layout/ReciboModal'
 import { toast } from '../../lib/toast'
@@ -238,6 +239,8 @@ const emptyForm = {
   lavadorId2: '',
   observaciones: '',
   altoCilindraje: false,
+  // Dígitos crudos del precio acordado — solo para tipos sin precio de lista (moto eléctrica).
+  precioAbierto: '',
 }
 
 function ReceptionForm({
@@ -289,6 +292,9 @@ function ReceptionForm({
           lavadorId2: corrigiendo.lavadorId2 ?? '',
           observaciones: corrigiendo.observaciones ?? '',
           altoCilindraje: corrigiendo.altoCilindraje,
+          precioAbierto: tipos.find((t) => t.id === corrigiendo.tipoVehiculoId)?.precioAbierto
+            ? String(corrigiendo.precio)
+            : '',
         }
       : emptyForm,
   )
@@ -386,6 +392,7 @@ function ReceptionForm({
   const todosOcupados = lavadoresReales.length > 0 && lavadoresReales.every((o) => ocupadosIds.has(o.value))
 
   const tipoSeleccionado = tipos.find((t) => t.id === form.tipoVehiculoId)
+  const precioAbierto = !!tipoSeleccionado?.precioAbierto
 
   const combosDisponibles = useMemo(
     () =>
@@ -438,8 +445,9 @@ function ReceptionForm({
   // Si hay combo elegido pero no se le pudo calcular precio (ej. le faltan servicios/precios
   // configurados para este tipo de vehículo — como pasa hoy con las motos), el total NO está
   // listo: mostrar $0 sería engañoso y dejaría enviar una orden que el servidor va a rechazar.
-  const precio =
-    form.comboId && precioCombo === undefined
+  const precio = precioAbierto
+    ? Number(form.precioAbierto) || undefined
+    : form.comboId && precioCombo === undefined
       ? undefined
       : form.comboId || serviciosAdicionales.length > 0
         ? (precioCombo ?? 0) + precioServiciosIndividuales + recargoAltoCilindraje
@@ -448,9 +456,9 @@ function ReceptionForm({
   const paso1Completo = !!(form.placa && form.clienteNombre && form.tipoVehiculoId)
   // El lavador es opcional: si los 4 están ocupados y hay cola, se registra sin asignar y se
   // asigna después desde el tablero de seguimiento (jefe de zona).
-  const paso2Completo = !!(
-    (form.comboId && precioCombo !== undefined) || (!form.comboId && serviciosAdicionales.length > 0)
-  )
+  const paso2Completo = precioAbierto
+    ? !!precio
+    : !!((form.comboId && precioCombo !== undefined) || (!form.comboId && serviciosAdicionales.length > 0))
 
   function update<K extends keyof typeof emptyForm>(key: K, value: (typeof emptyForm)[K]) {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -500,7 +508,7 @@ function ReceptionForm({
   }
 
   function handleTipoChange(tipoVehiculoId: string) {
-    setForm((prev) => ({ ...prev, tipoVehiculoId, comboId: '', altoCilindraje: false }))
+    setForm((prev) => ({ ...prev, tipoVehiculoId, comboId: '', altoCilindraje: false, precioAbierto: '' }))
     setServiciosAdicionales([])
     checkMotoDuplicada(form.placa, tipoVehiculoId)
   }
@@ -527,13 +535,14 @@ function ReceptionForm({
     if (enVueloRef.current) return
     const parsed = ordenInputSchema.safeParse({
       ...form,
-      comboId: form.comboId || undefined,
       lavadorId: form.lavadorId || undefined,
       lavadorId2: lavarEntreDos ? form.lavadorId2 || undefined : undefined,
       clienteTelefono: form.clienteTelefono || undefined,
       clienteCorreo: form.clienteCorreo || undefined,
       observaciones: form.observaciones || undefined,
-      serviciosAdicionales,
+      serviciosAdicionales: precioAbierto ? [] : serviciosAdicionales,
+      comboId: precioAbierto ? undefined : form.comboId || undefined,
+      precioAbierto: precioAbierto ? Number(form.precioAbierto) || undefined : undefined,
     })
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Revisa los datos del formulario')
@@ -717,96 +726,117 @@ function ReceptionForm({
       <AccordionSection
         step={2}
         title="Servicio"
-        summary={form.comboId ? combos.find((c) => c.id === form.comboId)?.nombre : 'Servicios y lavador'}
+        summary={
+          precioAbierto
+            ? precio
+              ? `Precio acordado · ${COP.format(precio)}`
+              : 'Precio acordado'
+            : form.comboId
+              ? combos.find((c) => c.id === form.comboId)?.nombre
+              : 'Servicios y lavador'
+        }
         isOpen={openStep === 2}
         isComplete={paso2Completo}
         onToggle={() => toggleStep(2)}
       >
-        <div className="flex flex-col gap-1.5 text-sm">
-          <span className="font-medium text-neutral-700">¿Qué se registra?</span>
-          <div className="grid grid-cols-2 gap-2">
-            {(
-              [
-                { value: 'combo' as const, label: 'Combo' },
-                { value: 'servicios' as const, label: 'Servicios sueltos' },
-              ]
-            ).map(({ value, label }) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => handleModoChange(value)}
-                className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
-                  modo === value
-                    ? 'border-primary-600 bg-primary-50 text-primary-700'
-                    : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {modo === 'combo' ? (
+        {precioAbierto ? (
           <label className="flex flex-col gap-1.5 text-sm">
-            <span className="flex items-center gap-1.5 font-medium text-neutral-700">
-              <Package size={14} className="text-primary-500" /> Combo
+            <span className="font-medium text-neutral-700">Precio acordado</span>
+            <CurrencyInput value={form.precioAbierto} onChange={(v) => update('precioAbierto', v)} />
+            <span className="text-xs text-neutral-400">
+              {tipoSeleccionado?.nombre} no tiene precio de lista: digita lo que se acordó con el cliente. La
+              comisión se reparte con la misma regla de siempre.
             </span>
-            <CustomSelect
-              value={form.comboId}
-              onChange={handleComboChange}
-              disabled={!form.tipoVehiculoId}
-              placeholder={form.tipoVehiculoId ? 'Selecciona…' : 'Primero elige el tipo de vehículo'}
-              emptyLabel="No hay combos con precio para ese tipo"
-              options={combosDisponibles.map((c) => ({ value: c.id, label: c.nombre, description: c.descripcion }))}
-            />
           </label>
-        ) : null}
-
-        {comboSeleccionado?.descripcion ? (
-          <p className="text-sm text-neutral-500">{comboSeleccionado.descripcion}</p>
-        ) : null}
-
-        {form.tipoVehiculoId && (modo === 'servicios' || serviciosDisponibles.length > 0) ? (
-          <div className="flex flex-col gap-1.5 rounded-lg border border-neutral-200 p-3">
-            <span className="flex items-center gap-1.5 text-sm font-medium text-neutral-700">
-              <Sparkles size={14} className="text-primary-500" />
-              {modo === 'combo' ? 'Servicios adicionales' : 'Servicios'}
-              <span className="font-normal text-neutral-400">
-                {modo === 'combo' ? '(opcional, fuera del combo)' : '(precio individual)'}
-              </span>
-            </span>
-            {serviciosDisponibles.map((servicio) => (
-              <label key={servicio.id} className="flex items-center gap-2.5 rounded-lg px-1 py-1 text-sm">
-                <input
-                  type="checkbox"
-                  checked={serviciosAdicionales.includes(servicio.id)}
-                  onChange={() => toggleServicioAdicional(servicio.id)}
-                  className="size-4 rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
-                />
-                <span className="text-neutral-700">{servicio.nombre}</span>
-                <span className="ml-auto text-xs text-neutral-400">
-                  {COP.format(findPrecioServicioIndividual(preciosServicioIndividual, servicio.id, form.tipoVehiculoId)?.precio ?? 0)}
-                </span>
-              </label>
-            ))}
+        ) : (
+          <>
+          <div className="flex flex-col gap-1.5 text-sm">
+            <span className="font-medium text-neutral-700">¿Qué se registra?</span>
+            <div className="grid grid-cols-2 gap-2">
+              {(
+                [
+                  { value: 'combo' as const, label: 'Combo' },
+                  { value: 'servicios' as const, label: 'Servicios sueltos' },
+                ]
+              ).map(({ value, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => handleModoChange(value)}
+                  className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
+                    modo === value
+                      ? 'border-primary-600 bg-primary-50 text-primary-700'
+                      : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
-        ) : null}
 
-        {tipoSeleccionado?.categoria === 'moto' ? (
-          <label className="flex items-center gap-2.5 rounded-lg border border-neutral-200 px-3 py-3 text-sm">
-            <input
-              type="checkbox"
-              checked={form.altoCilindraje}
-              onChange={(e) => update('altoCilindraje', e.target.checked)}
-              className="size-4 rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
-            />
-            <span className="text-neutral-700">
-              Alto cilindraje
-              <span className="ml-1 text-xs text-neutral-400">(+{COP.format(configuracion.recargoAltoCilindraje)})</span>
-            </span>
-          </label>
-        ) : null}
+          {modo === 'combo' ? (
+            <label className="flex flex-col gap-1.5 text-sm">
+              <span className="flex items-center gap-1.5 font-medium text-neutral-700">
+                <Package size={14} className="text-primary-500" /> Combo
+              </span>
+              <CustomSelect
+                value={form.comboId}
+                onChange={handleComboChange}
+                disabled={!form.tipoVehiculoId}
+                placeholder={form.tipoVehiculoId ? 'Selecciona…' : 'Primero elige el tipo de vehículo'}
+                emptyLabel="No hay combos con precio para ese tipo"
+                options={combosDisponibles.map((c) => ({ value: c.id, label: c.nombre, description: c.descripcion }))}
+              />
+            </label>
+          ) : null}
+
+          {comboSeleccionado?.descripcion ? (
+            <p className="text-sm text-neutral-500">{comboSeleccionado.descripcion}</p>
+          ) : null}
+
+          {form.tipoVehiculoId && (modo === 'servicios' || serviciosDisponibles.length > 0) ? (
+            <div className="flex flex-col gap-1.5 rounded-lg border border-neutral-200 p-3">
+              <span className="flex items-center gap-1.5 text-sm font-medium text-neutral-700">
+                <Sparkles size={14} className="text-primary-500" />
+                {modo === 'combo' ? 'Servicios adicionales' : 'Servicios'}
+                <span className="font-normal text-neutral-400">
+                  {modo === 'combo' ? '(opcional, fuera del combo)' : '(precio individual)'}
+                </span>
+              </span>
+              {serviciosDisponibles.map((servicio) => (
+                <label key={servicio.id} className="flex items-center gap-2.5 rounded-lg px-1 py-1 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={serviciosAdicionales.includes(servicio.id)}
+                    onChange={() => toggleServicioAdicional(servicio.id)}
+                    className="size-4 rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <span className="text-neutral-700">{servicio.nombre}</span>
+                  <span className="ml-auto text-xs text-neutral-400">
+                    {COP.format(findPrecioServicioIndividual(preciosServicioIndividual, servicio.id, form.tipoVehiculoId)?.precio ?? 0)}
+                  </span>
+                </label>
+              ))}
+            </div>
+          ) : null}
+
+          {tipoSeleccionado?.categoria === 'moto' ? (
+            <label className="flex items-center gap-2.5 rounded-lg border border-neutral-200 px-3 py-3 text-sm">
+              <input
+                type="checkbox"
+                checked={form.altoCilindraje}
+                onChange={(e) => update('altoCilindraje', e.target.checked)}
+                className="size-4 rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
+              />
+              <span className="text-neutral-700">
+                Alto cilindraje
+                <span className="ml-1 text-xs text-neutral-400">(+{COP.format(configuracion.recargoAltoCilindraje)})</span>
+              </span>
+            </label>
+          ) : null}
+          </>
+        )}
 
         {precio !== undefined ? (
           <div className="flex items-center justify-between rounded-lg bg-primary-50 px-3 py-2.5 text-sm">

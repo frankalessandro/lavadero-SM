@@ -304,29 +304,43 @@ async function preciosIndividuales(servicioIds: string[], tipoVehiculoId: string
   return filas.map((f) => ({ servicioId: f.servicioId, precio: f.precio, nombre: f.servicios?.nombre ?? '' }))
 }
 
+async function esTipoPrecioAbierto(tipoVehiculoId: string): Promise<boolean> {
+  const { data, error } = await db.from('tipos_vehiculo').select('precioAbierto:precio_abierto').eq('id', tipoVehiculoId).single()
+  if (error) throw new Error(error.message)
+  return (data as { precioAbierto: boolean }).precioAbierto
+}
+
 // Registro de ingreso (M2) — sin cobro todavía. El precio y la comisión quedan fijados desde
 // ya (regla de negocio 1), pero el método de pago se captura en `cobrarYEntregarOrden`. El
 // combo ya no es obligatorio: el total combina el combo (si lo hay) más los servicios
 // individuales elegidos (sea que acompañen al combo o que sean todo lo que lleva la orden).
 export async function createOrden(input: OrdenInput): Promise<Orden> {
   const parsed = ordenInputSchema.parse(input)
+  const tipoPrecioAbierto = await esTipoPrecioAbierto(parsed.tipoVehiculoId)
+  // Tipo sin precio de lista (moto eléctrica): el total es el valor que digitó el jefe de patio y
+  // no hay combo ni servicios — el resto del cálculo (comisiones, turno) es el de siempre.
+  if (tipoPrecioAbierto && !parsed.precioAbierto) {
+    throw new Error('Digita el precio acordado para este tipo de vehículo')
+  }
+  const comboId = tipoPrecioAbierto ? undefined : parsed.comboId
+  const servicioIds = tipoPrecioAbierto ? [] : parsed.serviciosAdicionales
   const [precioCombo, nombreCombo, addons, configuracion, turno] = await Promise.all([
-    parsed.comboId ? precioComboVigente(parsed.comboId, parsed.tipoVehiculoId) : Promise.resolve(0),
-    parsed.comboId ? nombreDeCombo(parsed.comboId) : Promise.resolve(undefined),
-    preciosIndividuales(parsed.serviciosAdicionales, parsed.tipoVehiculoId),
+    comboId ? precioComboVigente(comboId, parsed.tipoVehiculoId) : Promise.resolve(0),
+    comboId ? nombreDeCombo(comboId) : Promise.resolve(undefined),
+    preciosIndividuales(servicioIds, parsed.tipoVehiculoId),
     fetchConfiguracion(),
     fetchTurnoAbierto('jefe_zona'),
   ])
   if (!turno) {
     throw new Error('No hay turno de caja abierto — ábrelo antes de registrar vehículos.')
   }
-  if (parsed.comboId && precioCombo === undefined) {
+  if (comboId && precioCombo === undefined) {
     throw new Error('No existe un precio configurado para ese combo y tipo de vehículo')
   }
 
-  const recargo = parsed.altoCilindraje ? configuracion.recargoAltoCilindraje : 0
+  const recargo = parsed.altoCilindraje && !tipoPrecioAbierto ? configuracion.recargoAltoCilindraje : 0
   const precioAddons = addons.reduce((suma, addon) => suma + addon.precio, 0)
-  const total = (precioCombo ?? 0) + precioAddons + recargo
+  const total = tipoPrecioAbierto ? (parsed.precioAbierto ?? 0) : (precioCombo ?? 0) + precioAddons + recargo
   const comisionLavador = Math.round(total * configuracion.comisionLavadorPorcentaje)
   // Comisión del jefe de patio EN TURNO al registrar el vehículo — turno ya se exige arriba
   // (turno abierto de jefe_zona), así que responsableActual siempre existe acá. El negocio se
@@ -336,12 +350,13 @@ export async function createOrden(input: OrdenInput): Promise<Orden> {
   // ("Combo 1" de cada categoría = tarifa básica, cualquier otro combo = tarifa superior — se
   // identifica por nombre, la misma convención que usa el resto del sistema desde 0010) y los
   // servicios sueltos (con o sin combo) pagan la tarifa de servicios aparte. El recargo de alto
-  // cilindraje sigue la tarifa del combo si la orden lleva uno.
+  // cilindraje sigue la tarifa del combo si la orden lleva uno. Precio abierto (sin combo ni
+  // servicios): todo el total paga la tarifa de servicios.
   const tasaComboJefeZona =
     nombreCombo === 'Combo 1' ? configuracion.comisionJefeZonaCombo1Porcentaje : configuracion.comisionJefeZonaCombo2Porcentaje
-  const comisionJefeZonaCombo = parsed.comboId
+  const comisionJefeZonaCombo = comboId
     ? Math.round(((precioCombo ?? 0) + recargo) * tasaComboJefeZona)
-    : Math.round(recargo * configuracion.comisionJefeZonaServiciosPorcentaje)
+    : Math.round((tipoPrecioAbierto ? total : recargo) * configuracion.comisionJefeZonaServiciosPorcentaje)
   const comisionJefeZonaServicios = Math.round(precioAddons * configuracion.comisionJefeZonaServiciosPorcentaje)
   const comisionJefeZona = comisionJefeZonaCombo + comisionJefeZonaServicios
   const comisionNegocio = total - comisionLavador - comisionJefeZona
@@ -354,11 +369,11 @@ export async function createOrden(input: OrdenInput): Promise<Orden> {
       cliente_telefono: parsed.clienteTelefono,
       cliente_correo: parsed.clienteCorreo,
       tipo_vehiculo_id: parsed.tipoVehiculoId,
-      combo_id: parsed.comboId,
+      combo_id: comboId,
       lavador_id: parsed.lavadorId ?? null,
       lavador_id_2: parsed.lavadorId2 ?? null,
       precio: total,
-      alto_cilindraje: parsed.altoCilindraje,
+      alto_cilindraje: parsed.altoCilindraje && !tipoPrecioAbierto,
       comision_lavador: comisionLavador,
       comision_jefe_zona: comisionJefeZona,
       jefe_zona_responsable: turno.responsableActual,
