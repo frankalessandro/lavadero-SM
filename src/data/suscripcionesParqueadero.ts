@@ -106,3 +106,34 @@ export async function renovarSuscripcion(
   })
   if (error) throw new Error(error.message)
 }
+
+// El pago más reciente de cada suscripción (por periodo cubierto) — para la bandera de "pago
+// registrado" en la lista sin pedir el historial de cada una.
+export async function fetchUltimosPagos(): Promise<Map<string, PagoSuscripcion>> {
+  const { data, error } = await db
+    .from('pagos_suscripcion_parqueadero')
+    .select(PAGO_SELECT)
+    .order('periodo_fin', { ascending: false })
+    .order('fecha_pago', { ascending: false })
+  if (error) throw new Error(error.message)
+  const ultimos = new Map<string, PagoSuscripcion>()
+  for (const pago of pagoSuscripcionSchema.array().parse(data)) {
+    if (!ultimos.has(pago.suscripcionId)) ultimos.set(pago.suscripcionId, pago)
+  }
+  return ultimos
+}
+
+// Registra un pago que YA se había recibido para el ciclo actual (0085): no mueve la vigencia ni
+// entra al turno de quien lo registra.
+export async function confirmarPagoCiclo(
+  suscripcionId: string,
+  metodoPago: MetodoPagoBase,
+  fechaPago: string,
+): Promise<void> {
+  const { error } = await db.rpc('confirmar_pago_ciclo_suscripcion', {
+    p_suscripcion_id: suscripcionId,
+    p_metodo_pago: metodoPago,
+    p_fecha_pago: fechaPago,
+  })
+  if (error) throw new Error(error.message)
+}

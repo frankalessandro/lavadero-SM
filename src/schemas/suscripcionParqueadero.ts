@@ -150,3 +150,14 @@ export const CONDICION_LABEL: Record<ModalidadSuscripcion, { titulo: string; det
   mensualidad: { titulo: 'Mensualidad', detalle: 'Entra y sale de 7pm a 7am' },
   fijo: { titulo: 'Fijo 24h', detalle: 'Entra y sale cuando quiera' },
 }
+
+// Bandera de pago de una suscripción: "registrado" si hay un pago que cubre hasta su vencimiento
+// actual; "sin_confirmar" si no (p. ej. las cargadas sin saber si el último ciclo se pagó).
+export type EstadoPago = 'registrado' | 'sin_confirmar'
+
+export function estadoPago(
+  sus: Pick<SuscripcionParqueadero, 'fechaFin'>,
+  ultimo: Pick<PagoSuscripcion, 'periodoFin'> | undefined,
+): EstadoPago {
+  return ultimo && ultimo.periodoFin >= sus.fechaFin ? 'registrado' : 'sin_confirmar'
+}

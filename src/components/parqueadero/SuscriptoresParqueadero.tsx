@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   ChevronRight,
   CreditCard,
+  HelpCircle,
   History,
   MessageCircle,
   Pencil,
@@ -19,8 +20,10 @@ import {
 } from 'lucide-react'
 import {
   actualizarSuscripcion,
+  confirmarPagoCiclo,
   crearSuscripcion,
   fetchPagosSuscripcion,
+  fetchUltimosPagos,
   fetchSuscripciones,
   renovarSuscripcion,
   setSuscripcionActiva,
@@ -33,6 +36,7 @@ import {
   crearSuscripcionInputSchema,
   diasParaVencer,
   ESTADO_VIGENCIA_LABEL,
+  estadoPago,
   estadoVigencia,
   periodoDeRenovacion,
   sumarUnMes,
@@ -114,6 +118,7 @@ interface Props {
 export function SuscriptoresParqueadero({ puedeFecharAtras = false }: Props) {
   const [suscripciones, setSuscripciones] = useState<SuscripcionParqueadero[] | null>(null)
   const [tarifas, setTarifas] = useState<TarifaParqueadero[]>([])
+  const [ultimosPagos, setUltimosPagos] = useState<Map<string, PagoSuscripcion>>(new Map())
   const [abiertaId, setAbiertaId] = useState<string | null>(null)
   const [creando, setCreando] = useState(false)
   const [busqueda, setBusqueda] = useState('')
@@ -123,13 +128,18 @@ export function SuscriptoresParqueadero({ puedeFecharAtras = false }: Props) {
     fetchSuscripciones()
       .then(setSuscripciones)
       .catch((err) => toast.desdeError(err, 'No se pudieron cargar las suscripciones'))
+    fetchUltimosPagos()
+      .then(setUltimosPagos)
+      .catch((err) => toast.desdeError(err, 'No se pudieron cargar los pagos'))
     fetchTarifasParqueadero()
       .then(setTarifas)
       .catch((err) => toast.desdeError(err, 'No se pudieron cargar las tarifas'))
   }, [])
 
   const refresh = useCallback(async () => {
-    setSuscripciones(await fetchSuscripciones())
+    const [lista, pagos] = await Promise.all([fetchSuscripciones(), fetchUltimosPagos()])
+    setSuscripciones(lista)
+    setUltimosPagos(pagos)
   }, [])
 
   const lista = useMemo(() => suscripciones ?? [], [suscripciones])
@@ -204,7 +214,7 @@ export function SuscriptoresParqueadero({ puedeFecharAtras = false }: Props) {
       ) : (
         <ul className="flex flex-col gap-2">
           {visibles.map((sus) => (
-            <FilaSuscripcion key={sus.id} sus={sus} onAbrir={() => setAbiertaId(sus.id)} />
+            <FilaSuscripcion key={sus.id} sus={sus} ultimo={ultimosPagos.get(sus.id)} onAbrir={() => setAbiertaId(sus.id)} />
           ))}
         </ul>
       )}
@@ -224,6 +234,7 @@ export function SuscriptoresParqueadero({ puedeFecharAtras = false }: Props) {
       {abierta ? (
         <DetalleSuscripcionModal
           sus={abierta}
+          ultimo={ultimosPagos.get(abierta.id)}
           tarifas={tarifas}
           puedeFecharAtras={puedeFecharAtras}
           onClose={() => setAbiertaId(null)}
@@ -244,7 +255,15 @@ function Resumen({ etiqueta, valor, tono }: { etiqueta: string; valor: number; t
   )
 }
 
-function FilaSuscripcion({ sus, onAbrir }: { sus: SuscripcionParqueadero; onAbrir: () => void }) {
+function FilaSuscripcion({
+  sus,
+  ultimo,
+  onAbrir,
+}: {
+  sus: SuscripcionParqueadero
+  ultimo: PagoSuscripcion | undefined
+  onAbrir: () => void
+}) {
   const estado = estadoDe(sus)
   const Icono = ICONO_CLASE[sus.claseVehiculo]
   const dias = diasParaVencer(sus.fechaFin)
@@ -273,6 +292,7 @@ function FilaSuscripcion({ sus, onAbrir }: { sus: SuscripcionParqueadero; onAbri
           <span className="text-xs text-neutral-400">
             {CLASE_VEHICULO_LABEL[sus.claseVehiculo]} · {CONDICION_LABEL[sus.modalidad].titulo} · {COP.format(sus.valor)}
           </span>
+          <BanderaPago sus={sus} ultimo={ultimo} />
         </span>
         <span className="hidden shrink-0 flex-col items-end gap-0.5 text-right sm:flex">
           <span className="text-sm font-medium text-neutral-800">Vence {fmtFecha(sus.fechaFin)}</span>
@@ -294,6 +314,24 @@ function FilaSuscripcion({ sus, onAbrir }: { sus: SuscripcionParqueadero; onAbri
         {sus.activo ? ` · ${textoVencimiento(dias)}` : ''}
       </p>
     </li>
+  )
+}
+
+// "Último pago registrado" (verde) cuando hay un pago que cubre el ciclo actual; "Pago sin confirmar"
+// (ámbar) cuando no — típico de las suscripciones cargadas sin saber si ya habían pagado.
+function BanderaPago({ sus, ultimo }: { sus: SuscripcionParqueadero; ultimo: PagoSuscripcion | undefined }) {
+  if (estadoPago(sus, ultimo) === 'registrado' && ultimo) {
+    return (
+      <span className="mt-1 flex w-fit items-center gap-1 rounded-md bg-success-50 px-2 py-0.5 text-xs font-medium text-success-700">
+        <CheckCircle2 size={12} /> Último pago registrado · {fmtFecha(ultimo.fechaPago)}
+      </span>
+    )
+  }
+  return (
+    <span className="mt-1 flex w-fit items-center gap-1 rounded-md bg-warning-50 px-2 py-0.5 text-xs font-medium text-warning-700">
+      <HelpCircle size={12} /> Pago sin confirmar
+      {ultimo ? <span className="font-normal text-warning-700/80"> · último: {fmtFecha(ultimo.fechaPago)}</span> : null}
+    </span>
   )
 }
 
@@ -545,12 +583,14 @@ function NuevaSuscripcionModal({
 
 function DetalleSuscripcionModal({
   sus,
+  ultimo,
   tarifas,
   puedeFecharAtras,
   onClose,
   onCambio,
 }: {
   sus: SuscripcionParqueadero
+  ultimo: PagoSuscripcion | undefined
   tarifas: TarifaParqueadero[]
   puedeFecharAtras: boolean
   onClose: () => void
@@ -560,6 +600,9 @@ function DetalleSuscripcionModal({
   const [pagos, setPagos] = useState<PagoSuscripcion[] | null>(null)
   const [metodo, setMetodo] = useState<MetodoPagoBase>('efectivo')
   const [fechaPago, setFechaPago] = useState(hoy)
+  const [metodoConfirmado, setMetodoConfirmado] = useState<MetodoPagoBase>('efectivo')
+  const [fechaConfirmada, setFechaConfirmada] = useState(hoy)
+  const [confirmando, setConfirmando] = useState(false)
   const [cobrando, setCobrando] = useState(false)
   const [editando, setEditando] = useState(false)
   const [confirmandoEstado, setConfirmandoEstado] = useState(false)
@@ -598,6 +641,23 @@ function DetalleSuscripcionModal({
     }
   }
 
+  async function confirmarPago() {
+    if (enVuelo.current) return
+    enVuelo.current = true
+    setConfirmando(true)
+    try {
+      await confirmarPagoCiclo(sus.id, metodoConfirmado, fechaConfirmada)
+      toast.exito('Pago del ciclo registrado')
+      await Promise.all([onCambio(), cargarPagos()])
+    } catch (err) {
+      toast.desdeError(err, 'No se pudo registrar el pago')
+    } finally {
+      enVuelo.current = false
+      setConfirmando(false)
+    }
+  }
+
+  const sinConfirmar = estadoPago(sus, ultimo) === 'sin_confirmar'
   const totalPagado = pagos?.reduce((suma, p) => suma + p.monto, 0) ?? 0
 
   return (
@@ -623,6 +683,7 @@ function DetalleSuscripcionModal({
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-neutral-200 px-4 py-3.5">
           <div className="flex flex-col gap-1">
             <span className={`w-fit rounded-md px-2 py-0.5 text-xs font-medium ${BADGE[estado]}`}>{etiquetaEstado(estado)}</span>
+            <BanderaPago sus={sus} ultimo={ultimo} />
             <p className="text-sm text-neutral-700">
               {fmtFecha(sus.fechaInicio)} → <strong>{fmtFecha(sus.fechaFin)}</strong>
             </p>
@@ -645,6 +706,28 @@ function DetalleSuscripcionModal({
             </p>
           </div>
         </div>
+
+        {sinConfirmar && sus.activo ? (
+          <Seccion titulo="Confirmar el pago de este ciclo" icono={HelpCircle}>
+            <p className="text-sm text-neutral-600">
+              El ciclo del <strong>{fmtFecha(sus.fechaInicio)}</strong> al <strong>{fmtFecha(sus.fechaFin)}</strong> no tiene un
+              pago registrado. Si ya había pagado, regístralo aquí: no cobra de nuevo, no mueve la vigencia y no entra a tu turno.
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5 text-sm">
+                <span className="font-medium text-neutral-700">¿Cuándo pagó?</span>
+                <DatePicker size="sm" value={fechaConfirmada} onChange={setFechaConfirmada} max={hoy} />
+              </div>
+              <div className="flex flex-col gap-1.5 text-sm">
+                <span className="font-medium text-neutral-700">¿Cómo pagó?</span>
+                <SelectorMetodo value={metodoConfirmado} onChange={setMetodoConfirmado} />
+              </div>
+            </div>
+            <Button icon={CheckCircle2} loading={confirmando} onClick={confirmarPago}>
+              Ya pagó este ciclo · {COP.format(sus.valor)}
+            </Button>
+          </Seccion>
+        ) : null}
 
         <Seccion titulo="Cobrar renovación" icono={Banknote}>
           {precio === undefined ? (
