@@ -2,6 +2,8 @@ import { db } from '../lib/db'
 import { lavadorInputSchema, lavadorSchema, type Lavador, type LavadorInput } from '../schemas/lavador'
 import { fetchAsistenciasDelDia, fetchDiasDescanso, sincronizarRotacionDesde } from './asistenciaLavadores'
 import { fetchPermisos } from './cronograma'
+import { fetchAjustesNegocio } from './ajustesNegocio'
+import { AJUSTES_NEGOCIO_POR_DEFECTO } from '../schemas/ajustesNegocio'
 import { fechaLocalISO } from '../lib/periodo'
 
 const LAVADOR_SELECT =
@@ -96,9 +98,32 @@ export function asignacionDeHoy(ultimaAsignacion: string | null | undefined): nu
   return t >= inicioHoy.getTime() ? t : -Infinity
 }
 
+// Vehículos que lleva cada lavador hoy (los dos cuentan si lavan entre 2; las anuladas no) — para la
+// regla de rotación "quien lleva menos vehículos" (Configuración › Reglas de rotación).
+async function vehiculosDeHoyPorLavador(): Promise<Map<string, number>> {
+  const inicioHoy = new Date()
+  inicioHoy.setHours(0, 0, 0, 0)
+  const { data, error } = await db
+    .from('ordenes')
+    .select('lavador_id, lavador_id_2')
+    .gte('creado_en', inicioHoy.toISOString())
+    .neq('estado', 'anulada')
+  if (error) throw new Error(error.message)
+  const cuenta = new Map<string, number>()
+  for (const o of data as { lavador_id: string | null; lavador_id_2: string | null }[]) {
+    for (const id of [o.lavador_id, o.lavador_id_2]) {
+      if (id) cuenta.set(id, (cuenta.get(id) ?? 0) + 1)
+    }
+  }
+  return cuenta
+}
+
+// Las reglas de la cola las define gerencia (Configuración): el criterio de orden y qué hacer con
+// quien está ocupado. Si no se pueden leer rigen las de siempre, para no frenar la recepción.
 export async function suggestNextLavador(): Promise<string | undefined> {
   const hoy = fechaLocalISO(new Date())
-  const [asistenciasHoy, descansosHoy, permisosHoy, { data: ocupados, error: errorOcupados }, { data, error }] = await Promise.all([
+  const [ajustes, asistenciasHoy, descansosHoy, permisosHoy, { data: ocupados, error: errorOcupados }, { data, error }] = await Promise.all([
+    fetchAjustesNegocio().catch(() => AJUSTES_NEGOCIO_POR_DEFECTO),
     fetchAsistenciasDelDia(hoy),
     fetchDiasDescanso(hoy, hoy),
     fetchPermisos(hoy, hoy),
@@ -107,6 +132,8 @@ export async function suggestNextLavador(): Promise<string | undefined> {
   ])
   if (errorOcupados) throw new Error(errorOcupados.message)
   if (error) throw new Error(error.message)
+  const vehiculosHoy =
+    ajustes.rotacionCriterio === 'menos_vehiculos' ? await vehiculosDeHoyPorLavador() : new Map<string, number>()
 
   const presentesIds = new Set(asistenciasHoy.map((a) => a.lavadorId))
   const horaEntradaPorId = new Map(asistenciasHoy.map((a) => [a.lavadorId, a.horaEntrada]))
@@ -119,12 +146,22 @@ export async function suggestNextLavador(): Promise<string | undefined> {
   )
 
   const elegibles = (data as { id: string; ultimaAsignacion: string | null }[]).filter(
-    (l) => presentesIds.has(l.id) && l.id !== descansaHoyId && !conPermisoIds.has(l.id) && !ocupadosIds.has(l.id),
+    (l) =>
+      presentesIds.has(l.id) &&
+      l.id !== descansaHoyId &&
+      !conPermisoIds.has(l.id) &&
+      (ajustes.rotacionOcupado === 'permitir' || !ocupadosIds.has(l.id)),
   )
   elegibles.sort((a, b) => {
-    const asigA = asignacionDeHoy(a.ultimaAsignacion)
-    const asigB = asignacionDeHoy(b.ultimaAsignacion)
-    if (asigA !== asigB) return asigA === -Infinity ? -1 : asigB === -Infinity ? 1 : asigA - asigB
+    if (ajustes.rotacionCriterio === 'menos_vehiculos') {
+      const cantA = vehiculosHoy.get(a.id) ?? 0
+      const cantB = vehiculosHoy.get(b.id) ?? 0
+      if (cantA !== cantB) return cantA - cantB
+    } else {
+      const asigA = asignacionDeHoy(a.ultimaAsignacion)
+      const asigB = asignacionDeHoy(b.ultimaAsignacion)
+      if (asigA !== asigB) return asigA === -Infinity ? -1 : asigB === -Infinity ? 1 : asigA - asigB
+    }
     const horaA = horaEntradaPorId.get(a.id)
     const horaB = horaEntradaPorId.get(b.id)
     if (!horaA || !horaB) return 0

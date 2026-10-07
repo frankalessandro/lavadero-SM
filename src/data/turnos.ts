@@ -39,6 +39,20 @@ export async function fetchTurnos(rol?: RolCaja): Promise<TurnoCaja[]> {
   return turnoCajaSchema.array().parse(data)
 }
 
+// Turnos que ABRIERON dentro del rango (regla 11: un movimiento pertenece a la fecha en que se abrió
+// el turno, aunque cierre al día siguiente). Es la base de la asistencia del jefe de patio y el
+// vigilante: su "marcación" es abrir el turno de caja.
+export async function fetchTurnosEnRango(desdeISO: string, hastaISO: string): Promise<TurnoCaja[]> {
+  const { data, error } = await db
+    .from('turnos_caja')
+    .select(TURNO_SELECT)
+    .gte('abierto_en', desdeISO)
+    .lt('abierto_en', hastaISO)
+    .order('abierto_en', { ascending: false })
+  if (error) throw new Error(error.message)
+  return turnoCajaSchema.array().parse(data)
+}
+
 // El responsable ya no viaja desde el cliente (0072) — la RPC lo deriva de auth.uid() en el
 // servidor, así que abrir turno "a nombre de otro" ya no es posible.
 export async function abrirTurno(input: AbrirTurnoInput): Promise<TurnoCaja> {

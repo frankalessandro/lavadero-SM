@@ -7,6 +7,18 @@
     <link rel="apple-touch-icon" href="/favicon-256.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Carwash SM</title>
+    <!-- El sistema es solo claro (el panel es light-only): se fija desde el primer pintado para que
+         no haya un destello oscuro con el modo oscuro del sistema operativo antes de cargar el CSS. -->
+    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#f8fafc" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: #f8fafc;
+        color-scheme: light;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>

@@ -82,9 +82,10 @@ import { QuitarProductoModal } from '../../components/layout/QuitarProductoModal
 import { BarChart } from '../../components/layout/BarChart'
 import { METODO_PAGO_LABEL } from '../../lib/metodoPago'
 import { queryKeys } from '../../lib/queryKeys'
+import { fechaLocalISO } from '../../lib/periodo'
 
 function hoyISO(): string {
-  return new Date().toISOString().slice(0, 10)
+  return fechaLocalISO(new Date())
 }
 
 async function loadDashboard() {

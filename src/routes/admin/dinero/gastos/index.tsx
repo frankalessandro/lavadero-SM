@@ -27,19 +27,20 @@ import { toast } from '../../../../lib/toast'
 import { Modal } from '../../../../components/layout/Modal'
 import { Button } from '../../../../components/layout/Button'
 import { PageHeader, SectionHeader } from '../../../../components/layout/PageHeader'
+import { fechaLocalISO } from '../../../../lib/periodo'
 
 function inicioDelMesISO(): string {
   const now = new Date()
-  return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
+  return fechaLocalISO(new Date(now.getFullYear(), now.getMonth(), 1))
 }
 
 function finDelMesISO(): string {
   const now = new Date()
-  return new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10)
+  return fechaLocalISO(new Date(now.getFullYear(), now.getMonth() + 1, 0))
 }
 
 function hoyISO(): string {
-  return new Date().toISOString().slice(0, 10)
+  return fechaLocalISO(new Date())
 }
 
 const RANGOS_GASTO = [
@@ -56,12 +57,12 @@ function rangoGasto(key: RangoGastoKey, previo = false): { desde: string; hasta:
   if (key === 'mes') {
     const base = previo ? new Date(d.getFullYear(), d.getMonth() - 1, 1) : new Date(d.getFullYear(), d.getMonth(), 1)
     const fin = new Date(base.getFullYear(), base.getMonth() + 1, 0)
-    return { desde: base.toISOString().slice(0, 10), hasta: fin.toISOString().slice(0, 10) }
+    return { desde: fechaLocalISO(base), hasta: fechaLocalISO(fin) }
   }
   const dias = Number(key)
   const hasta = previo ? new Date(d.getFullYear(), d.getMonth(), d.getDate() - dias) : d
   const desde = new Date(hasta.getFullYear(), hasta.getMonth(), hasta.getDate() - dias)
-  return { desde: desde.toISOString().slice(0, 10), hasta: hasta.toISOString().slice(0, 10) }
+  return { desde: fechaLocalISO(desde), hasta: fechaLocalISO(hasta) }
 }
 
 const formatoMoneda = new Intl.NumberFormat('es-CO', {

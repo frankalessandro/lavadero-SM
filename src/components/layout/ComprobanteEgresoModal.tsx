@@ -1,7 +1,7 @@
 import { Printer, X } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import type { GastoConCategoria } from '../../data/gastos'
-import logoIsotipo from '../../assets/logo-isotipo.png'
+import { EncabezadoTiquete } from './EncabezadoTiquete'
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 const FECHA = new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium' })
@@ -88,9 +88,7 @@ function CampoResumen({ label, valor }: { label: string; valor: string }) {
 function ComprobanteEgresoPrint({ gasto }: { gasto: GastoConCategoria }) {
   return createPortal(
     <div className="tiquete-58">
-      <img src={logoIsotipo} alt="" className="tiquete-58__logo" />
-      <p className="tiquete-58__tagline">Lavadero · Parqueadero</p>
-      <p className="tiquete-58__nit-titulo">NIT 1113661734-4 · Comprobante de egreso</p>
+      <EncabezadoTiquete titulo="Comprobante de egreso" />
 
       <div className="tiquete-58__linea-solida" />
 

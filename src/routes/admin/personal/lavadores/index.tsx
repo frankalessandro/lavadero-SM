@@ -17,6 +17,7 @@ import { ConfirmModal } from '../../../../components/layout/ConfirmModal'
 import { PageHeader } from '../../../../components/layout/PageHeader'
 import { LavadorExpedienteModal } from '../../../../components/layout/LavadorExpedienteModal'
 import { toast } from '../../../../lib/toast'
+import { fechaLocalISO } from '../../../../lib/periodo'
 
 export const Route = createFileRoute('/admin/personal/lavadores/')({
   loader: async () => ({
@@ -214,7 +215,7 @@ function LavadorForm({
   const [nombre, setNombre] = useState(lavador?.nombre ?? '')
   const [telefono, setTelefono] = useState(lavador?.telefono ?? '')
   const [fechaIngreso, setFechaIngreso] = useState(
-    lavador?.fechaIngreso ?? new Date().toISOString().slice(0, 10),
+    lavador?.fechaIngreso ?? fechaLocalISO(new Date()),
   )
   const [fechaCumpleanos, setFechaCumpleanos] = useState(lavador?.fechaCumpleanos ?? '')
   const [lugar, setLugar] = useState(lavador?.posicionCronograma !== undefined ? String(lavador.posicionCronograma) : '')

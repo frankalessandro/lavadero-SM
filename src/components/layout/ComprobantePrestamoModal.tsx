@@ -1,7 +1,8 @@
 import { Printer, X } from 'lucide-react'
 import { createPortal } from 'react-dom'
-import logoIsotipo from '../../assets/logo-isotipo.png'
 import { BloqueFirma, Fila } from './ComprobanteEgresoModal'
+import { EncabezadoTiquete } from './EncabezadoTiquete'
+import { useAjustesNegocio } from '../../lib/useAjustesNegocio'
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 const FECHA_HORA = new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium', timeStyle: 'short' })
@@ -92,11 +93,10 @@ function Campo({ label, valor }: { label: string; valor: string }) {
 }
 
 function ComprobantePrestamoPrint({ data }: { data: ComprobantePrestamoData }) {
+  const negocio = useAjustesNegocio()
   return createPortal(
     <div className="tiquete-58">
-      <img src={logoIsotipo} alt="" className="tiquete-58__logo" />
-      <p className="tiquete-58__tagline">Lavadero · Parqueadero</p>
-      <p className="tiquete-58__nit-titulo">NIT 1113661734-4 · Comprobante de préstamo</p>
+      <EncabezadoTiquete titulo="Comprobante de préstamo" />
 
       <div className="tiquete-58__linea-solida" />
 
@@ -119,7 +119,7 @@ function ComprobantePrestamoPrint({ data }: { data: ComprobantePrestamoData }) {
       <div className="tiquete-58__linea" />
 
       <p className="tiquete-58__texto">
-        Recibo de Carwash SM la suma de {COP.format(data.monto)} en efectivo, como préstamo que me comprometo a pagar.
+        Recibo de {negocio.nombre} la suma de {COP.format(data.monto)} en efectivo, como préstamo que me comprometo a pagar.
       </p>
 
       <BloqueFirma rol="Entrega (jefe de patio)" nombre={data.jefePatioNombre} />

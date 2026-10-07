@@ -1,6 +1,7 @@
 import { useRef, useState, type ComponentType, type FormEvent, type ReactNode } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { AlertTriangle, CalendarClock, ChevronDown, History, Percent, Save, Bike, Users, ShieldCheck, Building2 } from 'lucide-react'
+import { AlertTriangle, CalendarClock, ChevronDown, History, Percent, Save, Bike, Users, ShieldCheck, Building2, Receipt, Shuffle } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   fetchConfiguracion,
   updateConfiguracion,
@@ -8,6 +9,14 @@ import {
   type ConfiguracionHistorial,
 } from '../../../data/configuracion'
 import { configuracionSchema, type Configuracion } from '../../../schemas/configuracion'
+import { fetchAjustesNegocio, updateAjustesNegocio } from '../../../data/ajustesNegocio'
+import {
+  ajustesNegocioSchema,
+  ROTACION_CRITERIO_LABEL,
+  ROTACION_OCUPADO_LABEL,
+  type AjustesNegocio,
+} from '../../../schemas/ajustesNegocio'
+import { queryKeys } from '../../../lib/queryKeys'
 import { Card } from '../../../components/layout/Card'
 import { CurrencyInput } from '../../../components/layout/CurrencyInput'
 import { PageHeader } from '../../../components/layout/PageHeader'
@@ -20,6 +29,7 @@ export const Route = createFileRoute('/admin/configuracion/')({
   loader: async () => ({
     configuracion: await fetchConfiguracion(),
     historial: await fetchConfiguracionHistorial(),
+    ajustes: await fetchAjustesNegocio(),
   }),
   component: ConfiguracionPage,
 })
@@ -61,7 +71,7 @@ function num(s: string): number {
 }
 
 function ConfiguracionPage() {
-  const { configuracion, historial } = Route.useLoaderData()
+  const { configuracion, historial, ajustes } = Route.useLoaderData()
   const router = useRouter()
   const [base, setBase] = useState<Formulario>(() => aFormulario(configuracion))
   const [form, setForm] = useState<Formulario>(base)
@@ -138,7 +148,8 @@ function ConfiguracionPage() {
   const pNegocio = Math.max(0, 100 - pLavador - pJefe)
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-6 pb-24 text-left">
+    <div className="flex flex-col gap-6 pb-24 text-left">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-6">
       <PageHeader
         title="Configuración"
         description="Las reglas con las que el sistema reparte cada cobro y liquida al personal."
@@ -371,6 +382,220 @@ function ConfiguracionPage() {
 
       {verHistorial ? <HistorialModal historial={historial} onClose={() => setVerHistorial(false)} /> : null}
     </form>
+
+    <AjustesDelNegocio inicial={ajustes} />
+    </div>
+  )
+}
+
+const INPUT_TEXTO =
+  'rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500'
+
+// Datos que salen impresos en los tiquetes y reglas de la cola de rotación de lavadores (0086).
+// Tiene su propio guardado: no comparte la barra de "cambios sin guardar" de las comisiones, porque
+// aquí nada toca el dinero de órdenes ya registradas.
+function AjustesDelNegocio({ inicial }: { inicial: AjustesNegocio }) {
+  const queryClient = useQueryClient()
+  const [base, setBase] = useState(inicial)
+  const [form, setForm] = useState(inicial)
+  const [error, setError] = useState<string | null>(null)
+  const [guardando, setGuardando] = useState(false)
+  const enVuelo = useRef(false)
+
+  const sucio = JSON.stringify(form) !== JSON.stringify(base)
+
+  function set<K extends keyof AjustesNegocio>(k: K, v: AjustesNegocio[K]) {
+    setForm((f) => ({ ...f, [k]: v }))
+    setError(null)
+  }
+
+  async function guardar(e: FormEvent) {
+    e.preventDefault()
+    if (enVuelo.current) return
+    const parsed = ajustesNegocioSchema.safeParse(form)
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.message ?? 'Revisa los datos')
+      return
+    }
+    enVuelo.current = true
+    setGuardando(true)
+    try {
+      const guardado = await updateAjustesNegocio(parsed.data)
+      setBase(guardado)
+      setForm(guardado)
+      // Los tiquetes leen estos datos de la caché: se actualiza al instante, sin recargar la página.
+      queryClient.setQueryData(queryKeys.ajustesNegocio, guardado)
+      toast.exito('Ajustes guardados — rigen desde ahora')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudieron guardar los ajustes')
+      toast.desdeError(err, 'No se pudieron guardar los ajustes')
+    } finally {
+      enVuelo.current = false
+      setGuardando(false)
+    }
+  }
+
+  const contacto = [form.direccion, form.telefono ? `Tel. ${form.telefono}` : undefined].filter(Boolean).join(' · ')
+
+  return (
+    <form onSubmit={guardar} className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="flex flex-col gap-6">
+        <Bloque
+          icon={Receipt}
+          titulo="Datos del negocio en los tiquetes"
+          descripcion="Lo que se imprime en el encabezado y el pie de cada tiquete, comprobante y colilla."
+        >
+          <div className="grid gap-5 sm:grid-cols-2">
+            <label className="flex flex-col gap-1.5 text-sm">
+              <span className="font-medium text-neutral-700">Nombre del negocio</span>
+              <input value={form.nombre} onChange={(e) => set('nombre', e.target.value)} className={INPUT_TEXTO} />
+            </label>
+            <label className="flex flex-col gap-1.5 text-sm">
+              <span className="font-medium text-neutral-700">Actividad</span>
+              <input
+                value={form.actividad}
+                onChange={(e) => set('actividad', e.target.value)}
+                placeholder="Lavadero · Parqueadero"
+                className={INPUT_TEXTO}
+              />
+            </label>
+          </div>
+          <div className="grid gap-5 sm:grid-cols-3">
+            <label className="flex flex-col gap-1.5 text-sm">
+              <span className="font-medium text-neutral-700">NIT</span>
+              <input value={form.nit ?? ''} onChange={(e) => set('nit', e.target.value)} placeholder="Opcional" className={INPUT_TEXTO} />
+            </label>
+            <label className="flex flex-col gap-1.5 text-sm">
+              <span className="font-medium text-neutral-700">Teléfono</span>
+              <input
+                value={form.telefono ?? ''}
+                onChange={(e) => set('telefono', e.target.value)}
+                placeholder="Opcional"
+                className={INPUT_TEXTO}
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 text-sm">
+              <span className="font-medium text-neutral-700">Dirección</span>
+              <input
+                value={form.direccion ?? ''}
+                onChange={(e) => set('direccion', e.target.value)}
+                placeholder="Opcional"
+                className={INPUT_TEXTO}
+              />
+            </label>
+          </div>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <label className="flex flex-col gap-1.5 text-sm">
+              <span className="font-medium text-neutral-700">Mensaje de cierre</span>
+              <input
+                value={form.mensajePie}
+                onChange={(e) => set('mensajePie', e.target.value)}
+                placeholder="Gracias por su visita"
+                className={INPUT_TEXTO}
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 text-sm">
+              <span className="font-medium text-neutral-700">Correo para factura electrónica</span>
+              <input
+                type="email"
+                value={form.correoFactura ?? ''}
+                onChange={(e) => set('correoFactura', e.target.value)}
+                placeholder="Opcional — si queda vacío no se imprime"
+                className={INPUT_TEXTO}
+              />
+            </label>
+          </div>
+        </Bloque>
+
+        <Bloque
+          icon={Shuffle}
+          titulo="Reglas de rotación de lavadores"
+          descripcion="Cómo se arma la cola cuando recepción sugiere a quién le toca el siguiente vehículo."
+        >
+          <div className="flex flex-col gap-2 text-sm">
+            <span className="font-medium text-neutral-700">¿A quién le toca el siguiente?</span>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {(Object.keys(ROTACION_CRITERIO_LABEL) as AjustesNegocio['rotacionCriterio'][]).map((k) => (
+                <OpcionRegla
+                  key={k}
+                  activa={form.rotacionCriterio === k}
+                  titulo={ROTACION_CRITERIO_LABEL[k].titulo}
+                  detalle={ROTACION_CRITERIO_LABEL[k].detalle}
+                  onClick={() => set('rotacionCriterio', k)}
+                />
+              ))}
+            </div>
+          </div>
+          <div className="flex flex-col gap-2 border-t border-neutral-100 pt-5 text-sm">
+            <span className="font-medium text-neutral-700">Si al que le toca está ocupado</span>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {(Object.keys(ROTACION_OCUPADO_LABEL) as AjustesNegocio['rotacionOcupado'][]).map((k) => (
+                <OpcionRegla
+                  key={k}
+                  activa={form.rotacionOcupado === k}
+                  titulo={ROTACION_OCUPADO_LABEL[k].titulo}
+                  detalle={ROTACION_OCUPADO_LABEL[k].detalle}
+                  onClick={() => set('rotacionOcupado', k)}
+                />
+              ))}
+            </div>
+          </div>
+          <p className="text-xs text-neutral-500">
+            Solo cambia la sugerencia de recepción: el jefe de patio siempre puede elegir a otro o dejarlo sin asignar. El
+            reparto de descansos del cronograma se maneja en Personal › Cronograma.
+          </p>
+        </Bloque>
+
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+          {error ? <p className="text-sm text-danger-600 sm:mr-auto">{error}</p> : null}
+          <Button
+            variant="ghost"
+            disabled={!sucio || guardando}
+            onClick={() => {
+              setForm(base)
+              setError(null)
+            }}
+          >
+            Descartar
+          </Button>
+          <Button variant="primary" type="submit" icon={Save} loading={guardando} disabled={!sucio}>
+            Guardar ajustes
+          </Button>
+        </div>
+      </div>
+
+      <aside className="lg:sticky lg:top-4 lg:self-start">
+        <Card className="flex flex-col items-center gap-1 p-5 text-center">
+          <p className="mb-2 self-start text-xs font-semibold uppercase tracking-[0.12em] text-neutral-400">Así sale en el tiquete</p>
+          <p className="text-base font-bold text-neutral-900">{form.nombre || '—'}</p>
+          {form.actividad ? <p className="text-xs font-semibold text-neutral-600">{form.actividad}</p> : null}
+          {contacto ? <p className="text-xs font-semibold text-neutral-600">{contacto}</p> : null}
+          <p className="text-[11px] font-semibold text-neutral-700">
+            {form.nit ? `NIT ${form.nit} · ` : ''}Comprobante de pago
+          </p>
+          <div className="my-3 w-full border-t border-dashed border-neutral-300" />
+          {form.mensajePie ? <p className="text-xs text-neutral-600">{form.mensajePie}</p> : null}
+          {form.correoFactura ? (
+            <p className="text-[11px] text-neutral-400">Factura electrónica: solicítala a {form.correoFactura}</p>
+          ) : null}
+        </Card>
+      </aside>
+    </form>
+  )
+}
+
+function OpcionRegla({ activa, titulo, detalle, onClick }: { activa: boolean; titulo: string; detalle: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex flex-col items-start gap-0.5 rounded-xl border px-3.5 py-3 text-left transition-colors ${
+        activa ? 'border-primary-600 bg-primary-50' : 'border-neutral-200 hover:bg-neutral-50'
+      }`}
+    >
+      <span className={`text-sm font-semibold ${activa ? 'text-primary-700' : 'text-neutral-800'}`}>{titulo}</span>
+      <span className="text-xs text-neutral-500">{detalle}</span>
+    </button>
   )
 }
 

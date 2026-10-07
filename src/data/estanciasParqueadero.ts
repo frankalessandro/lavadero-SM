@@ -137,6 +137,21 @@ export async function fetchUltimaEstanciaPorPlaca(placa: string): Promise<Estanc
   return data ? estanciaParqueaderoSchema.parse(data) : undefined
 }
 
+// Todas las estancias de una placa, más reciente primero — para el perfil de la placa. Incluye las
+// anuladas (el histórico no se oculta, regla 13); la pantalla las marca.
+export async function fetchEstanciasPorPlaca(placa: string): Promise<EstanciaParqueadero[]> {
+  const normalizada = placa.trim().toUpperCase()
+  if (!normalizada) return []
+  const { data, error } = await db
+    .from('estancias_parqueadero')
+    .select(ESTANCIA_SELECT)
+    .eq('placa', normalizada)
+    .order('hora_ingreso', { ascending: false })
+    .limit(100)
+  if (error) throw new Error(error.message)
+  return estanciaParqueaderoSchema.array().parse(data)
+}
+
 // Histórico para revisar y anular (Operación › Parqueadero) — trae TODO lo que entró en el
 // rango, sin importar si ya salió o sigue adentro. Pagina igual que el resto de lecturas por rango.
 export async function fetchEstanciasEnRango(desdeISO: string, hastaISO: string): Promise<EstanciaParqueadero[]> {

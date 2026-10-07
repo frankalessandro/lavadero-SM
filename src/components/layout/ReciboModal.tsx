@@ -3,6 +3,7 @@ import type { MetodoPago, MetodoPagoBase } from '../../schemas/orden'
 import { METODO_PAGO_LABEL } from '../../lib/metodoPago'
 import logoMark from '../../assets/logo-mark.png'
 import { TiquetePrint } from './TiquetePrint'
+import { useAjustesNegocio } from '../../lib/useAjustesNegocio'
 
 export interface ReciboData {
   consecutivo: number
@@ -57,6 +58,7 @@ export function ReciboModal({
    * impresora por defecto, configuración típica de un POS/tablet dedicado). */
   autoPrint?: boolean
 }) {
+  const negocio = useAjustesNegocio()
   const esPago = variant === 'pago'
 
   // Guarda contra el doble-invoke de efectos de StrictMode en desarrollo (monta→limpia→monta):
@@ -80,8 +82,8 @@ export function ReciboModal({
       <div className="custom-scroll flex max-h-full w-[calc(100vw-2rem)] max-w-sm flex-col overflow-y-auto rounded-t-2xl bg-white shadow-card-hover sm:w-full sm:rounded-2xl">
         <div className={`h-2 ${esPago ? 'bg-success-600' : 'bg-primary-600'}`} />
         <div className="flex flex-col items-center gap-1.5 px-6 pt-6 pb-4 text-center">
-          <img src={logoMark} alt="Carwash SM" className="size-11 shrink-0 object-contain" />
-          <p className="mt-1 text-sm font-semibold text-neutral-900">Carwash SM</p>
+          <img src={logoMark} alt={negocio.nombre} className="size-11 shrink-0 object-contain" />
+          <p className="mt-1 text-sm font-semibold text-neutral-900">{negocio.nombre}</p>
           <p className="text-xs text-neutral-400">{esPago ? 'Comprobante de pago' : 'Comprobante de ingreso'}</p>
         </div>
 

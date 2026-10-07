@@ -54,6 +54,7 @@ import { Route as AdminOperacionClientesIndexRouteImport } from './routes/admin/
 import { Route as AdminOperacionOrdenesIndexRouteImport } from './routes/admin/operacion/ordenes/index'
 import { Route as AdminOperacionParqueaderoIndexRouteImport } from './routes/admin/operacion/parqueadero/index'
 import { Route as AdminOperacionTurnosIndexRouteImport } from './routes/admin/operacion/turnos/index'
+import { Route as AdminPersonalAsistenciaIndexRouteImport } from './routes/admin/personal/asistencia/index'
 import { Route as AdminPersonalCronogramaIndexRouteImport } from './routes/admin/personal/cronograma/index'
 import { Route as AdminPersonalLavadoresIndexRouteImport } from './routes/admin/personal/lavadores/index'
 import { Route as AdminPersonalUsuariosIndexRouteImport } from './routes/admin/personal/usuarios/index'
@@ -297,6 +298,12 @@ const AdminOperacionTurnosIndexRoute =
     path: '/turnos/',
     getParentRoute: () => AdminOperacionRouteRoute,
   } as any)
+const AdminPersonalAsistenciaIndexRoute =
+  AdminPersonalAsistenciaIndexRouteImport.update({
+    id: '/asistencia/',
+    path: '/asistencia/',
+    getParentRoute: () => AdminPersonalRouteRoute,
+  } as any)
 const AdminPersonalCronogramaIndexRoute =
   AdminPersonalCronogramaIndexRouteImport.update({
     id: '/cronograma/',
@@ -362,6 +369,7 @@ export interface FileRoutesByFullPath {
   '/admin/operacion/ordenes/': typeof AdminOperacionOrdenesIndexRoute
   '/admin/operacion/parqueadero/': typeof AdminOperacionParqueaderoIndexRoute
   '/admin/operacion/turnos/': typeof AdminOperacionTurnosIndexRoute
+  '/admin/personal/asistencia/': typeof AdminPersonalAsistenciaIndexRoute
   '/admin/personal/cronograma/': typeof AdminPersonalCronogramaIndexRoute
   '/admin/personal/lavadores/': typeof AdminPersonalLavadoresIndexRoute
   '/admin/personal/usuarios/': typeof AdminPersonalUsuariosIndexRoute
@@ -404,6 +412,7 @@ export interface FileRoutesByTo {
   '/admin/operacion/ordenes': typeof AdminOperacionOrdenesIndexRoute
   '/admin/operacion/parqueadero': typeof AdminOperacionParqueaderoIndexRoute
   '/admin/operacion/turnos': typeof AdminOperacionTurnosIndexRoute
+  '/admin/personal/asistencia': typeof AdminPersonalAsistenciaIndexRoute
   '/admin/personal/cronograma': typeof AdminPersonalCronogramaIndexRoute
   '/admin/personal/lavadores': typeof AdminPersonalLavadoresIndexRoute
   '/admin/personal/usuarios': typeof AdminPersonalUsuariosIndexRoute
@@ -455,6 +464,7 @@ export interface FileRoutesById {
   '/admin/operacion/ordenes/': typeof AdminOperacionOrdenesIndexRoute
   '/admin/operacion/parqueadero/': typeof AdminOperacionParqueaderoIndexRoute
   '/admin/operacion/turnos/': typeof AdminOperacionTurnosIndexRoute
+  '/admin/personal/asistencia/': typeof AdminPersonalAsistenciaIndexRoute
   '/admin/personal/cronograma/': typeof AdminPersonalCronogramaIndexRoute
   '/admin/personal/lavadores/': typeof AdminPersonalLavadoresIndexRoute
   '/admin/personal/usuarios/': typeof AdminPersonalUsuariosIndexRoute
@@ -507,6 +517,7 @@ export interface FileRouteTypes {
     | '/admin/operacion/ordenes/'
     | '/admin/operacion/parqueadero/'
     | '/admin/operacion/turnos/'
+    | '/admin/personal/asistencia/'
     | '/admin/personal/cronograma/'
     | '/admin/personal/lavadores/'
     | '/admin/personal/usuarios/'
@@ -549,6 +560,7 @@ export interface FileRouteTypes {
     | '/admin/operacion/ordenes'
     | '/admin/operacion/parqueadero'
     | '/admin/operacion/turnos'
+    | '/admin/personal/asistencia'
     | '/admin/personal/cronograma'
     | '/admin/personal/lavadores'
     | '/admin/personal/usuarios'
@@ -599,6 +611,7 @@ export interface FileRouteTypes {
     | '/admin/operacion/ordenes/'
     | '/admin/operacion/parqueadero/'
     | '/admin/operacion/turnos/'
+    | '/admin/personal/asistencia/'
     | '/admin/personal/cronograma/'
     | '/admin/personal/lavadores/'
     | '/admin/personal/usuarios/'
@@ -934,6 +947,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminOperacionTurnosIndexRouteImport
       parentRoute: typeof AdminOperacionRouteRoute
     }
+    '/admin/personal/asistencia/': {
+      id: '/admin/personal/asistencia/'
+      path: '/asistencia'
+      fullPath: '/admin/personal/asistencia/'
+      preLoaderRoute: typeof AdminPersonalAsistenciaIndexRouteImport
+      parentRoute: typeof AdminPersonalRouteRoute
+    }
     '/admin/personal/cronograma/': {
       id: '/admin/personal/cronograma/'
       path: '/cronograma'
@@ -1021,6 +1041,7 @@ const AdminOperacionRouteRouteWithChildren =
 
 interface AdminPersonalRouteRouteChildren {
   AdminPersonalIndexRoute: typeof AdminPersonalIndexRoute
+  AdminPersonalAsistenciaIndexRoute: typeof AdminPersonalAsistenciaIndexRoute
   AdminPersonalCronogramaIndexRoute: typeof AdminPersonalCronogramaIndexRoute
   AdminPersonalLavadoresIndexRoute: typeof AdminPersonalLavadoresIndexRoute
   AdminPersonalUsuariosIndexRoute: typeof AdminPersonalUsuariosIndexRoute
@@ -1028,6 +1049,7 @@ interface AdminPersonalRouteRouteChildren {
 
 const AdminPersonalRouteRouteChildren: AdminPersonalRouteRouteChildren = {
   AdminPersonalIndexRoute: AdminPersonalIndexRoute,
+  AdminPersonalAsistenciaIndexRoute: AdminPersonalAsistenciaIndexRoute,
   AdminPersonalCronogramaIndexRoute: AdminPersonalCronogramaIndexRoute,
   AdminPersonalLavadoresIndexRoute: AdminPersonalLavadoresIndexRoute,
   AdminPersonalUsuariosIndexRoute: AdminPersonalUsuariosIndexRoute,

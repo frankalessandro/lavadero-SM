@@ -59,6 +59,20 @@ export async function setSuscripcionActiva(id: string, activo: boolean): Promise
   if (error) throw new Error(error.message)
 }
 
+// Todas las suscripciones de una placa (activas e inactivas) — para el perfil de la placa.
+export async function fetchSuscripcionesPorPlaca(placa: string): Promise<SuscripcionParqueadero[]> {
+  const normalizada = placa.trim().toUpperCase()
+  if (!normalizada) return []
+  const { data, error } = await db
+    .from('suscripciones_parqueadero')
+    .select(SELECT)
+    .eq('placa', normalizada)
+    .order('activo', { ascending: false })
+    .order('fecha_fin', { ascending: false })
+  if (error) throw new Error(error.message)
+  return suscripcionParqueaderoSchema.array().parse(data)
+}
+
 // La suscripción activa de una placa — para el aviso de la portería del vigilante. Si hay más de
 // una activa (renovación cargada por adelantado) se devuelve la de vencimiento más lejano.
 export async function fetchSuscripcionActivaPorPlaca(

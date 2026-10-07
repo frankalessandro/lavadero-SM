@@ -2,7 +2,8 @@ import { X } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import type { MetodoPago, MetodoPagoBase } from '../../schemas/orden'
 import { METODO_PAGO_LABEL } from '../../lib/metodoPago'
-import logoIsotipo from '../../assets/logo-isotipo.png'
+import { EncabezadoTiquete, PieTiquete } from './EncabezadoTiquete'
+import { useAjustesNegocio } from '../../lib/useAjustesNegocio'
 
 export interface VentaReciboItem {
   nombre: string
@@ -50,12 +51,13 @@ const FECHA_HORA = new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium', timeS
 // document.body que ReciboModal/TiquetePrint (impresora térmica de 58mm), sin auto-imprimir:
 // no hay impresora real configurada todavía, el admin/jefe de zona imprime con el botón.
 export function VentaReciboModal({ venta, onClose }: { venta: VentaReciboData; onClose: () => void }) {
+  const negocio = useAjustesNegocio()
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-neutral-900/50 p-0 backdrop-blur-sm sm:items-center sm:p-6">
       <div className="custom-scroll flex max-h-full w-[calc(100vw-2rem)] max-w-sm flex-col overflow-y-auto rounded-t-2xl bg-white shadow-card-hover sm:w-full sm:rounded-2xl">
         <div className="h-2 bg-success-600" />
         <div className="flex items-center justify-between px-6 pt-6">
-          <p className="text-sm font-semibold text-neutral-900">Carwash SM</p>
+          <p className="text-sm font-semibold text-neutral-900">{negocio.nombre}</p>
           <button
             type="button"
             onClick={onClose}
@@ -155,9 +157,7 @@ function VentaTicketPrint({ venta }: { venta: VentaReciboData }) {
   const fecha = new Date(venta.fecha)
   return createPortal(
     <div className="tiquete-58">
-      <img src={logoIsotipo} alt="" className="tiquete-58__logo" />
-      <p className="tiquete-58__tagline">Lavadero · Parqueadero</p>
-      <p className="tiquete-58__nit-titulo">NIT 1113661734-4 · Comprobante de venta</p>
+      <EncabezadoTiquete titulo="Comprobante de venta" />
 
       <div className="tiquete-58__linea-solida" />
 
@@ -234,8 +234,7 @@ function VentaTicketPrint({ venta }: { venta: VentaReciboData }) {
 
       <div className="tiquete-58__linea" />
 
-      <p className="tiquete-58__pie">Gracias por su visita</p>
-      <p className="tiquete-58__pie-legal">Factura electrónica: solicítala a gerencia@carwashsm.com</p>
+      <PieTiquete />
     </div>,
     document.body,
   )

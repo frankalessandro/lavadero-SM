@@ -2,6 +2,7 @@ import { useState, type ComponentType, type ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 import { ChevronRight, LayoutGrid, LogOut, Menu } from 'lucide-react'
 import { ConfirmModal } from './ConfirmModal'
+import { BuscadorPlaca } from './BuscadorPlaca'
 
 interface TopbarProps {
   title: string
@@ -23,8 +24,7 @@ interface TopbarProps {
   multiRol?: boolean
   onCambiarModulo?: () => void
   /** Slot junto al avatar — hoy solo admin pasa `<NotificacionesCentro />` acá (las alertas que
-   *  agrega son todas de datos que solo admin ve). Sin buscador: "buscar por placa" no aporta
-   *  aquí, recepción/órdenes ya tienen su propio buscador donde sí aplica. */
+   *  agrega son todas de datos que solo admin ve). El buscador de placa va aparte y es para todos. */
   notificaciones?: ReactNode
 }
 
@@ -85,6 +85,7 @@ export function Topbar({
         )}
       </div>
       <div className="flex shrink-0 items-center gap-3">
+        <BuscadorPlaca />
         {notificaciones}
         {responsable ? (
           <div className="hidden flex-col items-end leading-tight sm:flex">

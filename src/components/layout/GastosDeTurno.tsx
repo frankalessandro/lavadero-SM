@@ -7,11 +7,12 @@ import { Card } from './Card'
 import { CustomSelect } from './CustomSelect'
 import { CurrencyInput } from './CurrencyInput'
 import { toast } from '../../lib/toast'
+import { fechaLocalISO } from '../../lib/periodo'
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 
 function hoyISO(): string {
-  return new Date().toISOString().slice(0, 10)
+  return fechaLocalISO(new Date())
 }
 
 function formatHora(iso: string): string {

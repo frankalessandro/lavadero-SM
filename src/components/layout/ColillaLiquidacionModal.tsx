@@ -2,6 +2,7 @@ import { X } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import type { DesgloseCategoria, DesgloseVehiculos } from '../../data/liquidaciones'
 import { fechaLocalISO } from '../../lib/periodo'
+import { MarcaTiquete } from './EncabezadoTiquete'
 
 export interface ColillaLiquidacionData {
   lavadorNombre: string
@@ -203,8 +204,7 @@ function ColillaPrint({ colilla }: { colilla: ColillaLiquidacionData }) {
   const informativo = colilla.tipo === 'informativo'
   return createPortal(
     <div className="tiquete-58">
-      <p className="tiquete-58__marca">Carwash SM</p>
-      <p className="tiquete-58__tagline">Lavadero · Parqueadero</p>
+      <MarcaTiquete />
       <p className="tiquete-58__titulo">{informativo ? `${TITULO_INFORMATIVO[colilla.alcance ?? 'dia']} (informativo)` : 'Colilla de liquidación'}</p>
       {informativo ? <p className="tiquete-58__tagline">*** NO ES UN PAGO — pago semanal ***</p> : null}
 

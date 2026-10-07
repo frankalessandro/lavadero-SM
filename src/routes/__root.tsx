@@ -1,6 +1,7 @@
-import { createRootRouteWithContext, Link, Outlet } from '@tanstack/react-router'
+import { createRootRouteWithContext, Link, Outlet, useRouterState } from '@tanstack/react-router'
 import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
 import type { AuthContext } from '../lib/auth'
+import { PantallaCarga } from '../components/layout/PantallaCarga'
 
 export interface RouterContext {
   auth: AuthContext | null
@@ -8,7 +9,7 @@ export interface RouterContext {
 
 export const Route = createRootRouteWithContext<RouterContext>()({
   component: RootLayout,
-  pendingComponent: () => <div className="route-status">Cargando…</div>,
+  pendingComponent: () => <PantallaCarga />,
   errorComponent: ({ error }) => (
     <div className="route-status route-status--error">
       <p>Algo salió mal.</p>
@@ -24,8 +25,13 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 })
 
 function RootLayout() {
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  // El menú de enlaces es del sitio público de demostración: en los paneles (que lo tapaban con
+  // `fixed inset-0`) se veía un instante detrás del loader o mientras cargaba cada pantalla.
+  const mostrarMenuPublico = pathname.startsWith('/services')
   return (
     <>
+      {mostrarMenuPublico ? (
       <nav className="nav flex-wrap">
         <Link to="/" activeOptions={{ exact: true }} activeProps={{ className: 'active' }}>
           Inicio
@@ -46,6 +52,7 @@ function RootLayout() {
           Vigilante
         </Link>
       </nav>
+      ) : null}
       <Outlet />
       {import.meta.env.DEV ? <TanStackRouterDevtools position="bottom-right" /> : null}
     </>

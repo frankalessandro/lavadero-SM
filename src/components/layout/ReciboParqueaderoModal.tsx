@@ -2,13 +2,14 @@ import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { Printer } from 'lucide-react'
 import logoMark from '../../assets/logo-mark.png'
-import logoIsotipo from '../../assets/logo-isotipo.png'
 import { METODO_PAGO_LABEL } from '../../lib/metodoPago'
 import {
   CLASE_VEHICULO_LABEL,
   type EstanciaParqueadero,
   type ModalidadParqueadero,
 } from '../../schemas/estanciaParqueadero'
+import { EncabezadoTiquete } from './EncabezadoTiquete'
+import { useAjustesNegocio } from '../../lib/useAjustesNegocio'
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 const FECHA_HORA = new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium', timeStyle: 'short' })
@@ -51,6 +52,7 @@ export function ReciboParqueaderoModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  const negocio = useAjustesNegocio()
   const cobro = estancia.cobro ?? 0
   const tarifa = cobro - estancia.multa
 
@@ -59,8 +61,8 @@ export function ReciboParqueaderoModal({
       <div className="custom-scroll flex max-h-[92vh] w-full max-w-sm flex-col overflow-y-auto rounded-t-3xl bg-white shadow-card-hover sm:max-h-[88vh] sm:rounded-2xl">
         <div className={`h-2 shrink-0 ${esSalida ? 'bg-success-600' : 'bg-primary-600'}`} />
         <div className="flex flex-col items-center gap-1.5 px-6 pt-6 pb-4 text-center">
-          <img src={logoMark} alt="Carwash SM" className="size-11 shrink-0 object-contain" />
-          <p className="mt-1 text-sm font-semibold text-neutral-900">Carwash SM · Parqueadero</p>
+          <img src={logoMark} alt={negocio.nombre} className="size-11 shrink-0 object-contain" />
+          <p className="mt-1 text-sm font-semibold text-neutral-900">{negocio.nombre} · Parqueadero</p>
           <p className="text-xs text-neutral-400">{esSalida ? 'Recibo de salida' : 'Tiquete de ingreso'}</p>
         </div>
 
@@ -153,9 +155,7 @@ function TiqueteParqueaderoPrint({
   const cobro = estancia.cobro ?? 0
   return createPortal(
     <div className="tiquete-58">
-      <img src={logoIsotipo} alt="" className="tiquete-58__logo" />
-      <p className="tiquete-58__tagline">Lavadero · Parqueadero</p>
-      <p className="tiquete-58__nit-titulo">NIT 1113661734-4 · {esSalida ? 'Recibo de salida' : 'Tiquete de ingreso'}</p>
+      <EncabezadoTiquete titulo={esSalida ? 'Recibo de salida' : 'Tiquete de ingreso'} />
       <div className="tiquete-58__linea-solida" />
       <TiqueteFila label="No." valor={`PAR-${estancia.consecutivo}`} />
       <TiqueteFila label={esSalida ? 'Salida' : 'Ingreso'} valor={`${FECHA.format(fecha)} ${HORA.format(fecha)}`} />

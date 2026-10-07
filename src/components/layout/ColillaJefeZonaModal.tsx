@@ -1,5 +1,6 @@
 import { X } from 'lucide-react'
 import { createPortal } from 'react-dom'
+import { MarcaTiquete } from './EncabezadoTiquete'
 
 export interface ColillaJefeZonaData {
   responsable: string
@@ -78,8 +79,7 @@ export function ColillaJefeZonaModal({ colilla, onClose }: { colilla: ColillaJef
 function ColillaPrint({ colilla }: { colilla: ColillaJefeZonaData }) {
   return createPortal(
     <div className="tiquete-58">
-      <p className="tiquete-58__marca">Carwash SM</p>
-      <p className="tiquete-58__tagline">Lavadero · Parqueadero</p>
+      <MarcaTiquete />
       <p className="tiquete-58__titulo">Colilla — jefe de patio</p>
 
       <div className="tiquete-58__linea-solida" />

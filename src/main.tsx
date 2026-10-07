@@ -11,12 +11,21 @@ import './styles/tiquete-print.css'
 import { routeTree } from './routeTree.gen'
 import { App } from './App'
 import { queryClient } from './lib/queryClient'
+import { CargandoContenido } from './components/layout/PantallaCarga'
+import { ErrorPantalla } from './components/layout/ErrorPantalla'
 
 const router = createRouter({
   routeTree,
   context: { auth: null },
   defaultPreload: 'intent',
   defaultPreloadStaleTime: 0,
+  // Sin esto una pantalla con loader lento dejaba el contenido en blanco: el router no mostraba nada
+  // hasta pasar 1 s. Con 200 ms el spinner aparece enseguida y `PendingMinMs` evita el parpadeo
+  // cuando la carga es casi instantánea.
+  defaultPendingComponent: CargandoContenido,
+  defaultPendingMs: 200,
+  defaultPendingMinMs: 400,
+  defaultErrorComponent: ErrorPantalla,
   scrollRestoration: true,
 })
 
