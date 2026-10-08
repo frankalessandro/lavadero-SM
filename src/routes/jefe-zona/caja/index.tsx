@@ -1,6 +1,6 @@
 import { useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { Lock, CheckCircle2, AlertTriangle, Circle, X, Boxes, Wallet } from 'lucide-react'
+import { Lock, Unlock, CheckCircle2, AlertTriangle, Circle, Boxes, Wallet } from 'lucide-react'
 import { fetchTurnoAbierto, fetchTurnos, abrirTurno, solicitarTraspaso as solicitarTraspasoTurno } from '../../../data/turnos'
 import { fetchCategoriasGasto, fetchGastosDeTurno, type GastoConCategoria } from '../../../data/gastos'
 import { fetchProductosOperativo } from '../../../data/productos'
@@ -17,7 +17,9 @@ import type { TurnoCaja } from '../../../schemas/turnoCaja'
 import { toast } from '../../../lib/toast'
 
 import { Card } from '../../../components/layout/Card'
-import { CurrencyInput } from '../../../components/layout/CurrencyInput'
+import { Modal } from '../../../components/layout/Modal'
+import { Button } from '../../../components/layout/Button'
+import { BaseInicialInput } from '../../../components/layout/BaseInicialInput'
 import { GastosDeTurno } from '../../../components/layout/GastosDeTurno'
 import { PrestamosDeTurno } from '../../../components/layout/PrestamosDeTurno'
 import { ConteoInventario } from '../../../components/layout/ConteoInventario'
@@ -563,43 +565,35 @@ function AbrirCajaModal({
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="w-full max-w-sm rounded-t-2xl custom-scroll max-h-[92vh] overflow-y-auto bg-white sm:max-h-[88vh] p-5 shadow-card-hover sm:rounded-t-3xl sm:rounded-2xl sm:p-6">
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-base font-semibold text-neutral-900">Abrir caja</h3>
-            <p className="text-xs text-neutral-500">
-              Vas a abrirla como <span className="font-medium text-neutral-700">{miNombre}</span>.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Cerrar"
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium text-neutral-700">Base inicial</span>
-            <CurrencyInput size="md" prefix="$" value={baseInicial} onChange={setBaseInicial} />
-          </label>
-
-          {error ? <p className="text-xs text-danger-600">{error}</p> : null}
-
-          <button
-            type="submit"
-            disabled={saving}
-            className="rounded-xl bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
-          >
+    <Modal
+      title="Abrir caja"
+      subtitle={
+        <>
+          Vas a abrirla como <span className="font-medium text-neutral-700">{miNombre}</span>.
+        </>
+      }
+      icon={Unlock}
+      size="lg"
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button variant="primary" type="submit" form="abrir-caja-form" loading={saving}>
             {saving ? 'Abriendo…' : 'Abrir caja y continuar'}
-          </button>
-        </form>
-      </div>
-    </div>
+          </Button>
+        </>
+      }
+    >
+      <form id="abrir-caja-form" onSubmit={handleSubmit} className="flex flex-col gap-5">
+        <div className="flex flex-col gap-2 text-sm">
+          <span className="font-medium text-neutral-700">Base inicial</span>
+          <BaseInicialInput size="md" value={baseInicial} onChange={setBaseInicial} />
+        </div>
+        {error ? <p className="text-xs text-danger-600">{error}</p> : null}
+      </form>
+    </Modal>
   )
 }
 

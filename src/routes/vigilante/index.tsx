@@ -30,6 +30,7 @@ import { estadoVigencia, ESTADO_VIGENCIA_LABEL, type SuscripcionParqueadero } fr
 import { fetchTurnoAbierto, abrirTurno, calcularValorEsperado, cerrarTurno } from '../../data/turnos'
 import type { TurnoCaja } from '../../schemas/turnoCaja'
 import { CustomSelect } from '../../components/layout/CustomSelect'
+import { BaseInicialInput } from '../../components/layout/BaseInicialInput'
 import { CurrencyInput } from '../../components/layout/CurrencyInput'
 import { toast } from '../../lib/toast'
 import { ReciboParqueaderoModal, type VarianteReciboParqueadero } from '../../components/layout/ReciboParqueaderoModal'
@@ -309,29 +310,35 @@ function AbrirTurnoModal({ miNombre, onClose, onSaved }: { miNombre: string; onC
   }
 
   return (
-    <ModalSheet title="Abrir turno" onClose={onClose}>
-      <div className="flex flex-col gap-4">
-        <p className="text-sm text-neutral-500">
+    <Modal
+      title="Abrir turno"
+      subtitle={
+        <>
           Vas a abrirlo como <span className="font-medium text-neutral-700">{miNombre}</span>.
-        </p>
-
-        <label className="flex flex-col gap-1.5 text-sm">
+        </>
+      }
+      icon={Unlock}
+      size="lg"
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button variant="primary" onClick={handleSubmit} loading={saving}>
+            {saving ? 'Abriendo…' : 'Abrir turno'}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-2 text-sm">
           <span className="font-medium text-neutral-700">Base inicial</span>
-          <CurrencyInput size="md" prefix="$" value={baseInicial} onChange={setBaseInicial} />
-        </label>
-
+          <BaseInicialInput size="md" value={baseInicial} onChange={setBaseInicial} />
+        </div>
         {error ? <p className="text-xs text-danger-600">{error}</p> : null}
-
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={saving}
-          className="mt-1 w-full rounded-xl bg-primary-600 py-3.5 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
-        >
-          {saving ? 'Abriendo…' : 'Abrir turno'}
-        </button>
       </div>
-    </ModalSheet>
+    </Modal>
   )
 }
 

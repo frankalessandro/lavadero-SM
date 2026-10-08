@@ -5,7 +5,7 @@ import type { RolCaja, TurnoCaja, TraspasoTurno } from '../../schemas/turnoCaja'
 import { usePersonalElegible, nombreDe } from '../../lib/personalElegible'
 import { Card } from './Card'
 import { CustomSelect } from './CustomSelect'
-import { CurrencyInput } from './CurrencyInput'
+import { BaseInicialInput } from './BaseInicialInput'
 import { toast } from '../../lib/toast'
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
@@ -72,10 +72,10 @@ export function AbrirTurnoPrompt({
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <label className="flex flex-col gap-1.5 text-sm">
+        <div className="flex flex-col gap-2 text-sm">
           <span className="font-medium text-neutral-700">Base inicial</span>
-          <CurrencyInput size="sm" prefix="$" value={baseInicial} onChange={setBaseInicial} />
-        </label>
+          <BaseInicialInput size="sm" value={baseInicial} onChange={setBaseInicial} />
+        </div>
 
         {error ? <p className="text-xs text-danger-600">{error}</p> : null}
 
