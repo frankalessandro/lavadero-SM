@@ -31,7 +31,6 @@ import { fetchTurnoAbierto, abrirTurno, calcularValorEsperado, cerrarTurno } fro
 import type { TurnoCaja } from '../../schemas/turnoCaja'
 import { CustomSelect } from '../../components/layout/CustomSelect'
 import { BaseInicialInput } from '../../components/layout/BaseInicialInput'
-import { CurrencyInput } from '../../components/layout/CurrencyInput'
 import { toast } from '../../lib/toast'
 import { ReciboParqueaderoModal, type VarianteReciboParqueadero } from '../../components/layout/ReciboParqueaderoModal'
 import { Modal } from '../../components/layout/Modal'
@@ -408,17 +407,17 @@ function CerrarTurnoModal({ turno, onClose, onSaved }: { turno: TurnoCaja; onClo
   }
 
   return (
-    <ModalSheet title="Cerrar turno" onClose={onClose}>
+    <ModalSheet title="Cerrar turno" size="lg" onClose={onClose}>
       {paso === 'conteo' ? (
         <div className="flex flex-col gap-4">
           <p className="text-xs text-neutral-500">
             Cuenta el efectivo físico de la caja e ingresa el total. El valor esperado del sistema se muestra
             después, para un arqueo ciego.
           </p>
-          <label className="flex flex-col gap-1.5 text-sm">
+          <div className="flex flex-col gap-2 text-sm">
             <span className="font-medium text-neutral-700">Conteo físico</span>
-            <CurrencyInput autoFocus size="md" prefix="$" value={conteoFisico} onChange={setConteoFisico} />
-          </label>
+            <BaseInicialInput size="md" value={conteoFisico} onChange={setConteoFisico} />
+          </div>
 
           {error ? <p className="text-xs text-danger-600">{error}</p> : null}
 
@@ -916,9 +915,19 @@ function SalidaModal({
 }
 
 // Hoja modal del parqueadero sobre el Modal común: hoja anclada abajo en celular, centrada en escritorio.
-function ModalSheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+function ModalSheet({
+  title,
+  onClose,
+  children,
+  size = 'sm',
+}: {
+  title: string
+  onClose: () => void
+  children: ReactNode
+  size?: 'sm' | 'lg'
+}) {
   return (
-    <Modal title={title} size="sm" onClose={onClose}>
+    <Modal title={title} size={size} onClose={onClose}>
       {children}
     </Modal>
   )

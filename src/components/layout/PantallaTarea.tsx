@@ -12,6 +12,7 @@ export function PantallaTarea({
   onVolver,
   children,
   pie,
+  ancho = 'lg',
 }: {
   titulo: string
   subtitulo?: string
@@ -19,7 +20,10 @@ export function PantallaTarea({
   children: ReactNode
   /** Acción principal (y secundaria si aplica) — queda fija abajo. */
   pie?: ReactNode
+  /** `2xl` para pantallas con dos columnas (ej. contar billetes y monedas). */
+  ancho?: 'lg' | '2xl'
 }) {
+  const maxAncho = ancho === '2xl' ? 'max-w-2xl' : 'max-w-lg'
   return (
     <div className="fixed inset-0 z-30 flex flex-col bg-neutral-50">
       <header className="flex shrink-0 items-center gap-3 border-b border-neutral-200 bg-white px-4 py-3">
@@ -38,12 +42,12 @@ export function PantallaTarea({
       </header>
 
       <div className="custom-scroll min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-lg flex-col gap-4 p-4">{children}</div>
+        <div className={`mx-auto flex w-full ${maxAncho} flex-col gap-4 p-4`}>{children}</div>
       </div>
 
       {pie ? (
         <footer className="shrink-0 border-t border-neutral-200 bg-white p-4">
-          <div className="mx-auto flex w-full max-w-lg flex-col gap-2">{pie}</div>
+          <div className={`mx-auto flex w-full ${maxAncho} flex-col gap-2`}>{pie}</div>
         </footer>
       ) : null}
     </div>

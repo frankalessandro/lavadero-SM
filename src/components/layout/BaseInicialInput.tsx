@@ -13,7 +13,7 @@ type Conteo = Record<number, number>
 const totalDe = (conteo: Conteo) => ORDEN.reduce((suma, d) => suma + d * (conteo[d] || 0), 0)
 
 /**
- * Base inicial con dos formas de ingresarla: un monto total, o contando cuántos billetes y
+ * Monto en efectivo (base inicial o conteo de cierre) con dos formas de ingresarla: un monto total, o contando cuántos billetes y
  * monedas de cada denominación hay (con − / + y Enter para saltar a la siguiente). Hacia afuera
  * siempre entrega el total en dígitos crudos, igual que `CurrencyInput`: el consumidor y la RPC
  * no cambian. Pensado para un modal ancho (`Modal size="lg"`): billetes y monedas en dos columnas.

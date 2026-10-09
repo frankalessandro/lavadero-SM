@@ -3,7 +3,7 @@ import { CheckCircle2, RotateCcw, Eye } from 'lucide-react'
 import { cerrarTurno, desgloseEsperado, type DesgloseEsperado } from '../../data/turnos'
 import type { TurnoCaja } from '../../schemas/turnoCaja'
 import { PantallaTarea, BotonPrincipal } from './PantallaTarea'
-import { CurrencyInput } from './CurrencyInput'
+import { BaseInicialInput } from './BaseInicialInput'
 import { toast } from '../../lib/toast'
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
@@ -94,6 +94,7 @@ export function ArqueoCaja({
         <PantallaTarea
           titulo="Arqueo de caja"
           subtitulo="Cuenta el efectivo antes de ver el esperado"
+          ancho="2xl"
           onVolver={onVolver}
           pie={
             <>
@@ -110,10 +111,10 @@ export function ArqueoCaja({
               Cuenta todo el efectivo que hay en la caja ahora mismo. El sistema no te muestra cuánto debería haber
               hasta que registres tu conteo — así el arqueo es real y no un cuadre a la medida.
             </p>
-            <label className="flex flex-col gap-1.5 text-sm">
+            <div className="flex flex-col gap-2 text-sm">
               <span className="font-medium text-neutral-700">Efectivo contado</span>
-              <CurrencyInput autoFocus size="md" prefix="$" value={conteoFisico} onChange={setConteoFisico} />
-            </label>
+              <BaseInicialInput size="md" value={conteoFisico} onChange={setConteoFisico} />
+            </div>
           </div>
         </PantallaTarea>
       </form>
