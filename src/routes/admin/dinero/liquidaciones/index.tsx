@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState, type ComponentType, type FormEvent, type ReactNode } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { Wallet, CheckCircle2, Receipt, ShieldCheck, Ban, HandCoins, Inbox, UserRound } from 'lucide-react'
+import { Wallet, CheckCircle2, Receipt, ShieldCheck, Ban, HandCoins, Inbox, UserRound, CalendarDays } from 'lucide-react'
 import {
   fetchComisionesPendientes,
   fetchLiquidaciones,
   fetchMontoPeriodo,
+  fetchDiasConPendiente,
   fetchDesgloseLiquidacion,
   fetchDeudaTrasLiquidacion,
   fetchResumenPeriodoLavadores,
@@ -29,6 +30,11 @@ import {
   type ResumenPeriodoJefeZona,
 } from '../../../../data/liquidacionesJefeZona'
 import { PeriodoSelector } from '../../../../components/layout/PeriodoSelector'
+import {
+  ElegirPeriodoLiquidacionModal,
+  type RangoLiquidacion,
+  type TipoPeriodoLiquidacion,
+} from '../../../../components/layout/ElegirPeriodoLiquidacionModal'
 import { calcularRango, fechaLocalISO, type ModoPeriodo } from '../../../../lib/periodo'
 import { fetchLavadores } from '../../../../data/lavadores'
 import { fetchTurnoAbierto } from '../../../../data/turnos'
@@ -154,6 +160,14 @@ function LiquidacionesPage() {
     rangoLabel?: string
   } | null>(null)
   const [confirmandoPago, setConfirmandoPago] = useState<Liquidacion | null>(null)
+  // Periodo elegido a mano: un día cualquiera (lavadores) o quincena/mes (jefes de patio). Abre el
+  // selector de periodo y, al continuar, calcula el monto real y sigue el mismo confirm de siempre.
+  const [eligiendoPeriodo, setEligiendoPeriodo] = useState<
+    | { tipo: TipoPeriodoLiquidacion; lavador: ComisionPendiente; jefe?: undefined }
+    | { tipo: TipoPeriodoLiquidacion; jefe: ComisionPendienteJefeZona; lavador?: undefined }
+    | null
+  >(null)
+  const [calculandoPeriodo, setCalculandoPeriodo] = useState(false)
   const [colilla, setColilla] = useState<ColillaLiquidacionData | null>(null)
 
   // Jefe de patio (comisión por combo, ver Configuración) — mismo flujo que lavadores arriba, pero
@@ -476,26 +490,50 @@ function LiquidacionesPage() {
     }
   }
 
-  async function handleElegirPeriodicidadJefeZona(comision: ComisionPendienteJefeZona, periodicidad: Periodicidad) {
+  async function handleConfirmarPeriodo(rango: RangoLiquidacion) {
+    if (!eligiendoPeriodo) return
     setError(null)
-    setCalculandoJefeZona(`${comision.personaId}:${periodicidad}`)
+    setCalculandoPeriodo(true)
     try {
-      const [periodoInicio, periodoFin] = rangoPorPeriodicidad(periodicidad)
-      const preview = await fetchMontoPeriodoJefeZona(comision.personaId, periodoInicio, periodoFin)
-      if (preview.cantidadOrdenes === 0) {
-        setError(
-          `${comision.responsable} no tiene órdenes sin liquidar en ${
-            periodicidad === 'diaria' ? 'el día de hoy' : 'los últimos 7 días'
-          } — nada que generar en ese rango.`,
-        )
-        return
+      if (eligiendoPeriodo.lavador) {
+        const comision = eligiendoPeriodo.lavador
+        const preview = await fetchMontoPeriodo(comision.lavadorId, rango.periodoInicio, rango.periodoFin, tiposVehiculo, combos)
+        if (preview.cantidadOrdenes === 0) {
+          setError(`${comision.lavadorNombre} no tiene órdenes sin liquidar en ${rango.label} — nada que generar en ese periodo.`)
+          setEligiendoPeriodo(null)
+          return
+        }
+        setConfirmandoGenerar({
+          comision,
+          periodicidad: 'diaria',
+          periodoInicio: rango.periodoInicio,
+          periodoFin: rango.periodoFin,
+          preview,
+          rangoLabel: rango.label,
+        })
+      } else {
+        const comision = eligiendoPeriodo.jefe
+        const preview = await fetchMontoPeriodoJefeZona(comision.personaId, rango.periodoInicio, rango.periodoFin)
+        if (preview.cantidadOrdenes === 0) {
+          setError(`${comision.responsable} no tiene órdenes sin liquidar en ${rango.label} — nada que generar en ese periodo.`)
+          setEligiendoPeriodo(null)
+          return
+        }
+        setConfirmandoGenerarJefeZona({
+          comision,
+          periodicidad: 'semanal',
+          periodoInicio: rango.periodoInicio,
+          periodoFin: rango.periodoFin,
+          preview,
+          rangoLabel: rango.label,
+        })
       }
-      setConfirmandoGenerarJefeZona({ comision, periodicidad, periodoInicio, periodoFin, preview })
+      setEligiendoPeriodo(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo calcular el monto del periodo')
       toast.desdeError(err, 'No se pudo calcular el monto del periodo')
     } finally {
-      setCalculandoJefeZona(null)
+      setCalculandoPeriodo(false)
     }
   }
 
@@ -658,7 +696,7 @@ function LiquidacionesPage() {
         description="Lo que se le debe al personal: generar el corte, pagarlo y consultar lo ya pagado."
         help={{
           body:
-            `Se liquida sobre el acumulado, sin descuentos sobre el precio (regla de negocio 4). Puedes generar diaria o semanal para cualquier persona; la periodicidad resaltada (${periodicidadLabel}) y los porcentajes de comisión se definen en Configuración.\n\n` +
+            `Se liquida sobre el acumulado, sin descuentos sobre el precio (regla de negocio 4). Lavadores: hoy, últimos 7 días o un día que elijas. Jefes de patio: quincenal (1–15 / 16–fin de mes) o mensual. La periodicidad resaltada (${periodicidadLabel}) y los porcentajes de comisión se definen en Configuración.\n\n` +
             'Cuenta el trabajo desde que se asigna el vehículo, sin importar si ya terminó el lavado o si el cliente pagó — solo se excluyen las órdenes anuladas.\n\n' +
             'El flujo es: Por liquidar (trabajo acumulado) → Generar → Por pagar (liquidación creada, falta entregar la plata) → Marcar pagada → Histórico.\n\n' +
             'Si la persona tiene deuda (préstamos, consumo de nevera), al generar eliges cuánto descontar.',
@@ -769,10 +807,33 @@ function LiquidacionesPage() {
                       monto={c.montoPendiente}
                       ordenes={c.cantidadOrdenes}
                       deuda={c.deudaPendiente}
-                      periodicidadDefault={configuracion.periodicidadLiquidacion}
-                      calculando={(p) => calculando === `${c.lavadorId}:${p}`}
-                      bloqueado={generando === c.lavadorId}
-                      onGenerar={(p) => handleElegirPeriodicidad(c, p)}
+                      acciones={
+                        <>
+                          {(['diaria', 'semanal'] as const).map((p) => (
+                            <Button
+                              key={p}
+                              size="md"
+                              variant={p === configuracion.periodicidadLiquidacion ? 'primary' : 'secondary'}
+                              loading={calculando === `${c.lavadorId}:${p}`}
+                              disabled={c.montoPendiente === 0 || generando === c.lavadorId}
+                              onClick={() => handleElegirPeriodicidad(c, p)}
+                              className="capitalize"
+                            >
+                              {p}
+                            </Button>
+                          ))}
+                          <Button
+                            size="md"
+                            variant="secondary"
+                            icon={CalendarDays}
+                            disabled={c.montoPendiente === 0 || generando === c.lavadorId}
+                            onClick={() => setEligiendoPeriodo({ tipo: 'dia', lavador: c })}
+                            className="col-span-2"
+                          >
+                            Elegir otro día
+                          </Button>
+                        </>
+                      }
                     />
                   ))
                 : pendientesJefeZona.map((c) => (
@@ -783,10 +844,28 @@ function LiquidacionesPage() {
                       monto={c.montoPendiente}
                       ordenes={c.cantidadOrdenes}
                       deuda={c.deudaPendiente}
-                      periodicidadDefault={configuracion.periodicidadLiquidacion}
-                      calculando={(p) => calculandoJefeZona === `${c.personaId}:${p}`}
-                      bloqueado={generandoJefeZona === c.personaId}
-                      onGenerar={(p) => handleElegirPeriodicidadJefeZona(c, p)}
+                      acciones={
+                        <>
+                          <Button
+                            size="md"
+                            variant="primary"
+                            icon={CalendarDays}
+                            disabled={c.montoPendiente === 0 || generandoJefeZona === c.personaId}
+                            onClick={() => setEligiendoPeriodo({ tipo: 'quincena', jefe: c })}
+                          >
+                            Quincenal
+                          </Button>
+                          <Button
+                            size="md"
+                            variant="secondary"
+                            icon={CalendarDays}
+                            disabled={c.montoPendiente === 0 || generandoJefeZona === c.personaId}
+                            onClick={() => setEligiendoPeriodo({ tipo: 'mes', jefe: c })}
+                          >
+                            Mensual
+                          </Button>
+                        </>
+                      }
                       onVerOrdenes={{
                         cargando: cargandoDetalleJefeZona === c.personaId,
                         onClick: () => handleVerDetalleJefeZona(c.personaId, c.responsable),
@@ -967,6 +1046,17 @@ function LiquidacionesPage() {
             <ListaLiquidaciones filas={historicoFiltrado} acciones={accionesFila} />
           )}
         </section>
+      ) : null}
+
+      {eligiendoPeriodo ? (
+        <ElegirPeriodoLiquidacionModal
+          tipo={eligiendoPeriodo.tipo}
+          nombre={eligiendoPeriodo.lavador ? eligiendoPeriodo.lavador.lavadorNombre : eligiendoPeriodo.jefe.responsable}
+          calculando={calculandoPeriodo}
+          cargarDias={eligiendoPeriodo.lavador ? () => fetchDiasConPendiente(eligiendoPeriodo.lavador.lavadorId) : undefined}
+          onConfirm={handleConfirmarPeriodo}
+          onClose={() => setEligiendoPeriodo(null)}
+        />
       ) : null}
 
       {confirmandoGenerar ? (
@@ -1165,10 +1255,7 @@ function PendienteCard({
   monto,
   ordenes,
   deuda,
-  periodicidadDefault,
-  calculando,
-  bloqueado,
-  onGenerar,
+  acciones,
   onVerOrdenes,
 }: {
   nombre: string
@@ -1176,10 +1263,7 @@ function PendienteCard({
   monto: number
   ordenes: number
   deuda: number
-  periodicidadDefault: Periodicidad
-  calculando: (p: Periodicidad) => boolean
-  bloqueado: boolean
-  onGenerar: (p: Periodicidad) => void
+  acciones: ReactNode
   onVerOrdenes?: { cargando: boolean; onClick: () => void }
 }) {
   return (
@@ -1215,21 +1299,7 @@ function PendienteCard({
           </p>
         ) : null}
       </div>
-      <div className="mt-auto grid grid-cols-2 gap-2">
-        {(['diaria', 'semanal'] as const).map((p) => (
-          <Button
-            key={p}
-            size="md"
-            variant={p === periodicidadDefault ? 'primary' : 'secondary'}
-            loading={calculando(p)}
-            disabled={monto === 0 || bloqueado}
-            onClick={() => onGenerar(p)}
-            className="capitalize"
-          >
-            {p}
-          </Button>
-        ))}
-      </div>
+      <div className="mt-auto grid grid-cols-2 gap-2">{acciones}</div>
     </Card>
   )
 }

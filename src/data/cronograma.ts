@@ -10,6 +10,7 @@ import {
 import {
   ensureDiasDescansoGenerados,
   fetchDiasDescanso,
+  indiceDeDescanso,
   posicionQueDescansa,
   resolverIdsOrdenBase,
 } from './asistenciaLavadores'
@@ -119,29 +120,70 @@ export async function anularPermiso(id: string): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
-// Vuelve a la rotación fija los días desde `desdeISO` (hoy) hasta fin de mes: reescribe quién
-// descansa y borra los cambios a mano de entra/sale de esos días. Los días pasados no se tocan
-// (el histórico no se reescribe). El cambio anterior queda en la bitácora.
+// Lavadores activos en el orden de la rotación: primero los que tienen lugar (0-3) por ese orden y
+// después los que no, por nombre. Ese orden manda al repartir descansos cuando no son 4 justos.
+async function fetchActivosEnOrdenRotacion(): Promise<string[]> {
+  const { data, error } = await db
+    .from('lavadores')
+    .select('id, nombre, posicion:posicion_cronograma_base')
+    .eq('activo', true)
+  if (error) throw new Error(error.message)
+  const filas = data as { id: string; nombre: string; posicion: number | null }[]
+  return filas
+    .sort((a, b) => (a.posicion ?? 99) - (b.posicion ?? 99) || a.nombre.localeCompare(b.nombre, 'es'))
+    .map((f) => f.id)
+}
+
+// Vuelve a la rotación los días desde `desdeISO` (hoy) hasta fin de mes: reescribe quién descansa
+// y borra los cambios a mano de entra/sale de esos días. Los días pasados no se tocan (el
+// histórico no se reescribe). El cambio anterior queda en la bitácora.
+//
+// Se planea SOLO con los lavadores activos: si alguien está inactivo (ej. de descanso largo) no
+// entra en el reparto. Con 4 activos rige la rotación de siempre (cada uno descansa un día fijo
+// de la semana, que va rotando); con 3 o menos los descansos de lunes a jueves se reparten en
+// ciclo, parejo, entre los que hay. Al reactivar a alguien basta restablecer de nuevo.
 export async function restablecerMes(desdeISO: string, hastaISO: string): Promise<void> {
+  const activos = await fetchActivosEnOrdenRotacion()
+  if (activos.length === 0) throw new Error('No hay lavadores activos para armar la rotación')
+
   const { data, error } = await db.from('dias_descanso').select('fecha').gte('fecha', desdeISO).lte('fecha', hastaISO)
   if (error) throw new Error(error.message)
-  const fechas = (data as { fecha: string }[]).map((f) => f.fecha)
-  if (fechas.length === 0) return
+  const existentes = new Set((data as { fecha: string }[]).map((f) => f.fecha))
 
-  // dias_descanso no admite DELETE (el histórico se corrige, no se borra): se recalcula qué
-  // lavador toca cada fecha según la rotación y se actualiza esa fila.
-  const ids = await resolverIdsOrdenBase()
-  for (const fecha of fechas) {
+  const idsBase = activos.length === 4 ? await resolverIdsOrdenBase() : []
+  const baseCompleta = idsBase.length === 4 && idsBase.every(Boolean)
+  const ahora = new Date().toISOString()
+
+  const actualizar: { fecha: string; lavadorId: string }[] = []
+  const insertar: { fecha: string; lavador_id: string }[] = []
+  for (let fecha = desdeISO; fecha <= hastaISO; fecha = sumarDiasISO(fecha, 1)) {
     const [y, m, d] = fecha.split('-').map(Number)
-    const posicion = posicionQueDescansa(Date.UTC(y, m - 1, d))
-    if (posicion === undefined) continue
-    const lavadorId = ids[posicion]
+    const ms = Date.UTC(y, m - 1, d)
+    let lavadorId: string | undefined
+    if (activos.length === 4) {
+      const posicion = posicionQueDescansa(ms)
+      if (posicion !== undefined) lavadorId = baseCompleta ? idsBase[posicion] : activos[posicion]
+    } else {
+      const indice = indiceDeDescanso(ms)
+      if (indice !== undefined) lavadorId = activos[indice % activos.length]
+    }
     if (!lavadorId) continue
+    if (existentes.has(fecha)) actualizar.push({ fecha, lavadorId })
+    else insertar.push({ fecha, lavador_id: lavadorId })
+  }
+
+  // dias_descanso no admite DELETE (el histórico se corrige, no se borra): se actualiza la fila
+  // de cada fecha y se crean las que faltaban.
+  for (const { fecha, lavadorId } of actualizar) {
     const { error: errorUpd } = await db
       .from('dias_descanso')
-      .update({ lavador_id: lavadorId, actualizado_por: null, motivo: null, actualizado_en: new Date().toISOString() })
+      .update({ lavador_id: lavadorId, actualizado_por: null, motivo: null, actualizado_en: ahora })
       .eq('fecha', fecha)
     if (errorUpd) throw new Error(errorUpd.message)
+  }
+  if (insertar.length > 0) {
+    const { error: errorIns } = await db.from('dias_descanso').insert(insertar)
+    if (errorIns) throw new Error(errorIns.message)
   }
 
   const { error: errorExtras } = await db

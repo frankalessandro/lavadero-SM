@@ -196,7 +196,8 @@ export function CronogramaPanel({ actor, hoyISO, onCambio }: Props) {
         <p className="flex items-start gap-2 rounded-lg border border-warning-600/25 bg-warning-50 px-3 py-2.5 text-sm text-warning-700">
           <AlertTriangle size={15} className="mt-0.5 shrink-0" />
           {lugaresLibres === 1 ? 'Hay 1 lugar' : `Hay ${lugaresLibres} lugares`} de la rotación sin lavador: los días que le
-          tocan nadie descansa. Asígnalo en Personal › Lavadores (Editar › Lugar en la rotación).
+          tocan nadie descansa. Asígnalo en Personal › Lavadores (Editar › Lugar en la rotación) o usa «Restablecer a la
+          rotación» para repartir los descansos entre los activos.
         </p>
       ) : null}
 
@@ -277,7 +278,7 @@ export function CronogramaPanel({ actor, hoyISO, onCambio }: Props) {
       {confirmandoReset ? (
         <ConfirmModal
           title="Restablecer a la rotación"
-          message={`Desde hoy hasta el fin de ${tituloMes}, quién descansa vuelve a la rotación fija y se borran los cambios a mano de quién entra y quién sale. Los días anteriores no se tocan y los cambios quedan en la bitácora.`}
+          message={`Desde hoy hasta el fin de ${tituloMes}, quién descansa se vuelve a armar con los lavadores activos (${activos.length}), repartido parejo, y se borran los cambios a mano de quién entra y quién sale. Los inactivos no entran en el reparto. Los días anteriores no se tocan y los cambios quedan en la bitácora.`}
           confirmLabel="Restablecer"
           variant="danger"
           successMessage="Cronograma restablecido"

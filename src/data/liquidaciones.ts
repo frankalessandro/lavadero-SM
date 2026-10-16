@@ -1,5 +1,6 @@
 import { db } from '../lib/db'
-import { limitesLocalesISO } from '../lib/periodo'
+import { fechaLocalISO, limitesLocalesISO } from '../lib/periodo'
+import { paginar } from '../lib/paginar'
 import { liquidacionSchema, type Liquidacion } from '../schemas/liquidacion'
 import { fetchLavadores } from './lavadores'
 import { fetchOrdenesEnRango } from './ordenes'
@@ -184,6 +185,51 @@ async function ordenesElegibles(lavadorId: string, periodoInicio: string, period
     if (orden.lavadorId2 === lavadorId && orden.liquidacionId2 === undefined) return true
     return false
   })
+}
+
+export interface DiaConPendiente {
+  /** Fecha local YYYY-MM-DD en que se creó la orden. */
+  fecha: string
+  cantidadOrdenes: number
+  /** Lo que le corresponde a este lavador ese día (su mitad si se lavó entre dos). */
+  monto: number
+}
+
+// Días en que este lavador tiene comisión sin liquidar, del más reciente al más antiguo — para que
+// al elegir "liquidar un día" se vea de una vez cuáles tienen dinero, sin probar fecha por fecha.
+export async function fetchDiasConPendiente(lavadorId: string): Promise<DiaConPendiente[]> {
+  const filas = await paginar<{
+    creado_en: string
+    lavador_id: string | null
+    lavador_id_2: string | null
+    comision_lavador: number
+    liquidacion_id: string | null
+    liquidacion_id_2: string | null
+  }>((a, b) =>
+    db
+      .from('ordenes')
+      .select('creado_en, lavador_id, lavador_id_2, comision_lavador, liquidacion_id, liquidacion_id_2')
+      .neq('estado', 'anulada')
+      .or(`lavador_id.eq.${lavadorId},lavador_id_2.eq.${lavadorId}`)
+      .order('creado_en', { ascending: false })
+      .order('id')
+      .range(a, b),
+  )
+  const porDia = new Map<string, DiaConPendiente>()
+  for (const fila of filas) {
+    const tieneSegundo = !!fila.lavador_id_2
+    const [mitadPrincipal, mitadSegundo] = splitComision(fila.comision_lavador, tieneSegundo)
+    let monto: number
+    if (fila.lavador_id === lavadorId && fila.liquidacion_id == null) monto = tieneSegundo ? mitadPrincipal : fila.comision_lavador
+    else if (fila.lavador_id_2 === lavadorId && fila.liquidacion_id_2 == null) monto = mitadSegundo
+    else continue
+    const fecha = fechaLocalISO(new Date(fila.creado_en))
+    const dia = porDia.get(fecha) ?? { fecha, cantidadOrdenes: 0, monto: 0 }
+    dia.cantidadOrdenes += 1
+    dia.monto += monto
+    porDia.set(fecha, dia)
+  }
+  return [...porDia.values()].sort((x, y) => (x.fecha < y.fecha ? 1 : -1))
 }
 
 export interface DesgloseComboItem {

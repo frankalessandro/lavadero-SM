@@ -38,6 +38,17 @@ export function posicionQueDescansa(utcMs: number): number | undefined {
   return (diaSemana + CANTIDAD_ORDEN_BASE - rotacion) % CANTIDAD_ORDEN_BASE
 }
 
+// Número corrido del día de descanso desde la fecha ancla (lunes-jueves de cada semana, 4 por
+// semana). Sirve para repartir los descansos en ciclo entre los lavadores activos cuando no son
+// exactamente 4. undefined = ese día nadie descansa.
+export function indiceDeDescanso(utcMs: number): number | undefined {
+  const diffDias = Math.round((utcMs - EPOCA_LUNES_UTC) / UN_DIA_MS)
+  if (diffDias < 0) return undefined
+  const diaSemana = diffDias % 7
+  if (diaSemana > 3) return undefined
+  return Math.floor(diffDias / 7) * CANTIDAD_ORDEN_BASE + diaSemana
+}
+
 // La posición 0-3 vive en `lavadores.posicion_cronograma_base` (migración 0020) y se elige en
 // Personal › Lavadores: es la fuente única, no una lista aparte. Solo cuentan los lavadores
 // ACTIVOS; si falta alguien en un lugar (se fue y aún no entra su reemplazo) ese lugar queda
