@@ -982,7 +982,8 @@ function ProductoForm({
       nombre,
       unidadMedida,
       seccion: seccion || undefined,
-      precioVenta: precioVenta ? Number(precioVenta) : undefined,
+      // Un insumo no lleva precio: si se cambió de nevera a insumo, el precio viejo se descarta.
+      precioVenta: seccion && precioVenta ? Number(precioVenta) : undefined,
       costo: costo ? Number(costo) : undefined,
     })
     if (!parsed.success) {
@@ -1055,9 +1056,9 @@ function ProductoForm({
                 value={seccion}
                 onChange={setSeccion}
                 options={[
-                  { value: '', label: 'Insumo (no se vende)' },
-                  { value: 'bebida', label: SECCION_PRODUCTO_LABEL.bebida },
-                  { value: 'snack', label: SECCION_PRODUCTO_LABEL.snack },
+                  { value: '', label: 'Insumo de lavado (no se vende)' },
+                  { value: 'bebida', label: `Nevera · ${SECCION_PRODUCTO_LABEL.bebida}` },
+                  { value: 'snack', label: `Nevera · ${SECCION_PRODUCTO_LABEL.snack}` },
                 ]}
               />
             </label>
@@ -1070,18 +1071,20 @@ function ProductoForm({
               </span>
               <CurrencyInput size="sm" prefix="$" value={costo} onChange={setCosto} />
             </label>
-            <label className="flex flex-col gap-1.5 text-left text-sm">
-              <span className="font-medium text-neutral-700">
-                Precio de venta <span className="font-normal text-neutral-400">(opcional)</span>
-              </span>
-              <CurrencyInput size="sm" prefix="$" value={precioVenta} onChange={setPrecioVenta} />
-            </label>
+            {seccion ? (
+              <label className="flex flex-col gap-1.5 text-left text-sm">
+                <span className="font-medium text-neutral-700">Precio de venta</span>
+                <CurrencyInput size="sm" prefix="$" value={precioVenta} onChange={setPrecioVenta} />
+              </label>
+            ) : null}
           </div>
           <p className="-mt-2 text-xs text-neutral-400">
-            Sin precio de venta el producto no se puede vender en /jefe-zona. El costo es el precio de compra de
-            referencia — se usa para el margen y para el costo de mercancía vendida mientras no haya una entrada de
-            inventario con costo.
-            {costo && precioVenta ? (
+            {seccion
+              ? 'El producto aparece en la nevera de /jefe-zona con este precio. '
+              : 'Los insumos son de uso interno: no se venden ni llevan precio. '}
+            El costo es el precio de compra de referencia — se usa para el margen y para el costo de mercancía
+            vendida mientras no haya una entrada de inventario con costo.
+            {seccion && costo && precioVenta ? (
               <span className="ml-1 font-medium text-success-700">
                 Ganancia: {COP.format(Number(precioVenta) - Number(costo))}
               </span>

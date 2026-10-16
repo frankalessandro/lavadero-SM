@@ -34,13 +34,21 @@ export const productoSchema = z.object({
   seccion: seccionProductoSchema.nullish().transform((value) => value ?? undefined),
 })
 
-export const productoInputSchema = productoSchema.omit({ id: true, activo: true }).extend({
-  nombre: z.string().trim().min(2, 'El nombre debe tener al menos 2 caracteres'),
-  unidadMedida: z.string().trim().min(1, 'La unidad de medida es obligatoria'),
-  precioVenta: z.number().int().nonnegative().optional(),
-  costo: z.number().int().nonnegative().optional(),
-  seccion: seccionProductoSchema.optional(),
-})
+export const productoInputSchema = productoSchema
+  .omit({ id: true, activo: true })
+  .extend({
+    nombre: z.string().trim().min(2, 'El nombre debe tener al menos 2 caracteres'),
+    unidadMedida: z.string().trim().min(1, 'La unidad de medida es obligatoria'),
+    precioVenta: z.number().int().nonnegative().optional(),
+    costo: z.number().int().nonnegative().optional(),
+    seccion: seccionProductoSchema.optional(),
+  })
+  // Un producto de nevera (con sección) sin precio caería en "Insumos de lavado": la lista
+  // se separa por precio de venta.
+  .refine((p) => p.seccion == null || p.precioVenta != null, {
+    path: ['precioVenta'],
+    message: 'Un producto de nevera necesita precio de venta',
+  })
 
 export type Producto = z.infer<typeof productoSchema>
 export type ProductoInput = z.infer<typeof productoInputSchema>
