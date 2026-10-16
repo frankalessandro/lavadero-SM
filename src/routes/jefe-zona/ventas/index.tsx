@@ -1,7 +1,26 @@
 import { useMemo, useRef, useState, type FormEvent } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ShoppingCart, Receipt, X, Plus, Minus, Trash2, Wallet, Users, UserPlus, PackagePlus, StickyNote } from 'lucide-react'
+import {
+  ShoppingCart,
+  Receipt,
+  X,
+  Plus,
+  Minus,
+  Trash2,
+  Wallet,
+  Users,
+  UserPlus,
+  PackagePlus,
+  StickyNote,
+  Banknote,
+  Landmark,
+  CreditCard,
+  ChevronDown,
+  Ban,
+  CupSoda,
+  Clock,
+} from 'lucide-react'
 import { fetchTurnoAbierto } from '../../../data/turnos'
 import { fetchProductosOperativo } from '../../../data/productos'
 import { fetchStockProductosOperativo } from '../../../data/movimientosInventario'
@@ -75,6 +94,12 @@ function hace(desdeISO: string): string {
   const horas = Math.floor(minutos / 60)
   const resto = minutos % 60
   return `hace ${horas} h${resto > 0 ? ` ${resto} min` : ''}`
+}
+
+const METODO_ICONO = { efectivo: Banknote, transferencia: Landmark, datafono: CreditCard, mixto: Wallet } as const
+
+function minutosDesde(desdeISO: string): number {
+  return Math.max(0, Math.round((Date.now() - new Date(desdeISO).getTime()) / 60000))
 }
 
 function VenderPage() {
@@ -274,7 +299,7 @@ function VenderPage() {
           <div className="grid grid-cols-2 gap-1 rounded-xl bg-neutral-200/60 p-1 sm:w-fit">
             {(
               [
-                { key: 'mostrador' as const, label: 'Mostrador', icon: ShoppingCart, count: 0 },
+                { key: 'mostrador' as const, label: 'Mostrador', icon: ShoppingCart, count: ventasActivas.length },
                 { key: 'cuentas' as const, label: 'Cuentas abiertas', icon: Users, count: cuentasAbiertas.length },
               ] as const
             ).map(({ key, label, icon: Icon, count }) => (
@@ -288,15 +313,13 @@ function VenderPage() {
               >
                 <Icon size={15} />
                 <span className="truncate">{label}</span>
-                {count > 0 ? (
-                  <span
-                    className={`rounded-full px-1.5 text-[11px] font-semibold ${
-                      tab === key ? 'bg-primary-100 text-primary-700' : 'bg-neutral-100 text-neutral-500'
-                    }`}
-                  >
-                    {count}
-                  </span>
-                ) : null}
+                <span
+                  className={`rounded-full px-1.5 text-[11px] font-semibold tabular-nums ${
+                    tab === key ? 'bg-primary-100 text-primary-700' : 'bg-neutral-100 text-neutral-500'
+                  }`}
+                >
+                  {count}
+                </span>
               </button>
             ))}
           </div>
@@ -343,11 +366,15 @@ function VenderPage() {
                 <button
                   type="button"
                   onClick={() => setAbriendoCuenta(true)}
-                  className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-neutral-300 bg-white px-4 py-10 text-center transition-colors hover:border-primary-300 hover:bg-primary-50/40"
+                  className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-neutral-300 bg-white px-4 py-12 text-center transition-colors hover:border-primary-300 hover:bg-primary-50/40"
                 >
-                  <UserPlus size={22} className="text-neutral-300" />
-                  <span className="text-sm text-neutral-500">No hay cuentas abiertas.</span>
-                  <span className="text-sm font-semibold text-primary-700">Abrir la primera</span>
+                  <span className="flex size-14 items-center justify-center rounded-2xl bg-primary-50 text-primary-600">
+                    <UserPlus size={26} />
+                  </span>
+                  <span className="text-sm text-neutral-500">No hay cuentas abiertas ahora mismo.</span>
+                  <span className="rounded-xl bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-nav-active">
+                    Abrir la primera cuenta
+                  </span>
                 </button>
               ) : null}
 
@@ -355,41 +382,54 @@ function VenderPage() {
                 {cuentasAbiertas.map((cuenta) => {
                   const items = itemsPorCuenta.get(cuenta.id) ?? []
                   const total = items.reduce((s, v) => s + v.total, 0)
+                  const largaEspera = minutosDesde(cuenta.abiertaEn) >= 120
                   return (
-                    <Card key={cuenta.id} className="flex flex-col gap-3 p-4">
+                    <Card
+                      key={cuenta.id}
+                      className="flex h-full flex-col gap-3 p-4"
+                    >
                       <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="font-medium text-neutral-900">{cuenta.titular}</p>
-                          <p className="mt-0.5 text-xs text-neutral-500">
-                            {hace(cuenta.abiertaEn)} · {cuenta.abiertaPor}
-                          </p>
-                          {cuenta.nota ? (
-                            <p className="mt-1 flex items-start gap-1 text-xs text-neutral-500">
-                              <StickyNote size={12} className="mt-0.5 shrink-0" /> {cuenta.nota}
+                        <div className="flex min-w-0 items-start gap-3">
+                          <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary-50 text-base font-bold text-primary-700">
+                            {cuenta.titular.trim().charAt(0).toUpperCase() || '?'}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="truncate font-semibold text-neutral-900">{cuenta.titular}</p>
+                            <p
+                              className={`mt-0.5 flex items-center gap-1 text-xs ${
+                                largaEspera ? 'font-medium text-warning-700' : 'text-neutral-500'
+                              }`}
+                            >
+                              <Clock size={12} className="shrink-0" /> {hace(cuenta.abiertaEn)} · {cuenta.abiertaPor}
                             </p>
-                          ) : null}
+                            {cuenta.nota ? (
+                              <p className="mt-1 flex items-start gap-1 text-xs text-neutral-500">
+                                <StickyNote size={12} className="mt-0.5 shrink-0" /> {cuenta.nota}
+                              </p>
+                            ) : null}
+                          </div>
                         </div>
                         <div className="shrink-0 text-right">
-                          <p className="text-lg font-semibold text-neutral-900">{COP.format(total)}</p>
-                          <p className="text-xs text-neutral-400">
+                          <p className="rounded-md bg-success-50 px-2 py-1 text-base font-bold text-success-700">
+                            {COP.format(total)}
+                          </p>
+                          <p className="mt-1 text-xs text-neutral-400">
                             {items.length} ítem{items.length === 1 ? '' : 's'}
                           </p>
                         </div>
                       </div>
 
                       {items.length > 0 ? (
-                        <div
-                          className={`flex flex-col gap-1 rounded-lg bg-neutral-50 px-3 py-2 ${
-                            items.length > 4 ? 'custom-scroll max-h-24 overflow-y-auto' : ''
-                          }`}
+                        <ul
+                          className="custom-scroll flex h-32 flex-col divide-y divide-neutral-100 overflow-y-auto rounded-xl bg-neutral-50/70 px-3"
                         >
                           {items.map((v) => (
-                            <div key={v.id} className="flex items-center justify-between gap-2 text-xs">
-                              <span className="min-w-0 truncate text-neutral-600">
-                                {productoNombre(v.productoId)} ×{v.cantidad}
+                            <li key={v.id} className="flex items-center justify-between gap-2 py-2 text-xs">
+                              <span className="min-w-0 truncate text-neutral-700">
+                                {productoNombre(v.productoId)} <span className="text-neutral-400">×{v.cantidad}</span>
                               </span>
-                              <div className="flex shrink-0 items-center gap-2">
-                                <span className="font-medium text-neutral-700">{COP.format(v.total)}</span>
+                              <span className="flex shrink-0 items-center gap-2">
+                                <span className="font-medium text-neutral-800">{COP.format(v.total)}</span>
                                 <button
                                   type="button"
                                   onClick={() => setQuitandoDeCuenta(v)}
@@ -398,42 +438,45 @@ function VenderPage() {
                                 >
                                   <Trash2 size={13} />
                                 </button>
-                              </div>
-                            </div>
+                              </span>
+                            </li>
                           ))}
-                        </div>
-                      ) : null}
+                        </ul>
+                      ) : (
+                        <p className="flex h-32 items-center justify-center rounded-xl bg-neutral-50/70 px-3 text-center text-xs text-neutral-400">
+                          Todavía sin productos.
+                        </p>
+                      )}
 
-                      <div className="flex gap-2 border-t border-neutral-100 pt-3">
-                        <button
-                          type="button"
-                          onClick={() => setAgregandoACuenta(cuenta)}
-                          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 bg-white py-2 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
-                        >
-                          <PackagePlus size={14} /> Producto
-                        </button>
+                      <div className="mt-auto flex flex-col gap-2 border-t border-neutral-100 pt-3">
                         <button
                           type="button"
                           disabled={items.length === 0}
                           onClick={() => setCerrandoCuenta(cuenta)}
-                          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary-600 py-2 text-xs font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-50"
+                          className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary-600 py-2.5 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-50"
                         >
-                          <Wallet size={14} /> Cobrar y cerrar
+                          <Wallet size={15} /> Cobrar y cerrar
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => setAnulandoCuenta(cuenta)}
-                          className="rounded-lg px-3 py-2 text-xs font-medium text-danger-600 transition-colors hover:bg-danger-50"
-                        >
-                          Anular
-                        </button>
+                        <div className="flex items-center justify-between gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setAgregandoACuenta(cuenta)}
+                            className="flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
+                          >
+                            <PackagePlus size={14} /> Producto
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setAnulandoCuenta(cuenta)}
+                            className="rounded-lg px-2 py-1.5 text-xs font-medium text-neutral-400 transition-colors hover:bg-danger-50 hover:text-danger-600"
+                          >
+                            Anular cuenta
+                          </button>
+                        </div>
                       </div>
                     </Card>
                   )
                 })}
-                {cuentasAbiertas.length === 0 ? (
-                  <Card className="py-10 text-center text-sm text-neutral-400">No hay cuentas abiertas ahora mismo.</Card>
-                ) : null}
               </div>
 
             </div>
@@ -442,67 +485,36 @@ function VenderPage() {
       )}
 
       <div>
-        <h3 className="mb-2 px-1 text-sm font-semibold text-neutral-900">Ventas de hoy ({gruposVentasHoy.length})</h3>
+        <div className="mb-3 flex items-center justify-between gap-3 px-1">
+          <h3 className="text-sm font-semibold text-neutral-900">Ventas de hoy ({gruposVentasHoy.length})</h3>
+          {ventasActivas.length > 0 ? (
+            <span className="rounded-full bg-success-50 px-2.5 py-1 text-xs font-semibold text-success-700">
+              {COP.format(totalVendidoHoy)} vendidos
+            </span>
+          ) : null}
+        </div>
         <div className="flex flex-col gap-2">
           {gruposVentasHoy.map((grupo) => {
             const primera = grupo[0]
-            const total = grupo.reduce((s, v) => s + v.total, 0)
-            const cuenta = primera.cuentaId ? cuentaPorId.get(primera.cuentaId) : undefined
-            const cliente = cuenta?.titular ?? 'Mostrador'
-            const anulada = primera.estado === 'anulada'
             return (
-              <Card key={primera.id} className={`flex flex-col gap-2.5 p-4 ${anulada ? 'opacity-60' : ''}`}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-neutral-900">{cliente}</p>
-                    <p className="font-mono text-xs text-neutral-400">{facturaTexto(grupo)}</p>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className="text-sm font-semibold text-neutral-900">{COP.format(total)}</p>
-                    <p className="text-xs text-neutral-500">{METODO_PAGO_LABEL[primera.metodoPago]}</p>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-1 rounded-lg bg-neutral-50 px-3 py-2 text-xs">
-                  {grupo.map((v) => (
-                    <div key={v.id} className="flex items-center justify-between gap-2">
-                      <span className="min-w-0 truncate text-neutral-600">
-                        {productoNombre(v.productoId)} ×{v.cantidad}
-                      </span>
-                      <span className="shrink-0 text-neutral-500">{COP.format(v.total)}</span>
-                    </div>
-                  ))}
-                </div>
-
-                {anulada ? (
-                  <p className="text-xs text-danger-600">Anulada — {primera.motivoAnulacion}</p>
-                ) : (
-                  <div className="flex items-center justify-end gap-3">
-                    {primera.ventaGrupoId ? (
-                      <button
-                        type="button"
-                        onClick={() => setCorrigiendo(primera)}
-                        className="flex items-center gap-1 text-xs font-medium text-neutral-500 transition-colors hover:text-primary-700"
-                      >
-                        <Wallet size={12} /> Corregir pago
-                      </button>
-                    ) : null}
-                    {!primera.cuentaId ? (
-                      <button
-                        type="button"
-                        onClick={() => setAnulando(primera)}
-                        className="text-xs font-medium text-danger-600 transition-colors hover:text-danger-700"
-                      >
-                        Anular
-                      </button>
-                    ) : null}
-                  </div>
-                )}
-              </Card>
+              <VentaHoyFila
+                key={primera.id}
+                grupo={grupo}
+                cliente={primera.cuentaId ? (cuentaPorId.get(primera.cuentaId)?.titular ?? 'Cuenta') : 'Mostrador'}
+                factura={facturaTexto(grupo)}
+                productoNombre={productoNombre}
+                onCorregir={() => setCorrigiendo(primera)}
+                onAnular={() => setAnulando(primera)}
+              />
             )
           })}
           {gruposVentasHoy.length === 0 ? (
-            <Card className="py-10 text-center text-sm text-neutral-400">Todavía no se han registrado ventas hoy.</Card>
+            <Card className="flex flex-col items-center gap-3 py-12 text-center">
+              <span className="flex size-14 items-center justify-center rounded-2xl bg-neutral-100 text-neutral-400">
+                <ShoppingCart size={26} />
+              </span>
+              <p className="text-sm text-neutral-500">Todavía no se han registrado ventas hoy.</p>
+            </Card>
           ) : null}
         </div>
       </div>
@@ -614,6 +626,107 @@ function VenderPage() {
         />
       ) : null}
     </div>
+  )
+}
+
+// Fila compacta de una venta del día: una línea con cliente, total y método; al tocarla se abre el
+// detalle de productos y las acciones. Las anuladas muestran el motivo en una franja roja.
+function VentaHoyFila({
+  grupo,
+  cliente,
+  factura,
+  productoNombre,
+  onCorregir,
+  onAnular,
+}: {
+  grupo: Venta[]
+  cliente: string
+  factura: string
+  productoNombre: (id: string) => string
+  onCorregir: () => void
+  onAnular: () => void
+}) {
+  const [abierta, setAbierta] = useState(false)
+  const primera = grupo[0]
+  const total = grupo.reduce((s, v) => s + v.total, 0)
+  const anulada = primera.estado === 'anulada'
+  const Icono = METODO_ICONO[primera.metodoPago as keyof typeof METODO_ICONO] ?? Wallet
+  return (
+    <Card className={`p-0 ${anulada ? 'bg-neutral-50' : ''}`}>
+      <button
+        type="button"
+        onClick={() => setAbierta((v) => !v)}
+        aria-expanded={abierta}
+        className="flex w-full items-center gap-3 p-3 text-left"
+      >
+        <span
+          className={`flex size-9 shrink-0 items-center justify-center rounded-xl ${
+            anulada ? 'bg-danger-50 text-danger-600' : 'bg-primary-50 text-primary-600'
+          }`}
+        >
+          {anulada ? <Ban size={16} /> : <Icono size={16} />}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium text-neutral-900">{cliente}</span>
+          <span className="block truncate font-mono text-xs text-neutral-400">
+            {factura} · {grupo.length} producto{grupo.length === 1 ? '' : 's'}
+          </span>
+        </span>
+        <span className="shrink-0 text-right">
+          <span className={`block text-sm font-semibold ${anulada ? 'text-neutral-400 line-through' : 'text-neutral-900'}`}>
+            {COP.format(total)}
+          </span>
+          <span className="block text-xs text-neutral-500">{METODO_PAGO_LABEL[primera.metodoPago]}</span>
+        </span>
+        <ChevronDown size={16} className={`shrink-0 text-neutral-400 transition-transform ${abierta ? 'rotate-180' : ''}`} />
+      </button>
+
+      {anulada ? (
+        <p className="border-t border-danger-600/20 bg-danger-50 px-3 py-2 text-xs text-danger-700">
+          Anulada — {primera.motivoAnulacion}
+        </p>
+      ) : null}
+
+      {abierta ? (
+        <div className="flex flex-col gap-2 border-t border-neutral-100 px-3 py-3">
+          <ul className="flex flex-col divide-y divide-neutral-100 rounded-xl bg-neutral-50/70 px-3 text-xs">
+            {grupo.map((v) => (
+              <li key={v.id} className="flex items-center justify-between gap-2 py-2">
+                <span className="flex min-w-0 items-center gap-1.5 text-neutral-700">
+                  <CupSoda size={12} className="shrink-0 text-neutral-400" />
+                  <span className="truncate">
+                    {productoNombre(v.productoId)} <span className="text-neutral-400">×{v.cantidad}</span>
+                  </span>
+                </span>
+                <span className="shrink-0 text-neutral-600">{COP.format(v.total)}</span>
+              </li>
+            ))}
+          </ul>
+          {!anulada ? (
+            <div className="flex items-center justify-end gap-3">
+              {primera.ventaGrupoId ? (
+                <button
+                  type="button"
+                  onClick={onCorregir}
+                  className="flex items-center gap-1 text-xs font-medium text-neutral-500 transition-colors hover:text-primary-700"
+                >
+                  <Wallet size={12} /> Corregir pago
+                </button>
+              ) : null}
+              {!primera.cuentaId ? (
+                <button
+                  type="button"
+                  onClick={onAnular}
+                  className="text-xs font-medium text-danger-600 transition-colors hover:text-danger-700"
+                >
+                  Anular
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </Card>
   )
 }
 
@@ -732,8 +845,10 @@ function VentaCarrito({
                   return (
                     <div
                       key={p.id}
-                      className={`flex flex-col gap-1.5 rounded-lg border p-2.5 transition-colors ${
-                        cant > 0 ? 'border-primary-500 bg-primary-50' : 'border-neutral-200'
+                      className={`relative flex flex-col gap-2 rounded-xl border p-3 transition-all ${
+                        cant > 0
+                          ? 'border-primary-500 bg-primary-50 shadow-nav-active'
+                          : 'border-neutral-200 bg-white hover:border-primary-300 hover:shadow-card'
                       } ${agotado ? 'opacity-50' : ''}`}
                     >
                       <button
@@ -742,26 +857,25 @@ function VentaCarrito({
                         onClick={() => setCantidad(p.id, cant + 1)}
                         className="text-left disabled:cursor-not-allowed"
                       >
-                        <span className="block text-sm font-medium text-neutral-800">{p.nombre}</span>
-                        <span className="block text-xs text-neutral-500">
-                          {COP.format(p.precioVenta ?? 0)} · quedan {stock}
-                        </span>
+                        <span className="block text-sm font-semibold leading-tight text-neutral-800">{p.nombre}</span>
+                        <span className="mt-1 block text-base font-bold text-primary-700">{COP.format(p.precioVenta ?? 0)}</span>
+                        <span className="block text-[11px] text-neutral-400">quedan {stock}</span>
                       </button>
                       {cant > 0 ? (
-                        <div className="flex items-center justify-between rounded-md bg-white px-1 py-0.5">
+                        <div className="flex items-center justify-between rounded-lg bg-white px-1 py-1 shadow-sm">
                           <button
                             type="button"
                             onClick={() => setCantidad(p.id, cant - 1)}
-                            className="flex size-7 items-center justify-center rounded text-neutral-600 hover:bg-neutral-100"
+                            className="flex size-9 items-center justify-center rounded-md text-neutral-600 hover:bg-neutral-100"
                           >
                             <Minus size={14} />
                           </button>
-                          <span className="text-sm font-semibold text-neutral-900">{cant}</span>
+                          <span className="text-base font-bold text-neutral-900">{cant}</span>
                           <button
                             type="button"
                             disabled={tope}
                             onClick={() => setCantidad(p.id, cant + 1)}
-                            className="flex size-7 items-center justify-center rounded text-neutral-600 hover:bg-neutral-100 disabled:opacity-30"
+                            className="flex size-9 items-center justify-center rounded-md text-neutral-600 hover:bg-neutral-100 disabled:opacity-30"
                           >
                             <Plus size={14} />
                           </button>
@@ -809,17 +923,24 @@ function VentaCarrito({
 
         {error ? <p className="text-xs text-danger-600">{error}</p> : null}
 
-        <button
-          type="submit"
-          disabled={saving || items.length === 0 || !cuadra}
-          className="flex items-center justify-center gap-2 rounded-xl bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
-        >
-          {saving
-            ? 'Registrando…'
-            : items.length === 0
-              ? 'Elige productos'
-              : `Cobrar ${unidades} · ${COP.format(total)}`}
-        </button>
+        <div className="sticky bottom-2 z-10 -mx-1 rounded-2xl border border-neutral-100 bg-white/95 p-2 shadow-card-hover backdrop-blur">
+          {items.length > 0 ? (
+            <div className="mb-2 flex items-center justify-between px-2 text-sm">
+              <span className="text-neutral-500">
+                {unidades} unidad{unidades === 1 ? '' : 'es'}
+              </span>
+              <span className="text-lg font-bold text-neutral-900">{COP.format(total)}</span>
+            </div>
+          ) : null}
+          <button
+            type="submit"
+            disabled={saving || items.length === 0 || !cuadra}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary-600 py-3.5 text-base font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
+          >
+            <Wallet size={17} />
+            {saving ? 'Registrando…' : items.length === 0 ? 'Elige productos' : 'Cobrar'}
+          </button>
+        </div>
       </form>
     </Card>
   )

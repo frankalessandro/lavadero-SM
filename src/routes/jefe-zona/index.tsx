@@ -458,6 +458,9 @@ function JefeZonaDashboard() {
   }
   const cajaLavados = pagosVigentesHoy.filter((p) => p.ordenId).reduce((s, p) => s + p.monto, 0)
   const cajaProductos = totalCajaHoy - cajaLavados
+  // Productos de vitrina ya cargados (a órdenes o cuentas) pero todavía sin cobrar: no están en
+  // `pagos`, así que se muestran aparte como acumulado por cobrar.
+  const productosPorCobrar = ventasPendientes.reduce((s, v) => s + v.total, 0)
 
   // Tiempo de lavado de hoy (M3), por combo y por lavador — mide solo el lavado en sí
   // (creado→listo, `tiempoLavadoSegundos`), no el ciclo completo. Antes se calculaba como
@@ -635,7 +638,7 @@ function JefeZonaDashboard() {
         <StatCard
           label="Caja del día"
           value={COP.format(totalCajaHoy)}
-          hint="Toca para ver el desglose"
+          hint={productosPorCobrar > 0 ? `+ ${COP.format(productosPorCobrar)} en productos por cobrar` : 'Toca para ver el desglose'}
           icon={Wallet}
           onClick={() => setViendoCajaDesglose(true)}
         />
@@ -1028,6 +1031,7 @@ function JefeZonaDashboard() {
           porMetodo={cajaPorMetodo}
           lavados={cajaLavados}
           productos={cajaProductos}
+          productosPorCobrar={productosPorCobrar}
           onClose={() => setViendoCajaDesglose(false)}
         />
       ) : null}
@@ -1044,6 +1048,7 @@ function CajaDesgloseModal({
   porMetodo,
   lavados,
   productos,
+  productosPorCobrar,
   onClose,
 }: {
   total: number
@@ -1051,6 +1056,7 @@ function CajaDesgloseModal({
   porMetodo: { efectivo: number; transferencia: number; datafono: number }
   lavados: number
   productos: number
+  productosPorCobrar: number
   onClose: () => void
 }) {
   return (
@@ -1078,6 +1084,14 @@ function CajaDesgloseModal({
         <div className="mb-4 rounded-lg bg-success-50 px-3 py-3 text-center">
           <p className="text-xl font-bold text-success-700">{COP.format(total)}</p>
         </div>
+
+        {productosPorCobrar > 0 ? (
+          <div className="mb-4 flex flex-col gap-1.5">
+            <p className="text-xs font-medium text-neutral-500">Acumulado por cobrar</p>
+            <CajaFila icon={CupSoda} label="Productos cargados sin cobrar" valor={productosPorCobrar} />
+            <CajaFila icon={Wallet} label="Total con lo por cobrar" valor={total + productosPorCobrar} />
+          </div>
+        ) : null}
 
         {!hayPagos ? (
           <p className="py-4 text-center text-sm text-neutral-400">Todavía no hay cobros hoy.</p>
@@ -1259,9 +1273,13 @@ function OrdenCard({
       {productosPendientes.length > 0 ? (
         <div className="flex flex-col gap-1 border-t border-neutral-100 bg-primary-50/40 px-3 py-2">
           <span className="flex items-center gap-1.5 text-xs font-semibold text-primary-800">
-            <CupSoda size={13} /> Productos por cobrar · {COP.format(totalProductos)}
+            <CupSoda size={13} /> Detalle a cobrar
           </span>
           <ul className="flex flex-col gap-0.5">
+            <li className="flex items-center justify-between gap-2 text-xs text-neutral-600">
+              <span className="min-w-0 truncate">Lavado · {comboNombre}</span>
+              <span className="shrink-0 font-medium text-neutral-700">{COP.format(orden.precio)}</span>
+            </li>
             {productosPendientes.map((v) => (
               <li key={v.id} className="flex items-center justify-between gap-2 text-xs text-neutral-600">
                 <span className="min-w-0 truncate">
@@ -1286,6 +1304,10 @@ function OrdenCard({
               </li>
             ))}
           </ul>
+          <div className="mt-1 flex items-center justify-between gap-2 border-t border-primary-100 pt-1.5 text-sm font-bold text-primary-800">
+            <span>Total</span>
+            <span>{COP.format(orden.precio + totalProductos)}</span>
+          </div>
         </div>
       ) : null}
 
@@ -1368,7 +1390,7 @@ function OrdenCard({
 
         <div className="flex flex-wrap items-center gap-2.5">
           <span className="rounded-md bg-success-50 px-2 py-1 text-sm font-bold text-success-700">
-            {COP.format(orden.precio)}
+            {COP.format(orden.precio + totalProductos)}
           </span>
           {sinAsignar && onReasignar ? (
             <button
