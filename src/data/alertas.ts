@@ -132,10 +132,10 @@ export async function fetchAlertas(): Promise<Alerta[]> {
 
   const alertas: Alerta[] = []
 
-  const negativo = alertaStockNegativo(stock, productos, '/admin/dinero/inventario')
+  const negativo = alertaStockNegativo(stock, productos, '/admin/inventario/stock')
   if (negativo) alertas.push(negativo)
 
-  const stockBajo = alertaStockBajo(bajos, '/admin/dinero/inventario')
+  const stockBajo = alertaStockBajo(bajos, '/admin/inventario/stock')
   if (stockBajo) alertas.push(stockBajo)
 
   const huecosAlerta = alertaHuecosConsecutivo(consecutivos, '/admin/operacion/ordenes')

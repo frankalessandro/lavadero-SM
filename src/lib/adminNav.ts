@@ -22,6 +22,7 @@ import {
   UserCog,
   CalendarDays,
   UserCheck,
+  ShoppingCart,
 } from 'lucide-react'
 
 type Icono = ComponentType<{ size?: number; strokeWidth?: number }>
@@ -75,7 +76,17 @@ export const ADMIN_SECCIONES: AdminSeccion[] = [
       { to: '/admin/dinero/deudas', label: 'Deudas', icon: HandCoins },
       { to: '/admin/dinero/gastos', label: 'Gastos', icon: Receipt },
       { to: '/admin/dinero/ingresos', label: 'Otros ingresos', icon: Banknote },
-      { to: '/admin/dinero/inventario', label: 'Inventario', icon: Boxes },
+    ],
+  },
+  {
+    to: '/admin/inventario',
+    label: 'Inventario y ventas',
+    icon: Boxes,
+    grupo: 'Gestión',
+    exact: false,
+    tabs: [
+      { to: '/admin/inventario/stock', label: 'Inventario', icon: Boxes },
+      { to: '/admin/inventario/ventas', label: 'Ventas', icon: ShoppingCart },
     ],
   },
   {

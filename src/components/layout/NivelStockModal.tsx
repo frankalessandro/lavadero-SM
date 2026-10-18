@@ -9,7 +9,7 @@ export interface ProductoNivelFila {
 }
 
 // Detalle de un nivel de stock (bajo/medio/bueno) — antes era solo el `title` (tooltip) de la
-// tarjeta de nivel en /admin/dinero/inventario y /jefe-zona/inventario, que en celular no se ve
+// tarjeta de nivel en /admin/inventario/stock y /jefe-zona/inventario, que en celular no se ve
 // y con muchos productos queda ilegible. Mismo componente para los dos paneles: ninguno de los
 // dos muestra costo acá (jefe de zona no lo ve por rol, y esta es una lista operativa de "qué
 // reponer", no de valorización — esa ya vive en la tarjeta de "Valorización total").

@@ -35,7 +35,6 @@ import { StatCard } from '../../../../components/layout/StatCard'
 import { CustomSelect } from '../../../../components/layout/CustomSelect'
 import { ConfirmModal } from '../../../../components/layout/ConfirmModal'
 import { CurrencyInput } from '../../../../components/layout/CurrencyInput'
-import { METODO_PAGO_LABEL } from '../../../../lib/metodoPago'
 import {
   nivelStock,
   ordenarPorNivelStock,
@@ -69,7 +68,7 @@ async function loadInventario() {
   return { productos, stock, movimientos: movimientos.slice(0, 15), ventas, faltantes, compras, turnoJefeZona, manuales }
 }
 
-export const Route = createFileRoute('/admin/dinero/inventario/')({
+export const Route = createFileRoute('/admin/inventario/stock/')({
   loader: loadInventario,
   component: InventarioPage,
 })
@@ -105,7 +104,7 @@ function InventarioPage() {
   const [confirmando, setConfirmando] = useState<Producto | null>(null)
   const [expedienteDe, setExpedienteDe] = useState<Producto | null>(null)
   const [nivelModal, setNivelModal] = useState<NivelStock | null>(null)
-  const [vistaInv, setVistaInv] = useState<'stock' | 'movimientos' | 'ventas' | 'compras'>('stock')
+  const [vistaInv, setVistaInv] = useState<'stock' | 'movimientos' | 'compras'>('stock')
 
   async function refresh() {
     const [nuevosProductos, nuevoStock, nuevosMovimientos, nuevasVentas, nuevasCompras, nuevoTurno] = await Promise.all([
@@ -209,7 +208,6 @@ function InventarioPage() {
           [
             { id: 'stock', label: 'Stock' },
             { id: 'movimientos', label: 'Movimientos' },
-            { id: 'ventas', label: 'Ventas' },
             { id: 'compras', label: 'Compras' },
           ] as const
         ).map((v) => (
@@ -337,64 +335,6 @@ function InventarioPage() {
               <tr>
                 <td className="px-5 py-6 text-center text-neutral-400" colSpan={6}>
                   Todavía no hay movimientos registrados.
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-        </div>
-      </Card>
-      ) : null}
-
-      {vistaInv === 'ventas' ? (
-      <Card className="p-0">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-100 px-5 py-4">
-          <h3 className="flex items-center gap-1.5 text-sm font-semibold text-neutral-900">
-            <ShoppingCart size={15} className="text-primary-500" />
-            Ventas recientes (últimos 30 días)
-          </h3>
-          <p className="text-xs text-neutral-500">
-            Total: <span className="font-semibold text-neutral-900">{COP.format(ventas.filter((v) => v.estado === 'activa').reduce((t, v) => t + v.total, 0))}</span>
-          </p>
-        </div>
-        <div className="overflow-x-auto">
-        <table className="w-full min-w-[48rem] text-sm">
-          <thead>
-            <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
-              <th className="px-5 py-3">Fecha</th>
-              <th className="px-5 py-3">Producto</th>
-              <th className="px-5 py-3">Cantidad</th>
-              <th className="px-5 py-3">Total</th>
-              <th className="px-5 py-3">Método</th>
-              <th className="px-5 py-3">Vendido por</th>
-              <th className="px-5 py-3">Estado</th>
-            </tr>
-          </thead>
-          <tbody>
-            {ventas.slice(0, 15).map((venta) => (
-              <tr key={venta.id} className={`border-b border-neutral-100 transition-colors last:border-0 hover:bg-primary-50/40 ${venta.estado === 'anulada' ? 'opacity-60' : ''}`}>
-                <td className="px-5 py-3 text-neutral-500">{new Date(venta.creadoEn).toLocaleString('es-CO')}</td>
-                <td className="px-5 py-3 font-medium text-neutral-900">{productoNombre(venta.productoId)}</td>
-                <td className="px-5 py-3 text-neutral-700">{venta.cantidad}</td>
-                <td className="px-5 py-3 text-neutral-700">{COP.format(venta.total)}</td>
-                <td className="px-5 py-3 text-neutral-600">{METODO_PAGO_LABEL[venta.metodoPago]}</td>
-                <td className="px-5 py-3 text-neutral-600">{venta.vendidoPor}</td>
-                <td className="px-5 py-3">
-                  <span
-                    className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
-                      venta.estado === 'anulada' ? 'bg-danger-50 text-danger-700' : 'bg-success-50 text-success-700'
-                    }`}
-                    title={venta.estado === 'anulada' ? (venta.motivoAnulacion ?? undefined) : undefined}
-                  >
-                    {venta.estado === 'anulada' ? 'Anulada' : 'Activa'}
-                  </span>
-                </td>
-              </tr>
-            ))}
-            {ventas.length === 0 ? (
-              <tr>
-                <td className="px-5 py-6 text-center text-neutral-400" colSpan={7}>
-                  Todavía no se han registrado ventas.
                 </td>
               </tr>
             ) : null}

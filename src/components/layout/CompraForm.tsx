@@ -23,7 +23,7 @@ interface Linea {
 // turno / gerencia) + un carrito de líneas (producto, cantidad, costo unitario tecleado por quien
 // compró). Reemplaza el camino de antes de registrar una "entrada" suelta por producto —
 // agrupa todo bajo UNA compra con su propio consecutivo, para que quede claro qué se compró junto
-// y de dónde salió la plata. Compartido entre /admin/dinero/inventario (`size="sm"`) y
+// y de dónde salió la plata. Compartido entre /admin/inventario/stock (`size="sm"`) y
 // /jefe-zona/inventario (`size="md"`, default) — mismo criterio que GastosDeTurno/PagoLineas.
 export function CompraForm({
   productos,
@@ -327,7 +327,7 @@ export function CompraForm({
 }
 
 // Anular una compra (regla 13: motivo obligatorio, no se borra) — repone el stock con una salida
-// sin costo. Compartido entre /admin/dinero/inventario y /jefe-zona/inventario, mismo patrón que
+// sin costo. Compartido entre /admin/inventario/stock y /jefe-zona/inventario, mismo patrón que
 // AnularVentaModal.
 export function AnularCompraModal({
   compra,

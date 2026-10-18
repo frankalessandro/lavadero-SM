@@ -17,6 +17,7 @@ import { Route as VigilanteRouteRouteImport } from './routes/vigilante/route'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminCatalogoRouteRouteImport } from './routes/admin/catalogo/route'
 import { Route as AdminDineroRouteRouteImport } from './routes/admin/dinero/route'
+import { Route as AdminInventarioRouteRouteImport } from './routes/admin/inventario/route'
 import { Route as AdminOperacionRouteRouteImport } from './routes/admin/operacion/route'
 import { Route as AdminPersonalRouteRouteImport } from './routes/admin/personal/route'
 import { Route as CambiarPasswordIndexRouteImport } from './routes/cambiar-password/index'
@@ -30,6 +31,7 @@ import { Route as VigilanteIndexRouteImport } from './routes/vigilante/index'
 import { Route as AdminCatalogoIndexRouteImport } from './routes/admin/catalogo/index'
 import { Route as AdminConfiguracionIndexRouteImport } from './routes/admin/configuracion/index'
 import { Route as AdminDineroIndexRouteImport } from './routes/admin/dinero/index'
+import { Route as AdminInventarioIndexRouteImport } from './routes/admin/inventario/index'
 import { Route as AdminOperacionIndexRouteImport } from './routes/admin/operacion/index'
 import { Route as AdminPersonalIndexRouteImport } from './routes/admin/personal/index'
 import { Route as AdminRentabilidadIndexRouteImport } from './routes/admin/rentabilidad/index'
@@ -40,6 +42,7 @@ import { Route as JefeZonaInventarioIndexRouteImport } from './routes/jefe-zona/
 import { Route as JefeZonaLiquidacionesIndexRouteImport } from './routes/jefe-zona/liquidaciones/index'
 import { Route as JefeZonaParqueaderoIndexRouteImport } from './routes/jefe-zona/parqueadero/index'
 import { Route as JefeZonaVentasIndexRouteImport } from './routes/jefe-zona/ventas/index'
+import { Route as JefeZonaVentasHistorialRouteImport } from './routes/jefe-zona/ventas/historial'
 import { Route as AdminCatalogoCombosIndexRouteImport } from './routes/admin/catalogo/combos/index'
 import { Route as AdminCatalogoParqueaderoIndexRouteImport } from './routes/admin/catalogo/parqueadero/index'
 import { Route as AdminCatalogoServiciosIndexRouteImport } from './routes/admin/catalogo/servicios/index'
@@ -47,8 +50,9 @@ import { Route as AdminCatalogoTiposVehiculoIndexRouteImport } from './routes/ad
 import { Route as AdminDineroDeudasIndexRouteImport } from './routes/admin/dinero/deudas/index'
 import { Route as AdminDineroGastosIndexRouteImport } from './routes/admin/dinero/gastos/index'
 import { Route as AdminDineroIngresosIndexRouteImport } from './routes/admin/dinero/ingresos/index'
-import { Route as AdminDineroInventarioIndexRouteImport } from './routes/admin/dinero/inventario/index'
 import { Route as AdminDineroLiquidacionesIndexRouteImport } from './routes/admin/dinero/liquidaciones/index'
+import { Route as AdminInventarioStockIndexRouteImport } from './routes/admin/inventario/stock/index'
+import { Route as AdminInventarioVentasIndexRouteImport } from './routes/admin/inventario/ventas/index'
 import { Route as AdminOperacionAuditoriaIndexRouteImport } from './routes/admin/operacion/auditoria/index'
 import { Route as AdminOperacionClientesIndexRouteImport } from './routes/admin/operacion/clientes/index'
 import { Route as AdminOperacionOrdenesIndexRouteImport } from './routes/admin/operacion/ordenes/index'
@@ -97,6 +101,11 @@ const AdminCatalogoRouteRoute = AdminCatalogoRouteRouteImport.update({
 const AdminDineroRouteRoute = AdminDineroRouteRouteImport.update({
   id: '/dinero',
   path: '/dinero',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminInventarioRouteRoute = AdminInventarioRouteRouteImport.update({
+  id: '/inventario',
+  path: '/inventario',
   getParentRoute: () => AdminRouteRoute,
 } as any)
 const AdminOperacionRouteRoute = AdminOperacionRouteRouteImport.update({
@@ -164,6 +173,11 @@ const AdminDineroIndexRoute = AdminDineroIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AdminDineroRouteRoute,
 } as any)
+const AdminInventarioIndexRoute = AdminInventarioIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminInventarioRouteRoute,
+} as any)
 const AdminOperacionIndexRoute = AdminOperacionIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -216,6 +230,11 @@ const JefeZonaVentasIndexRoute = JefeZonaVentasIndexRouteImport.update({
   path: '/ventas/',
   getParentRoute: () => JefeZonaRouteRoute,
 } as any)
+const JefeZonaVentasHistorialRoute = JefeZonaVentasHistorialRouteImport.update({
+  id: '/ventas/historial',
+  path: '/ventas/historial',
+  getParentRoute: () => JefeZonaRouteRoute,
+} as any)
 const AdminCatalogoCombosIndexRoute =
   AdminCatalogoCombosIndexRouteImport.update({
     id: '/combos/',
@@ -256,17 +275,23 @@ const AdminDineroIngresosIndexRoute =
     path: '/ingresos/',
     getParentRoute: () => AdminDineroRouteRoute,
   } as any)
-const AdminDineroInventarioIndexRoute =
-  AdminDineroInventarioIndexRouteImport.update({
-    id: '/inventario/',
-    path: '/inventario/',
-    getParentRoute: () => AdminDineroRouteRoute,
-  } as any)
 const AdminDineroLiquidacionesIndexRoute =
   AdminDineroLiquidacionesIndexRouteImport.update({
     id: '/liquidaciones/',
     path: '/liquidaciones/',
     getParentRoute: () => AdminDineroRouteRoute,
+  } as any)
+const AdminInventarioStockIndexRoute =
+  AdminInventarioStockIndexRouteImport.update({
+    id: '/stock/',
+    path: '/stock/',
+    getParentRoute: () => AdminInventarioRouteRoute,
+  } as any)
+const AdminInventarioVentasIndexRoute =
+  AdminInventarioVentasIndexRouteImport.update({
+    id: '/ventas/',
+    path: '/ventas/',
+    getParentRoute: () => AdminInventarioRouteRoute,
   } as any)
 const AdminOperacionAuditoriaIndexRoute =
   AdminOperacionAuditoriaIndexRouteImport.update({
@@ -331,6 +356,7 @@ export interface FileRoutesByFullPath {
   '/vigilante': typeof VigilanteRouteRouteWithChildren
   '/admin/catalogo': typeof AdminCatalogoRouteRouteWithChildren
   '/admin/dinero': typeof AdminDineroRouteRouteWithChildren
+  '/admin/inventario': typeof AdminInventarioRouteRouteWithChildren
   '/admin/operacion': typeof AdminOperacionRouteRouteWithChildren
   '/admin/personal': typeof AdminPersonalRouteRouteWithChildren
   '/services/$serviceId': typeof ServicesServiceIdRoute
@@ -342,9 +368,11 @@ export interface FileRoutesByFullPath {
   '/seleccionar-modulo/': typeof SeleccionarModuloIndexRoute
   '/services/': typeof ServicesIndexRoute
   '/vigilante/': typeof VigilanteIndexRoute
+  '/jefe-zona/ventas/historial': typeof JefeZonaVentasHistorialRoute
   '/admin/catalogo/': typeof AdminCatalogoIndexRoute
   '/admin/configuracion/': typeof AdminConfiguracionIndexRoute
   '/admin/dinero/': typeof AdminDineroIndexRoute
+  '/admin/inventario/': typeof AdminInventarioIndexRoute
   '/admin/operacion/': typeof AdminOperacionIndexRoute
   '/admin/personal/': typeof AdminPersonalIndexRoute
   '/admin/rentabilidad/': typeof AdminRentabilidadIndexRoute
@@ -362,8 +390,9 @@ export interface FileRoutesByFullPath {
   '/admin/dinero/deudas/': typeof AdminDineroDeudasIndexRoute
   '/admin/dinero/gastos/': typeof AdminDineroGastosIndexRoute
   '/admin/dinero/ingresos/': typeof AdminDineroIngresosIndexRoute
-  '/admin/dinero/inventario/': typeof AdminDineroInventarioIndexRoute
   '/admin/dinero/liquidaciones/': typeof AdminDineroLiquidacionesIndexRoute
+  '/admin/inventario/stock/': typeof AdminInventarioStockIndexRoute
+  '/admin/inventario/ventas/': typeof AdminInventarioVentasIndexRoute
   '/admin/operacion/auditoria/': typeof AdminOperacionAuditoriaIndexRoute
   '/admin/operacion/clientes/': typeof AdminOperacionClientesIndexRoute
   '/admin/operacion/ordenes/': typeof AdminOperacionOrdenesIndexRoute
@@ -385,9 +414,11 @@ export interface FileRoutesByTo {
   '/seleccionar-modulo': typeof SeleccionarModuloIndexRoute
   '/services': typeof ServicesIndexRoute
   '/vigilante': typeof VigilanteIndexRoute
+  '/jefe-zona/ventas/historial': typeof JefeZonaVentasHistorialRoute
   '/admin/catalogo': typeof AdminCatalogoIndexRoute
   '/admin/configuracion': typeof AdminConfiguracionIndexRoute
   '/admin/dinero': typeof AdminDineroIndexRoute
+  '/admin/inventario': typeof AdminInventarioIndexRoute
   '/admin/operacion': typeof AdminOperacionIndexRoute
   '/admin/personal': typeof AdminPersonalIndexRoute
   '/admin/rentabilidad': typeof AdminRentabilidadIndexRoute
@@ -405,8 +436,9 @@ export interface FileRoutesByTo {
   '/admin/dinero/deudas': typeof AdminDineroDeudasIndexRoute
   '/admin/dinero/gastos': typeof AdminDineroGastosIndexRoute
   '/admin/dinero/ingresos': typeof AdminDineroIngresosIndexRoute
-  '/admin/dinero/inventario': typeof AdminDineroInventarioIndexRoute
   '/admin/dinero/liquidaciones': typeof AdminDineroLiquidacionesIndexRoute
+  '/admin/inventario/stock': typeof AdminInventarioStockIndexRoute
+  '/admin/inventario/ventas': typeof AdminInventarioVentasIndexRoute
   '/admin/operacion/auditoria': typeof AdminOperacionAuditoriaIndexRoute
   '/admin/operacion/clientes': typeof AdminOperacionClientesIndexRoute
   '/admin/operacion/ordenes': typeof AdminOperacionOrdenesIndexRoute
@@ -426,6 +458,7 @@ export interface FileRoutesById {
   '/vigilante': typeof VigilanteRouteRouteWithChildren
   '/admin/catalogo': typeof AdminCatalogoRouteRouteWithChildren
   '/admin/dinero': typeof AdminDineroRouteRouteWithChildren
+  '/admin/inventario': typeof AdminInventarioRouteRouteWithChildren
   '/admin/operacion': typeof AdminOperacionRouteRouteWithChildren
   '/admin/personal': typeof AdminPersonalRouteRouteWithChildren
   '/services/$serviceId': typeof ServicesServiceIdRoute
@@ -437,9 +470,11 @@ export interface FileRoutesById {
   '/seleccionar-modulo/': typeof SeleccionarModuloIndexRoute
   '/services/': typeof ServicesIndexRoute
   '/vigilante/': typeof VigilanteIndexRoute
+  '/jefe-zona/ventas/historial': typeof JefeZonaVentasHistorialRoute
   '/admin/catalogo/': typeof AdminCatalogoIndexRoute
   '/admin/configuracion/': typeof AdminConfiguracionIndexRoute
   '/admin/dinero/': typeof AdminDineroIndexRoute
+  '/admin/inventario/': typeof AdminInventarioIndexRoute
   '/admin/operacion/': typeof AdminOperacionIndexRoute
   '/admin/personal/': typeof AdminPersonalIndexRoute
   '/admin/rentabilidad/': typeof AdminRentabilidadIndexRoute
@@ -457,8 +492,9 @@ export interface FileRoutesById {
   '/admin/dinero/deudas/': typeof AdminDineroDeudasIndexRoute
   '/admin/dinero/gastos/': typeof AdminDineroGastosIndexRoute
   '/admin/dinero/ingresos/': typeof AdminDineroIngresosIndexRoute
-  '/admin/dinero/inventario/': typeof AdminDineroInventarioIndexRoute
   '/admin/dinero/liquidaciones/': typeof AdminDineroLiquidacionesIndexRoute
+  '/admin/inventario/stock/': typeof AdminInventarioStockIndexRoute
+  '/admin/inventario/ventas/': typeof AdminInventarioVentasIndexRoute
   '/admin/operacion/auditoria/': typeof AdminOperacionAuditoriaIndexRoute
   '/admin/operacion/clientes/': typeof AdminOperacionClientesIndexRoute
   '/admin/operacion/ordenes/': typeof AdminOperacionOrdenesIndexRoute
@@ -479,6 +515,7 @@ export interface FileRouteTypes {
     | '/vigilante'
     | '/admin/catalogo'
     | '/admin/dinero'
+    | '/admin/inventario'
     | '/admin/operacion'
     | '/admin/personal'
     | '/services/$serviceId'
@@ -490,9 +527,11 @@ export interface FileRouteTypes {
     | '/seleccionar-modulo/'
     | '/services/'
     | '/vigilante/'
+    | '/jefe-zona/ventas/historial'
     | '/admin/catalogo/'
     | '/admin/configuracion/'
     | '/admin/dinero/'
+    | '/admin/inventario/'
     | '/admin/operacion/'
     | '/admin/personal/'
     | '/admin/rentabilidad/'
@@ -510,8 +549,9 @@ export interface FileRouteTypes {
     | '/admin/dinero/deudas/'
     | '/admin/dinero/gastos/'
     | '/admin/dinero/ingresos/'
-    | '/admin/dinero/inventario/'
     | '/admin/dinero/liquidaciones/'
+    | '/admin/inventario/stock/'
+    | '/admin/inventario/ventas/'
     | '/admin/operacion/auditoria/'
     | '/admin/operacion/clientes/'
     | '/admin/operacion/ordenes/'
@@ -533,9 +573,11 @@ export interface FileRouteTypes {
     | '/seleccionar-modulo'
     | '/services'
     | '/vigilante'
+    | '/jefe-zona/ventas/historial'
     | '/admin/catalogo'
     | '/admin/configuracion'
     | '/admin/dinero'
+    | '/admin/inventario'
     | '/admin/operacion'
     | '/admin/personal'
     | '/admin/rentabilidad'
@@ -553,8 +595,9 @@ export interface FileRouteTypes {
     | '/admin/dinero/deudas'
     | '/admin/dinero/gastos'
     | '/admin/dinero/ingresos'
-    | '/admin/dinero/inventario'
     | '/admin/dinero/liquidaciones'
+    | '/admin/inventario/stock'
+    | '/admin/inventario/ventas'
     | '/admin/operacion/auditoria'
     | '/admin/operacion/clientes'
     | '/admin/operacion/ordenes'
@@ -573,6 +616,7 @@ export interface FileRouteTypes {
     | '/vigilante'
     | '/admin/catalogo'
     | '/admin/dinero'
+    | '/admin/inventario'
     | '/admin/operacion'
     | '/admin/personal'
     | '/services/$serviceId'
@@ -584,9 +628,11 @@ export interface FileRouteTypes {
     | '/seleccionar-modulo/'
     | '/services/'
     | '/vigilante/'
+    | '/jefe-zona/ventas/historial'
     | '/admin/catalogo/'
     | '/admin/configuracion/'
     | '/admin/dinero/'
+    | '/admin/inventario/'
     | '/admin/operacion/'
     | '/admin/personal/'
     | '/admin/rentabilidad/'
@@ -604,8 +650,9 @@ export interface FileRouteTypes {
     | '/admin/dinero/deudas/'
     | '/admin/dinero/gastos/'
     | '/admin/dinero/ingresos/'
-    | '/admin/dinero/inventario/'
     | '/admin/dinero/liquidaciones/'
+    | '/admin/inventario/stock/'
+    | '/admin/inventario/ventas/'
     | '/admin/operacion/auditoria/'
     | '/admin/operacion/clientes/'
     | '/admin/operacion/ordenes/'
@@ -686,6 +733,13 @@ declare module '@tanstack/react-router' {
       path: '/dinero'
       fullPath: '/admin/dinero'
       preLoaderRoute: typeof AdminDineroRouteRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/inventario': {
+      id: '/admin/inventario'
+      path: '/inventario'
+      fullPath: '/admin/inventario'
+      preLoaderRoute: typeof AdminInventarioRouteRouteImport
       parentRoute: typeof AdminRouteRoute
     }
     '/admin/operacion': {
@@ -779,6 +833,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminDineroIndexRouteImport
       parentRoute: typeof AdminDineroRouteRoute
     }
+    '/admin/inventario/': {
+      id: '/admin/inventario/'
+      path: '/'
+      fullPath: '/admin/inventario/'
+      preLoaderRoute: typeof AdminInventarioIndexRouteImport
+      parentRoute: typeof AdminInventarioRouteRoute
+    }
     '/admin/operacion/': {
       id: '/admin/operacion/'
       path: '/'
@@ -849,6 +910,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof JefeZonaVentasIndexRouteImport
       parentRoute: typeof JefeZonaRouteRoute
     }
+    '/jefe-zona/ventas/historial': {
+      id: '/jefe-zona/ventas/historial'
+      path: '/ventas/historial'
+      fullPath: '/jefe-zona/ventas/historial'
+      preLoaderRoute: typeof JefeZonaVentasHistorialRouteImport
+      parentRoute: typeof JefeZonaRouteRoute
+    }
     '/admin/catalogo/combos/': {
       id: '/admin/catalogo/combos/'
       path: '/combos'
@@ -898,19 +966,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminDineroIngresosIndexRouteImport
       parentRoute: typeof AdminDineroRouteRoute
     }
-    '/admin/dinero/inventario/': {
-      id: '/admin/dinero/inventario/'
-      path: '/inventario'
-      fullPath: '/admin/dinero/inventario/'
-      preLoaderRoute: typeof AdminDineroInventarioIndexRouteImport
-      parentRoute: typeof AdminDineroRouteRoute
-    }
     '/admin/dinero/liquidaciones/': {
       id: '/admin/dinero/liquidaciones/'
       path: '/liquidaciones'
       fullPath: '/admin/dinero/liquidaciones/'
       preLoaderRoute: typeof AdminDineroLiquidacionesIndexRouteImport
       parentRoute: typeof AdminDineroRouteRoute
+    }
+    '/admin/inventario/stock/': {
+      id: '/admin/inventario/stock/'
+      path: '/stock'
+      fullPath: '/admin/inventario/stock/'
+      preLoaderRoute: typeof AdminInventarioStockIndexRouteImport
+      parentRoute: typeof AdminInventarioRouteRoute
+    }
+    '/admin/inventario/ventas/': {
+      id: '/admin/inventario/ventas/'
+      path: '/ventas'
+      fullPath: '/admin/inventario/ventas/'
+      preLoaderRoute: typeof AdminInventarioVentasIndexRouteImport
+      parentRoute: typeof AdminInventarioRouteRoute
     }
     '/admin/operacion/auditoria/': {
       id: '/admin/operacion/auditoria/'
@@ -1002,7 +1077,6 @@ interface AdminDineroRouteRouteChildren {
   AdminDineroDeudasIndexRoute: typeof AdminDineroDeudasIndexRoute
   AdminDineroGastosIndexRoute: typeof AdminDineroGastosIndexRoute
   AdminDineroIngresosIndexRoute: typeof AdminDineroIngresosIndexRoute
-  AdminDineroInventarioIndexRoute: typeof AdminDineroInventarioIndexRoute
   AdminDineroLiquidacionesIndexRoute: typeof AdminDineroLiquidacionesIndexRoute
 }
 
@@ -1011,12 +1085,26 @@ const AdminDineroRouteRouteChildren: AdminDineroRouteRouteChildren = {
   AdminDineroDeudasIndexRoute: AdminDineroDeudasIndexRoute,
   AdminDineroGastosIndexRoute: AdminDineroGastosIndexRoute,
   AdminDineroIngresosIndexRoute: AdminDineroIngresosIndexRoute,
-  AdminDineroInventarioIndexRoute: AdminDineroInventarioIndexRoute,
   AdminDineroLiquidacionesIndexRoute: AdminDineroLiquidacionesIndexRoute,
 }
 
 const AdminDineroRouteRouteWithChildren =
   AdminDineroRouteRoute._addFileChildren(AdminDineroRouteRouteChildren)
+
+interface AdminInventarioRouteRouteChildren {
+  AdminInventarioIndexRoute: typeof AdminInventarioIndexRoute
+  AdminInventarioStockIndexRoute: typeof AdminInventarioStockIndexRoute
+  AdminInventarioVentasIndexRoute: typeof AdminInventarioVentasIndexRoute
+}
+
+const AdminInventarioRouteRouteChildren: AdminInventarioRouteRouteChildren = {
+  AdminInventarioIndexRoute: AdminInventarioIndexRoute,
+  AdminInventarioStockIndexRoute: AdminInventarioStockIndexRoute,
+  AdminInventarioVentasIndexRoute: AdminInventarioVentasIndexRoute,
+}
+
+const AdminInventarioRouteRouteWithChildren =
+  AdminInventarioRouteRoute._addFileChildren(AdminInventarioRouteRouteChildren)
 
 interface AdminOperacionRouteRouteChildren {
   AdminOperacionIndexRoute: typeof AdminOperacionIndexRoute
@@ -1061,6 +1149,7 @@ const AdminPersonalRouteRouteWithChildren =
 interface AdminRouteRouteChildren {
   AdminCatalogoRouteRoute: typeof AdminCatalogoRouteRouteWithChildren
   AdminDineroRouteRoute: typeof AdminDineroRouteRouteWithChildren
+  AdminInventarioRouteRoute: typeof AdminInventarioRouteRouteWithChildren
   AdminOperacionRouteRoute: typeof AdminOperacionRouteRouteWithChildren
   AdminPersonalRouteRoute: typeof AdminPersonalRouteRouteWithChildren
   AdminIndexRoute: typeof AdminIndexRoute
@@ -1072,6 +1161,7 @@ interface AdminRouteRouteChildren {
 const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminCatalogoRouteRoute: AdminCatalogoRouteRouteWithChildren,
   AdminDineroRouteRoute: AdminDineroRouteRouteWithChildren,
+  AdminInventarioRouteRoute: AdminInventarioRouteRouteWithChildren,
   AdminOperacionRouteRoute: AdminOperacionRouteRouteWithChildren,
   AdminPersonalRouteRoute: AdminPersonalRouteRouteWithChildren,
   AdminIndexRoute: AdminIndexRoute,
@@ -1086,6 +1176,7 @@ const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(
 
 interface JefeZonaRouteRouteChildren {
   JefeZonaIndexRoute: typeof JefeZonaIndexRoute
+  JefeZonaVentasHistorialRoute: typeof JefeZonaVentasHistorialRoute
   JefeZonaAsistenciaIndexRoute: typeof JefeZonaAsistenciaIndexRoute
   JefeZonaCajaIndexRoute: typeof JefeZonaCajaIndexRoute
   JefeZonaInventarioIndexRoute: typeof JefeZonaInventarioIndexRoute
@@ -1096,6 +1187,7 @@ interface JefeZonaRouteRouteChildren {
 
 const JefeZonaRouteRouteChildren: JefeZonaRouteRouteChildren = {
   JefeZonaIndexRoute: JefeZonaIndexRoute,
+  JefeZonaVentasHistorialRoute: JefeZonaVentasHistorialRoute,
   JefeZonaAsistenciaIndexRoute: JefeZonaAsistenciaIndexRoute,
   JefeZonaCajaIndexRoute: JefeZonaCajaIndexRoute,
   JefeZonaInventarioIndexRoute: JefeZonaInventarioIndexRoute,

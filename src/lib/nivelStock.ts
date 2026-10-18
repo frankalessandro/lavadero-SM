@@ -1,7 +1,7 @@
 import { CHART_COLORS } from './chartTheme'
 
 // 3 medidas de nivel de stock, umbral relativo (mismo para todos los productos, no depende de
-// stockMinimo por producto — compartido entre /admin/dinero/inventario y /jefe-zona/inventario
+// stockMinimo por producto — compartido entre /admin/inventario/stock y /jefe-zona/inventario
 // para no tener los umbrales duplicados en dos archivos).
 export const STOCK_BAJO_MAX = 5
 export const STOCK_MEDIO_MAX = 15

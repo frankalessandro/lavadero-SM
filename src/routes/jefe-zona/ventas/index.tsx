@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type FormEvent } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ShoppingCart,
@@ -20,6 +20,7 @@ import {
   Ban,
   CupSoda,
   Clock,
+  History,
 } from 'lucide-react'
 import { fetchTurnoAbierto } from '../../../data/turnos'
 import { fetchProductosOperativo } from '../../../data/productos'
@@ -279,11 +280,19 @@ function VenderPage() {
           body: 'Mostrador: se cobra en el momento, con pago partido si hace falta.\n\nCuentas abiertas: a nombre de alguien sin vehículo (lavador, acompañante, transeúnte). Se van cargando productos y se cobra completa al cerrarla, o se carga como deuda a un trabajador.\n\nToda venta descuenta el stock y suma al arqueo de caja, aparte de lo cobrado por lavados. Sin conteo de apertura del inventario no se puede vender.',
         }}
         actions={
-          turno && tab === 'cuentas' ? (
+          <>
+            <Link
+              to="/jefe-zona/ventas/historial"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3.5 py-2 text-sm font-medium text-neutral-700 transition-colors hover:border-neutral-300 hover:bg-neutral-50"
+            >
+              <History size={15} /> Historial
+            </Link>
+            {turno && tab === 'cuentas' ? (
             <Button variant="primary" icon={UserPlus} onClick={() => setAbriendoCuenta(true)}>
               Abrir cuenta
             </Button>
-          ) : undefined
+            ) : null}
+          </>
         }
       />
 
