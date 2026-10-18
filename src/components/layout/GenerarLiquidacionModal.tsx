@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { HandCoins, X } from 'lucide-react'
+import { Car, HandCoins, X } from 'lucide-react'
 import { CurrencyInput } from './CurrencyInput'
 import { toast } from '../../lib/toast'
 
@@ -14,6 +14,8 @@ export function GenerarLiquidacionModal({
   nombre,
   comisionBruta,
   deudaPendiente,
+  onVerPlacas,
+  cargandoPlacas = false,
   onConfirm,
   onCancel,
 }: {
@@ -22,6 +24,9 @@ export function GenerarLiquidacionModal({
   nombre: string
   comisionBruta: number
   deudaPendiente: number
+  /** Abre el listado de placas que entran en este corte (solo lavadores). */
+  onVerPlacas?: () => void
+  cargandoPlacas?: boolean
   onConfirm: (deudaADescontar: number) => Promise<void>
   onCancel: () => void
 }) {
@@ -70,7 +75,18 @@ export function GenerarLiquidacionModal({
           </button>
         </div>
 
-        <p className="mb-4 text-sm text-neutral-600">{resumen}</p>
+        <p className="mb-2 text-sm text-neutral-600">{resumen}</p>
+        {onVerPlacas ? (
+          <button
+            type="button"
+            onClick={onVerPlacas}
+            disabled={cargandoPlacas}
+            className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-primary-600 transition-colors hover:text-primary-800 disabled:opacity-50"
+          >
+            <Car size={15} />
+            {cargandoPlacas ? 'Cargando placas…' : 'Ver las placas de este corte'}
+          </button>
+        ) : null}
 
         {deudaPendiente > 0 ? (
           <div className="mb-4 flex flex-col gap-3 rounded-xl border border-warning-600/25 bg-warning-50/60 p-4">

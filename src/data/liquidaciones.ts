@@ -509,3 +509,89 @@ export async function fetchDeudaTrasLiquidacion(liquidacion: { id: string; lavad
   if (error) throw new Error(error.message)
   return Math.max(0, (data ?? []).reduce((total, d) => total + (d.monto as number), 0))
 }
+
+export interface PlacaLiquidacion {
+  id: string
+  consecutivo: number
+  placa: string
+  estado: 'en_proceso' | 'listo' | 'entregado'
+  creadoEn: string
+  entregadaEn?: string
+  tipoVehiculoId: string
+  comboId?: string
+  /** Lo que le toca a ESTE lavador de la orden (su mitad si se lavó entre dos). */
+  comision: number
+  conAcompanante: boolean
+  /** Liquidación que ya cubre esta orden para este lavador; undefined = sigue sin liquidar. */
+  liquidacionId?: string
+}
+
+export type FiltroPlacasLavador =
+  | { tipo: 'pendientes' }
+  | { tipo: 'periodo'; periodoInicio: string; periodoFin: string }
+  | { tipo: 'liquidacion'; liquidacionId: string }
+
+// Las placas (órdenes) detrás de lo que se le va a pagar —o ya se le pagó— a un lavador: qué
+// vehículos entran en su acumulado sin liquidar, en un periodo, o en una liquidación ya generada.
+// Entra a la liquidación por la fecha en que se REGISTRÓ la orden (`creado_en`), no por cuándo se
+// lavó o se cobró: un carro registrado ayer y lavado hoy cuenta en el corte de ayer.
+export async function fetchPlacasLavador(lavadorId: string, filtro: FiltroPlacasLavador): Promise<PlacaLiquidacion[]> {
+  const SELECT =
+    'id, consecutivo, placa, estado, creadoEn:creado_en, entregadaEn:entregada_en, tipoVehiculoId:tipo_vehiculo_id, comboId:combo_id, comisionLavador:comision_lavador, lavadorId:lavador_id, lavadorId2:lavador_id_2, liquidacionId:liquidacion_id, liquidacionId2:liquidacion_id_2'
+  type Fila = {
+    id: string
+    consecutivo: number
+    placa: string
+    estado: 'en_proceso' | 'listo' | 'entregado'
+    creadoEn: string
+    entregadaEn: string | null
+    tipoVehiculoId: string
+    comboId: string | null
+    comisionLavador: number
+    lavadorId: string | null
+    lavadorId2: string | null
+    liquidacionId: string | null
+    liquidacionId2: string | null
+  }
+
+  const filas = await paginar<Fila>((a, b) => {
+    let consulta = db.from('ordenes').select(SELECT).neq('estado', 'anulada')
+    if (filtro.tipo === 'liquidacion') {
+      consulta = consulta.or(`liquidacion_id.eq.${filtro.liquidacionId},liquidacion_id_2.eq.${filtro.liquidacionId}`)
+    } else {
+      consulta = consulta.or(`lavador_id.eq.${lavadorId},lavador_id_2.eq.${lavadorId}`)
+      if (filtro.tipo === 'periodo') {
+        const { desdeISO, hastaISO } = limitesLocalesISO(filtro.periodoInicio, filtro.periodoFin)
+        consulta = consulta.gte('creado_en', desdeISO).lt('creado_en', hastaISO)
+      }
+    }
+    return consulta.order('creado_en', { ascending: false }).order('id').range(a, b)
+  })
+
+  const resultado: PlacaLiquidacion[] = []
+  for (const f of filas) {
+    const tieneSegundo = !!f.lavadorId2
+    const [mitadPrincipal, mitadSegundo] = splitComision(f.comisionLavador, tieneSegundo)
+    // Qué mitad es la de este lavador. En una liquidación concreta, la columna que coincide con
+    // ese id manda (mismo criterio que fetchDesgloseLiquidacion).
+    const esPrincipal =
+      filtro.tipo === 'liquidacion' ? f.liquidacionId === filtro.liquidacionId : f.lavadorId === lavadorId
+    const liquidacionId = (esPrincipal ? f.liquidacionId : f.liquidacionId2) ?? undefined
+    if (filtro.tipo !== 'liquidacion' && f.lavadorId !== lavadorId && f.lavadorId2 !== lavadorId) continue
+    if (filtro.tipo === 'pendientes' && liquidacionId !== undefined) continue
+    resultado.push({
+      id: f.id,
+      consecutivo: f.consecutivo,
+      placa: f.placa,
+      estado: f.estado,
+      creadoEn: f.creadoEn,
+      entregadaEn: f.entregadaEn ?? undefined,
+      tipoVehiculoId: f.tipoVehiculoId,
+      comboId: f.comboId ?? undefined,
+      comision: !tieneSegundo ? f.comisionLavador : esPrincipal ? mitadPrincipal : mitadSegundo,
+      conAcompanante: tieneSegundo,
+      liquidacionId,
+    })
+  }
+  return resultado
+}

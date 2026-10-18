@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState, type ComponentType, type FormEvent, type ReactNode } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { Wallet, CheckCircle2, Receipt, ShieldCheck, Ban, HandCoins, Inbox, UserRound, CalendarDays } from 'lucide-react'
+import { Wallet, CheckCircle2, Receipt, ShieldCheck, Ban, HandCoins, Inbox, UserRound, CalendarDays, Car } from 'lucide-react'
 import {
   fetchComisionesPendientes,
   fetchLiquidaciones,
   fetchMontoPeriodo,
   fetchDiasConPendiente,
   fetchDesgloseLiquidacion,
+  fetchPlacasLavador,
+  type FiltroPlacasLavador,
+  type PlacaLiquidacion,
   fetchDeudaTrasLiquidacion,
   fetchResumenPeriodoLavadores,
   generarLiquidacion,
@@ -29,6 +32,7 @@ import {
   type MontoPeriodoJefeZona,
   type ResumenPeriodoJefeZona,
 } from '../../../../data/liquidacionesJefeZona'
+import { PlacasLavadorModal } from '../../../../components/layout/PlacasLavadorModal'
 import { PeriodoSelector } from '../../../../components/layout/PeriodoSelector'
 import {
   ElegirPeriodoLiquidacionModal,
@@ -169,6 +173,10 @@ function LiquidacionesPage() {
   >(null)
   const [calculandoPeriodo, setCalculandoPeriodo] = useState(false)
   const [colilla, setColilla] = useState<ColillaLiquidacionData | null>(null)
+  // Placas (órdenes) detrás de un corte de lavador: sin liquidar, un periodo o una liquidación ya
+  // generada. `cargandoPlacas` guarda la clave del botón que se tocó.
+  const [cargandoPlacas, setCargandoPlacas] = useState<string | null>(null)
+  const [placasModal, setPlacasModal] = useState<{ titulo: string; subtitulo: string; filas: PlacaLiquidacion[] } | null>(null)
 
   // Jefe de patio (comisión por combo, ver Configuración) — mismo flujo que lavadores arriba, pero
   // keyed por `responsable` (texto libre, ver src/data/liquidacionesJefeZona.ts) en vez de un id.
@@ -593,6 +601,19 @@ function LiquidacionesPage() {
     }
   }
 
+  async function abrirPlacas(clave: string, lavadorId: string, titulo: string, subtitulo: string, filtro: FiltroPlacasLavador) {
+    setError(null)
+    setCargandoPlacas(clave)
+    try {
+      const filas = await fetchPlacasLavador(lavadorId, filtro)
+      setPlacasModal({ titulo, subtitulo, filas })
+    } catch (err) {
+      toast.desdeError(err, 'No se pudieron cargar las placas')
+    } finally {
+      setCargandoPlacas(null)
+    }
+  }
+
   async function handleVerDetalleJefeZona(personaId: string, responsable: string) {
     setError(null)
     setCargandoDetalleJefeZona(personaId)
@@ -669,6 +690,21 @@ function LiquidacionesPage() {
       },
       onAnular: () =>
         setAnulando({ tipo: esLavadores ? 'lavador' : 'jefeZona', id: fila.id, label: fila.nombre, monto: fila.monto }),
+      cargandoPlacas: cargandoPlacas === `liq:${fila.id}`,
+      onVerPlacas: esLavadores
+        ? () => {
+            const l = historico.find((x) => x.id === fila.id)
+            if (l) {
+              void abrirPlacas(
+                `liq:${fila.id}`,
+                l.lavadorId,
+                `Placas liquidadas — ${fila.nombre}`,
+                `Liquidación generada el ${FECHA.format(new Date(l.creadoEn))}`,
+                { tipo: 'liquidacion', liquidacionId: l.id },
+              )
+            }
+          }
+        : undefined,
       onVerColilla: () => {
         if (esLavadores) {
           const l = historico.find((x) => x.id === fila.id)
@@ -834,6 +870,17 @@ function LiquidacionesPage() {
                           </Button>
                         </>
                       }
+                      onVerOrdenes={{
+                        cargando: cargandoPlacas === `pend:${c.lavadorId}`,
+                        onClick: () =>
+                          abrirPlacas(
+                            `pend:${c.lavadorId}`,
+                            c.lavadorId,
+                            `Placas sin liquidar — ${c.lavadorNombre}`,
+                            'Todo lo que se le acumula hoy, sin importar si el lavado terminó o el cliente ya pagó.',
+                            { tipo: 'pendientes' },
+                          ),
+                      }}
                     />
                   ))
                 : pendientesJefeZona.map((c) => (
@@ -960,7 +1007,23 @@ function LiquidacionesPage() {
                       generado={r.montoTotal}
                       pendiente={r.montoPendiente}
                       acciones={
-                        r.montoPendiente > 0 ? (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            icon={Car}
+                            loading={cargandoPlacas === `per:${r.lavadorId}`}
+                            onClick={() =>
+                              abrirPlacas(`per:${r.lavadorId}`, r.lavadorId, `Placas — ${r.lavadorNombre}`, rangoPeriodo.label, {
+                                tipo: 'periodo',
+                                periodoInicio: rangoPeriodo.periodoInicio,
+                                periodoFin: rangoPeriodo.periodoFin,
+                              })
+                            }
+                          >
+                            Placas
+                          </Button>
+                          {r.montoPendiente > 0 ? (
                           <>
                             <Button
                               size="sm"
@@ -982,7 +1045,8 @@ function LiquidacionesPage() {
                               Generar
                             </Button>
                           </>
-                        ) : null
+                          ) : null}
+                        </>
                       }
                     />
                   ))
@@ -1078,8 +1142,29 @@ function LiquidacionesPage() {
           )}) · Motos: ${confirmandoGenerar.preview.desglose.motos.cantidad} (${COP.format(
             confirmandoGenerar.preview.desglose.motos.monto,
           )}).`}
+          onVerPlacas={() =>
+            abrirPlacas(
+              'gen',
+              confirmandoGenerar.comision.lavadorId,
+              `Placas de este corte — ${confirmandoGenerar.comision.lavadorNombre}`,
+              `${confirmandoGenerar.periodoInicio} → ${confirmandoGenerar.periodoFin}`,
+              { tipo: 'periodo', periodoInicio: confirmandoGenerar.periodoInicio, periodoFin: confirmandoGenerar.periodoFin },
+            )
+          }
+          cargandoPlacas={cargandoPlacas === 'gen'}
           onConfirm={handleGenerar}
           onCancel={() => setConfirmandoGenerar(null)}
+        />
+      ) : null}
+
+      {placasModal ? (
+        <PlacasLavadorModal
+          titulo={placasModal.titulo}
+          subtitulo={placasModal.subtitulo}
+          filas={placasModal.filas}
+          tipoNombre={(id) => tiposVehiculo.find((t) => t.id === id)?.nombre ?? '—'}
+          comboNombre={(id) => (id ? (combos.find((c) => c.id === id)?.nombre ?? 'Combo eliminado') : 'Sin combo')}
+          onClose={() => setPlacasModal(null)}
         />
       ) : null}
 
@@ -1182,6 +1267,8 @@ interface FilaLiquidacion {
 interface AccionesFila {
   pagando: boolean
   cargandoColilla: boolean
+  cargandoPlacas: boolean
+  onVerPlacas?: () => void
   onMarcarPagada: () => void
   onAnular: () => void
   onVerColilla: () => void
@@ -1367,6 +1454,8 @@ function ItemLiquidacion({
   fila,
   pagando,
   cargandoColilla,
+  cargandoPlacas,
+  onVerPlacas,
   onMarcarPagada,
   onAnular,
   onVerColilla,
@@ -1422,6 +1511,11 @@ function ItemLiquidacion({
           ) : null}
         </span>
         <div className="flex items-center gap-1">
+          {onVerPlacas ? (
+            <Button size="sm" variant="ghost" icon={Car} loading={cargandoPlacas} onClick={onVerPlacas}>
+              Placas
+            </Button>
+          ) : null}
           <Button size="sm" variant="ghost" icon={Receipt} loading={cargandoColilla} onClick={onVerColilla}>
             Colilla
           </Button>
