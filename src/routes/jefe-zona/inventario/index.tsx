@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { Package, Droplet, AlertTriangle, PackageSearch, ShoppingBag, ShoppingBasket, X } from 'lucide-react'
+import { Package, Droplet, AlertTriangle, PackageSearch, ShoppingBag, ShoppingBasket } from 'lucide-react'
 import { fetchTurnoAbierto } from '../../../data/turnos'
 import { fetchProductosOperativo } from '../../../data/productos'
 import {
@@ -13,6 +13,7 @@ import { movimientoInventarioInputSchema, type TipoMovimientoInventario } from '
 import type { Producto } from '../../../schemas/producto'
 import type { Compra } from '../../../schemas/compra'
 import { Card } from '../../../components/layout/Card'
+import { Modal } from '../../../components/layout/Modal'
 import { CustomSelect } from '../../../components/layout/CustomSelect'
 import { NivelStockModal } from '../../../components/layout/NivelStockModal'
 import { CompraForm, AnularCompraModal } from '../../../components/layout/CompraForm'
@@ -31,25 +32,13 @@ import { toast } from '../../../lib/toast'
 import { PageHeader } from '../../../components/layout/PageHeader'
 import { Button } from '../../../components/layout/Button'
 
-// Hoja inferior en móvil, centrada en desktop — mismo patrón que src/routes/vigilante/index.tsx,
-// es la convención del repo para formularios modales nuevos en pantallas operativas mobile-first.
+// Envoltorio de los formularios de esta pantalla sobre el Modal del sistema (hoja en celular,
+// centrado en escritorio).
 function ModalSheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
-    <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="custom-scroll max-h-[92vh] sm:max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-t-2xl bg-white p-5 shadow-card-hover sm:rounded-t-3xl sm:rounded-2xl">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="flex items-center gap-2 text-sm font-semibold text-neutral-900">{title}</h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
+    <Modal title={title} onClose={onClose}>
+      {children}
+    </Modal>
   )
 }
 

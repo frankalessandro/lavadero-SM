@@ -7,7 +7,7 @@ import { fetchLavadores } from '../../../data/lavadores'
 import { fetchCombos } from '../../../data/combos'
 import { fetchTiposVehiculo } from '../../../data/tiposVehiculo'
 import { comisionParaLavador, fetchMontoPeriodo } from '../../../data/liquidaciones'
-import { fetchDeudaPendientePorLavador } from '../../../data/deudasPersonal'
+import { fetchSaldosDeuda } from '../../../data/deudasPersonal'
 import type { Orden } from '../../../schemas/orden'
 import { Card } from '../../../components/layout/Card'
 import { PageHeader } from '../../../components/layout/PageHeader'
@@ -40,11 +40,11 @@ const ESTADO_CLASSNAME: Record<Orden['estado'], string> = {
 }
 
 async function loadLiquidaciones() {
-  const [lavadores, combos, tiposVehiculo, deudaPorLavador] = await Promise.all([
+  const [lavadores, combos, tiposVehiculo, { porLavador: deudaPorLavador }] = await Promise.all([
     fetchLavadores(),
     fetchCombos(),
     fetchTiposVehiculo(),
-    fetchDeudaPendientePorLavador(),
+    fetchSaldosDeuda(),
   ])
   return { lavadores, combos, tiposVehiculo, deudaPorLavador }
 }
@@ -147,6 +147,8 @@ function LiquidacionesJefeZona() {
         alcance: modo,
         deudaPendiente: preview.deudaPendiente,
         montoNeto: preview.montoNeto,
+        deudaPrestamo: preview.deuda.prestamo,
+        deudaTienda: preview.deuda.tienda,
       })
     } catch (err) {
       toast.desdeError(err, 'No se pudo calcular la colilla')
@@ -228,9 +230,10 @@ function LiquidacionesJefeZona() {
                     +{p.yaLiquidadas} ya liquidada{p.yaLiquidadas === 1 ? '' : 's'} (no se cuenta{p.yaLiquidadas === 1 ? '' : 'n'} acá)
                   </p>
                 ) : null}
-                {(deudaPorLavador.get(p.lavadorId) ?? 0) > 0 ? (
+                {(deudaPorLavador.get(p.lavadorId)?.total ?? 0) > 0 ? (
                   <p className="-mt-1 text-xs text-warning-700">
-                    Debe {COP.format(deudaPorLavador.get(p.lavadorId) ?? 0)} (préstamos/nevera)
+                    Debe préstamos {COP.format(deudaPorLavador.get(p.lavadorId)?.prestamo ?? 0)} · tienda{' '}
+                    {COP.format(deudaPorLavador.get(p.lavadorId)?.tienda ?? 0)}
                   </p>
                 ) : null}
                 <button

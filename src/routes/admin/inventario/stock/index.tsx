@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type FormEvent } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { Plus, X, Pencil, AlertTriangle, Boxes, PackageSearch, Coins, ShoppingCart, Droplet, ShoppingBag } from 'lucide-react'
+import { Plus, Pencil, AlertTriangle, Boxes, PackageSearch, Coins, ShoppingCart, Droplet, ShoppingBag } from 'lucide-react'
 import {
   fetchProductos,
   createProducto,
@@ -20,6 +20,7 @@ import { fetchComprasRecientes, registrarCompra, anularCompra } from '../../../.
 import { fetchTurnoAbierto } from '../../../../data/turnos'
 import { fetchFaltantesPendientes, type FaltantePendiente } from '../../../../data/conteosInventario'
 import { ProductoExpedienteModal } from '../../../../components/layout/ProductoExpedienteModal'
+import { Modal } from '../../../../components/layout/Modal'
 import { NivelStockModal } from '../../../../components/layout/NivelStockModal'
 import { CompraForm, AnularCompraModal } from '../../../../components/layout/CompraForm'
 import type { Compra } from '../../../../schemas/compra'
@@ -754,22 +755,24 @@ function MovimientoForm({
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="max-h-[92vh] sm:max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-3xl sm:rounded-2xl bg-white p-6 shadow-card-hover sm:p-7">
-        <div className="mb-5 flex items-center justify-between">
-          <h3 className="flex items-center gap-2 text-base font-semibold text-neutral-900">
-            <PackageSearch size={16} className="text-primary-500" />
+    <Modal
+      title="Registrar movimiento"
+      subtitle="Ajuste manual de stock con justificación."
+      icon={PackageSearch}
+      onClose={onClose}
+      onSubmit={handleSubmit}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button type="submit" variant="primary" loading={saving}>
             Registrar movimiento
-          </h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+          </Button>
+        </>
+      }
+    >
+        <div className="flex flex-col gap-5">
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-medium text-neutral-700">Producto</span>
@@ -882,18 +885,8 @@ function MovimientoForm({
 
         {error ? <p className="text-xs text-danger-600">{error}</p> : null}
 
-        <div className="flex justify-end border-t border-neutral-100 pt-4">
-          <button
-            type="submit"
-            disabled={saving}
-            className="rounded-xl bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
-          >
-            {saving ? 'Guardando…' : 'Registrar movimiento'}
-          </button>
         </div>
-      </form>
-      </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -951,22 +944,24 @@ function ProductoForm({
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="max-h-[92vh] sm:max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-3xl sm:rounded-2xl bg-white p-6 shadow-card-hover sm:p-7">
-        <div className="mb-5 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-neutral-900">
-            {producto ? 'Editar producto' : 'Nuevo producto'}
-          </h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+    <Modal
+      title={producto ? 'Editar producto' : 'Nuevo producto'}
+      icon={Boxes}
+      size="lg"
+      onClose={onClose}
+      onSubmit={handleSubmit}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button type="submit" variant="primary" loading={saving}>
+            Guardar
+          </Button>
+        </>
+      }
+    >
+        <div className="flex flex-col gap-5">
           <label className="flex flex-col gap-1.5 text-left text-sm">
             <span className="font-medium text-neutral-700">Nombre</span>
             <input
@@ -1033,25 +1028,8 @@ function ProductoForm({
 
           {error ? <p className="text-xs text-danger-600">{error}</p> : null}
 
-          <div className="mt-1 flex justify-end gap-2 border-t border-neutral-100 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg px-4 py-2 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-100"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-xl bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
-            >
-              {saving ? 'Guardando…' : 'Guardar'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </div>
+    </Modal>
   )
 }
 

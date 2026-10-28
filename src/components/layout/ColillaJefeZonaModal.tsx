@@ -1,6 +1,7 @@
-import { X } from 'lucide-react'
+import { Wallet } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { MarcaTiquete } from './EncabezadoTiquete'
+import { ComprobanteModal } from './ComprobanteModal'
 
 export interface ColillaJefeZonaData {
   responsable: string
@@ -20,59 +21,29 @@ function periodoLabel(inicio: string, fin: string): string {
   return `Semanal · ${FECHA.format(new Date(`${inicio}T00:00:00`))} → ${FECHA.format(new Date(`${fin}T00:00:00`))}`
 }
 
-// Colilla de liquidación del jefe de patio — mismo patrón pantalla+portal que
-// ColillaLiquidacionModal (lavadores), pero sin desglose por combo/categoría: la comisión de
-// jefe de patio es un porcentaje plano del total de cada orden durante su turno, no depende de
-// qué combo fue cada vehículo.
+// Colilla de liquidación del jefe de patio — vista con ComprobanteModal, sin desglose por
+// combo/categoría: la comisión de jefe de patio es un porcentaje plano del total de cada orden
+// durante su turno, no depende de qué combo fue cada vehículo. Lo que se imprime es ColillaPrint.
 export function ColillaJefeZonaModal({ colilla, onClose }: { colilla: ColillaJefeZonaData; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-30 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="custom-scroll max-h-[92vh] sm:max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-t-3xl sm:rounded-2xl bg-white p-6 shadow-card-hover">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-semibold text-neutral-900">Colilla de liquidación — jefe de patio</h3>
-            <p className="text-xs text-neutral-500">
-              {colilla.responsable} · {periodoLabel(colilla.periodoInicio, colilla.periodoFin)}
-            </p>
-            <p className="text-[11px] text-neutral-400">Generada {FECHA_HORA.format(new Date(colilla.generadaEn))}</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <p className="text-sm text-neutral-600">
-          {colilla.cantidadOrdenes} orden{colilla.cantidadOrdenes === 1 ? '' : 'es'} registrada
-          {colilla.cantidadOrdenes === 1 ? '' : 's'} con turno a cargo en el periodo.
-        </p>
-
-        <div className="mt-3 flex items-center justify-between rounded-lg bg-primary-50 px-3 py-2.5 text-sm">
-          <span className="font-medium text-primary-900">Total liquidado</span>
-          <span className="text-lg font-bold text-primary-700">{COP.format(colilla.monto)}</span>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => window.print()}
-          className="mt-4 w-full rounded-lg border border-neutral-200 py-3 text-sm font-semibold text-neutral-700 transition-colors hover:bg-neutral-50"
-        >
-          Imprimir colilla
-        </button>
-        <button
-          type="button"
-          onClick={onClose}
-          className="mt-2.5 w-full rounded-xl bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700"
-        >
-          Cerrar
-        </button>
-        <p className="mt-2.5 text-center text-[11px] text-neutral-400">Impresión pensada para POS térmica de 58mm.</p>
-      </div>
-      <ColillaPrint colilla={colilla} />
-    </div>
+    <ComprobanteModal
+      titulo="Colilla de liquidación"
+      subtitulo={`${colilla.responsable} · jefe de patio`}
+      icon={Wallet}
+      total={{
+        label: 'Total liquidado',
+        valor: COP.format(colilla.monto),
+        nota: `${colilla.cantidadOrdenes} orden${colilla.cantidadOrdenes === 1 ? '' : 'es'} con turno a cargo en el periodo.`,
+      }}
+      datos={[
+        { label: 'Periodo', valor: periodoLabel(colilla.periodoInicio, colilla.periodoFin), ancho: true },
+        { label: 'Órdenes', valor: String(colilla.cantidadOrdenes) },
+        { label: 'Generada', valor: FECHA_HORA.format(new Date(colilla.generadaEn)) },
+      ]}
+      imprimirLabel="Imprimir colilla"
+      onClose={onClose}
+      impresion={<ColillaPrint colilla={colilla} />}
+    />
   )
 }
 

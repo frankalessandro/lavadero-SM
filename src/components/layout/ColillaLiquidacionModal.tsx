@@ -1,8 +1,10 @@
-import { X } from 'lucide-react'
+import { Wallet } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import type { DesgloseCategoria, DesgloseVehiculos } from '../../data/liquidaciones'
 import { fechaLocalISO } from '../../lib/periodo'
 import { MarcaTiquete } from './EncabezadoTiquete'
+import { ComprobanteDesglose, ComprobanteModal } from './ComprobanteModal'
+import type { DescuentoDeuda } from '../../schemas/deudaPersonal'
 
 export interface ColillaLiquidacionData {
   lavadorNombre: string
@@ -24,6 +26,9 @@ export interface ColillaLiquidacionData {
   // línea extra.
   deudaPendiente?: number
   montoNeto?: number
+  // 0089: la deuda pendiente partida en préstamos y tienda (nevera, incluida la cuenta abierta).
+  deudaPrestamo?: number
+  deudaTienda?: number
   // Solo en modo 'liquidacion' (corte real): lo acumulado en el periodo ANTES de descontar deuda
   // y cuánto se descontó en ESTE corte puntual (liquidaciones.comision_bruta/deuda_descontada) —
   // a diferencia de deudaPendiente/montoNeto arriba, que en modo informativo reflejan la deuda
@@ -31,11 +36,36 @@ export interface ColillaLiquidacionData {
   // se muestra la línea extra.
   comisionBruta?: number
   deudaDescontada?: number
-  // Lo que sigue debiendo tras ese corte (saldo del ledger al momento de generarlo).
-  deudaRestante?: number
+  // Por bolsa (0089): lo descontado en ese corte y lo que seguía debiendo al generarlo.
+  descontado?: DescuentoDeuda
+  restante?: DescuentoDeuda
   // Solo en modo 'informativo': el corte sigue el filtro de periodo de la pantalla (día, semana o
   // mes) — cambia el título y los textos. Ausente = 'dia'.
   alcance?: 'dia' | 'semana' | 'mes'
+}
+
+function restanteTotal(colilla: ColillaLiquidacionData): number {
+  return colilla.restante ? colilla.restante.prestamo + colilla.restante.tienda : 0
+}
+
+// Líneas "− Préstamos / − Tienda" de lo descontado en un corte real; sin desglose, una sola línea.
+function lineasDescontado(colilla: ColillaLiquidacionData): [string, number][] {
+  if (!colilla.descontado) return colilla.deudaDescontada ? [['Abonado a la deuda', colilla.deudaDescontada]] : []
+  const lineas: [string, number][] = []
+  if (colilla.descontado.prestamo > 0) lineas.push(['Abonado a préstamos', colilla.descontado.prestamo])
+  if (colilla.descontado.tienda > 0) lineas.push(['Abonado a tienda', colilla.descontado.tienda])
+  return lineas
+}
+
+// Líneas de deuda de la colilla informativa: préstamos y tienda por separado.
+function lineasDeuda(colilla: ColillaLiquidacionData): [string, number][] {
+  if (colilla.deudaPrestamo === undefined && colilla.deudaTienda === undefined) {
+    return [['Debe (préstamos/tienda)', colilla.deudaPendiente ?? 0]]
+  }
+  const lineas: [string, number][] = []
+  if (colilla.deudaPrestamo) lineas.push(['Debe préstamos', colilla.deudaPrestamo])
+  if (colilla.deudaTienda) lineas.push(['Debe tienda', colilla.deudaTienda])
+  return lineas
 }
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
@@ -70,130 +100,83 @@ function corteInformativo(colilla: ColillaLiquidacionData): string {
   return `${fechaDe(colilla.periodoInicio)} → ${fechaDe(colilla.periodoFin)}`
 }
 
-// Colilla de liquidación para el lavador — mismo patrón que ReciboModal/TiquetePrint (pantalla +
-// portal a document.body para la impresora térmica de 58mm, ver src/styles/tiquete-print.css):
-// desglosa cuántos carros y cuántas motos hizo en el periodo, y DENTRO de cada uno cuántos fueron
-// de cada combo (no solo "5 carros" — cuántos Combo 1, cuántos Combo 6, etc.), no solo el total.
-// Se usa recién generada la liquidación (Admin > Liquidaciones) y también para reimprimir
-// cualquiera del histórico.
+// Colilla de liquidación para el lavador — vista con ComprobanteModal; lo que se imprime es
+// ColillaPrint (térmica 58mm, ver src/styles/tiquete-print.css). Desglosa cuántos carros y
+// cuántas motos hizo en el periodo y, DENTRO de cada uno, cuántos fueron de cada combo (no solo
+// "5 carros" — cuántos Combo 1, cuántos Combo 6, etc.). Se usa recién generada la liquidación
+// (Admin > Liquidaciones), para reimprimir cualquiera del histórico y como colilla informativa.
 export function ColillaLiquidacionModal({ colilla, onClose }: { colilla: ColillaLiquidacionData; onClose: () => void }) {
   const informativo = colilla.tipo === 'informativo'
+  const totalVehiculos = colilla.desglose.autos.cantidad + colilla.desglose.motos.cantidad
   return (
-    <div className="fixed inset-0 z-30 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="custom-scroll max-h-[92vh] sm:max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-t-3xl sm:rounded-2xl bg-white p-6 shadow-card-hover">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-semibold text-neutral-900">
-              {informativo ? TITULO_INFORMATIVO[colilla.alcance ?? 'dia'] : 'Colilla de liquidación'}
-            </h3>
-            <p className="text-xs text-neutral-500">
-              {colilla.lavadorNombre} · {informativo ? `Corte informativo · ${corteInformativo(colilla)}` : periodoLabel(colilla.periodoInicio, colilla.periodoFin)}
-            </p>
-            <p className="text-[11px] text-neutral-400">Generada {FECHA_HORA.format(new Date(colilla.generadaEn))}</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        {informativo ? (
-          <p className="mb-4 rounded-lg bg-warning-50 px-3 py-2 text-xs text-warning-700">
-            No es un pago — es solo para ver cómo va {cuandoInformativo(colilla)}. El pago real se liquida semanal.
-          </p>
-        ) : null}
-
-        <div className="flex flex-col gap-4 text-sm">
-          <DesgloseCategoriaBloque label="Carros" categoria={colilla.desglose.autos} />
-          <DesgloseCategoriaBloque label="Motos" categoria={colilla.desglose.motos} />
-        </div>
-
-        {!informativo && (colilla.deudaDescontada || colilla.deudaRestante) ? (
-          <div className="flex flex-col gap-1 rounded-lg bg-neutral-50 px-3 py-2.5 text-xs text-neutral-600">
-            <div className="flex items-center justify-between">
-              <span>Acumulado del periodo</span>
-              <span className="font-medium text-neutral-800">{COP.format(colilla.comisionBruta ?? 0)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span>Abonado a la deuda</span>
-              <span className="font-medium text-neutral-800">−{COP.format(colilla.deudaDescontada ?? 0)}</span>
-            </div>
-            <div className="flex items-center justify-between border-t border-neutral-200 pt-1 font-medium text-neutral-900">
-              <span>Queda debiendo</span>
-              <span>{COP.format(colilla.deudaRestante ?? 0)}</span>
-            </div>
-          </div>
-        ) : null}
-
-        <div
-          className={`mt-3 flex items-center justify-between rounded-lg px-3 py-2.5 text-sm ${informativo ? 'bg-warning-50' : 'bg-primary-50'}`}
-        >
-          <span className={`font-medium ${informativo ? 'text-warning-700' : 'text-primary-900'}`}>
-            {informativo ? `Ganado ${cuandoInformativo(colilla)} (sin liquidar aún)` : 'Total liquidado'}
-          </span>
-          <span className={`text-lg font-bold ${informativo ? 'text-warning-700' : 'text-primary-700'}`}>
-            {COP.format(colilla.monto)}
-          </span>
-        </div>
-
-        {informativo && colilla.deudaPendiente ? (
-          <div className="mt-2 flex flex-col gap-1 rounded-lg bg-neutral-50 px-3 py-2.5 text-xs text-neutral-600">
-            <div className="flex items-center justify-between">
-              <span>Debe (préstamos/nevera)</span>
-              <span className="font-medium text-neutral-800">−{COP.format(colilla.deudaPendiente)}</span>
-            </div>
-            <div className="flex items-center justify-between border-t border-neutral-200 pt-1 font-medium text-neutral-900">
-              <span>Le quedaría a favor</span>
-              <span>{COP.format(colilla.montoNeto ?? 0)}</span>
-            </div>
-          </div>
-        ) : null}
-
-        <button
-          type="button"
-          onClick={() => window.print()}
-          className="mt-4 w-full rounded-lg border border-neutral-200 py-3 text-sm font-semibold text-neutral-700 transition-colors hover:bg-neutral-50"
-        >
-          Imprimir colilla
-        </button>
-        <button
-          type="button"
-          onClick={onClose}
-          className="mt-2.5 w-full rounded-xl bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700"
-        >
-          Cerrar
-        </button>
-        <p className="mt-2.5 text-center text-[11px] text-neutral-400">Impresión pensada para POS térmica de 58mm.</p>
+    <ComprobanteModal
+      titulo={informativo ? TITULO_INFORMATIVO[colilla.alcance ?? 'dia'] : 'Colilla de liquidación'}
+      subtitulo={colilla.lavadorNombre}
+      icon={Wallet}
+      tono={informativo ? 'warning' : 'primary'}
+      aviso={
+        informativo
+          ? `No es un pago — es solo para ver cómo va ${cuandoInformativo(colilla)}. El pago real se liquida semanal.`
+          : undefined
+      }
+      total={{
+        label: informativo ? `Ganado ${cuandoInformativo(colilla)} (sin liquidar aún)` : 'Total liquidado',
+        valor: COP.format(colilla.monto),
+      }}
+      datos={[
+        {
+          label: informativo ? 'Corte' : 'Periodo',
+          valor: informativo ? corteInformativo(colilla) : periodoLabel(colilla.periodoInicio, colilla.periodoFin),
+          ancho: true,
+        },
+        { label: 'Vehículos', valor: String(totalVehiculos) },
+        { label: 'Generada', valor: FECHA_HORA.format(new Date(colilla.generadaEn)) },
+      ]}
+      imprimirLabel="Imprimir colilla"
+      onClose={onClose}
+      impresion={<ColillaPrint colilla={colilla} />}
+    >
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <DesgloseCategoriaBloque label="Carros" categoria={colilla.desglose.autos} />
+        <DesgloseCategoriaBloque label="Motos" categoria={colilla.desglose.motos} />
       </div>
-      <ColillaPrint colilla={colilla} />
-    </div>
+
+      {!informativo && (colilla.deudaDescontada || restanteTotal(colilla)) ? (
+        <ComprobanteDesglose
+          titulo="Deuda"
+          lineas={[
+            { label: 'Acumulado del periodo', valor: COP.format(colilla.comisionBruta ?? 0) },
+            ...lineasDescontado(colilla).map(([label, valor]) => ({ label, valor: `−${COP.format(valor)}`, tenue: true })),
+            ...(colilla.restante
+              ? [
+                  { label: 'Sigue debiendo · préstamos', valor: COP.format(colilla.restante.prestamo), tenue: true },
+                  { label: 'Sigue debiendo · tienda', valor: COP.format(colilla.restante.tienda), tenue: true },
+                ]
+              : []),
+          ]}
+          total={{ label: 'Queda debiendo', valor: COP.format(restanteTotal(colilla)) }}
+        />
+      ) : null}
+
+      {informativo && colilla.deudaPendiente ? (
+        <ComprobanteDesglose
+          titulo="Si se liquidara hoy"
+          lineas={lineasDeuda(colilla).map(([label, valor]) => ({ label, valor: `−${COP.format(valor)}`, tenue: true }))}
+          total={{ label: 'Le quedaría a favor', valor: COP.format(colilla.montoNeto ?? 0) }}
+        />
+      ) : null}
+    </ComprobanteModal>
   )
 }
 
 function DesgloseCategoriaBloque({ label, categoria }: { label: string; categoria: DesgloseCategoria }) {
   if (categoria.cantidad === 0) return null
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-          {label} ({categoria.cantidad})
-        </span>
-        <span className="text-sm font-semibold text-neutral-900">{COP.format(categoria.monto)}</span>
-      </div>
-      <div className="flex flex-col gap-1 rounded-lg bg-neutral-50 p-2.5">
-        {categoria.porCombo.map((item) => (
-          <div key={item.comboNombre} className="flex items-center justify-between gap-3 text-xs">
-            <span className="text-neutral-600">
-              {item.comboNombre} <span className="text-neutral-400">×{item.cantidad}</span>
-            </span>
-            <span className="font-medium text-neutral-800">{COP.format(item.monto)}</span>
-          </div>
-        ))}
-      </div>
-    </div>
+    <ComprobanteDesglose
+      titulo={`${label} (${categoria.cantidad})`}
+      lineas={categoria.porCombo.map((item) => ({ label: `${item.comboNombre} ×${item.cantidad}`, valor: COP.format(item.monto) }))}
+      total={{ label: 'Subtotal', valor: COP.format(categoria.monto) }}
+    />
   )
 }
 
@@ -233,20 +216,30 @@ function ColillaPrint({ colilla }: { colilla: ColillaLiquidacionData }) {
 
       <div className="tiquete-58__linea-solida" />
 
-      {!informativo && (colilla.deudaDescontada || colilla.deudaRestante) ? (
+      {!informativo && (colilla.deudaDescontada || restanteTotal(colilla)) ? (
         <>
           <div className="tiquete-58__fila">
             <span className="tiquete-58__fila-label">Acumulado del periodo</span>
             <span className="tiquete-58__fila-valor">{COP.format(colilla.comisionBruta ?? 0)}</span>
           </div>
-          <div className="tiquete-58__fila">
-            <span className="tiquete-58__fila-label">Abonado a la deuda</span>
-            <span className="tiquete-58__fila-valor">−{COP.format(colilla.deudaDescontada ?? 0)}</span>
-          </div>
-          <div className="tiquete-58__fila">
-            <span className="tiquete-58__fila-label">Queda debiendo</span>
-            <span className="tiquete-58__fila-valor">{COP.format(colilla.deudaRestante ?? 0)}</span>
-          </div>
+          {lineasDescontado(colilla).map(([label, valor]) => (
+            <div key={label} className="tiquete-58__fila">
+              <span className="tiquete-58__fila-label">{label}</span>
+              <span className="tiquete-58__fila-valor">−{COP.format(valor)}</span>
+            </div>
+          ))}
+          {colilla.restante ? (
+            <>
+              <div className="tiquete-58__fila">
+                <span className="tiquete-58__fila-label">Debe préstamos</span>
+                <span className="tiquete-58__fila-valor">{COP.format(colilla.restante.prestamo)}</span>
+              </div>
+              <div className="tiquete-58__fila">
+                <span className="tiquete-58__fila-label">Debe tienda</span>
+                <span className="tiquete-58__fila-valor">{COP.format(colilla.restante.tienda)}</span>
+              </div>
+            </>
+          ) : null}
           <div className="tiquete-58__linea" />
         </>
       ) : null}
@@ -258,10 +251,12 @@ function ColillaPrint({ colilla }: { colilla: ColillaLiquidacionData }) {
 
       {informativo && colilla.deudaPendiente ? (
         <>
-          <div className="tiquete-58__fila">
-            <span className="tiquete-58__fila-label">Debe (préstamos/nevera)</span>
-            <span className="tiquete-58__fila-valor">−{COP.format(colilla.deudaPendiente)}</span>
-          </div>
+          {lineasDeuda(colilla).map(([label, valor]) => (
+            <div key={label} className="tiquete-58__fila">
+              <span className="tiquete-58__fila-label">{label}</span>
+              <span className="tiquete-58__fila-valor">−{COP.format(valor)}</span>
+            </div>
+          ))}
           <div className="tiquete-58__fila">
             <span className="tiquete-58__fila-label">Le quedaría a favor</span>
             <span className="tiquete-58__fila-valor">{COP.format(colilla.montoNeto ?? 0)}</span>

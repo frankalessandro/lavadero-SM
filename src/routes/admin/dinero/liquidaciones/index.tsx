@@ -61,6 +61,7 @@ import {
   DetalleOrdenesJefeZonaModal,
   type DetalleOrdenJefeZonaFila,
 } from '../../../../components/layout/DetalleOrdenesJefeZonaModal'
+import type { DescuentoDeuda, SaldoDeuda } from '../../../../schemas/deudaPersonal'
 import { toast } from '../../../../lib/toast'
 import { Modal } from '../../../../components/layout/Modal'
 import { BarraFiltros, FiltroCombo, FiltroMenu } from '../../../../components/layout/Filtros'
@@ -301,6 +302,7 @@ function LiquidacionesPage() {
           montoPendiente: resumen.montoPendiente,
           cantidadOrdenes: resumen.cantidadOrdenes,
           deudaPendiente: preview.deudaPendiente,
+          deuda: preview.deuda,
           montoNeto: preview.montoNeto,
         },
         periodicidad: 'semanal',
@@ -330,6 +332,7 @@ function LiquidacionesPage() {
           montoPendiente: resumen.montoPendiente,
           cantidadOrdenes: resumen.cantidadOrdenes,
           deudaPendiente: preview.deudaPendiente,
+          deuda: preview.deuda,
         },
         periodicidad: 'semanal',
         periodoInicio: rangoPeriodo.periodoInicio,
@@ -381,7 +384,7 @@ function LiquidacionesPage() {
   // (handleVerColilla) — el desglose siempre sale de `ordenes.liquidacion_id`, exacto a lo que
   // quedó liquidado de verdad, no del rango de fechas.
   async function abrirColilla(liquidacion: Liquidacion, lavadorNombre: string) {
-    const [desglose, deudaRestante] = await Promise.all([
+    const [desglose, deuda] = await Promise.all([
       fetchDesgloseLiquidacion(liquidacion.id, tiposVehiculo, combos),
       fetchDeudaTrasLiquidacion(liquidacion),
     ])
@@ -394,7 +397,8 @@ function LiquidacionesPage() {
       generadaEn: liquidacion.creadoEn,
       comisionBruta: liquidacion.comisionBruta,
       deudaDescontada: liquidacion.deudaDescontada,
-      deudaRestante,
+      descontado: deuda.descontado,
+      restante: deuda.restante,
     })
   }
 
@@ -437,6 +441,8 @@ function LiquidacionesPage() {
         alcance: modoPeriodo,
         deudaPendiente: preview.deudaPendiente,
         montoNeto: preview.montoNeto,
+        deudaPrestamo: preview.deuda.prestamo,
+        deudaTienda: preview.deuda.tienda,
       })
     } catch (err) {
       toast.desdeError(err, 'No se pudo calcular la colilla')
@@ -472,7 +478,7 @@ function LiquidacionesPage() {
   }
 
   // El modal atrapa el error (y se queda abierto para corregir el descuento); si sale bien se cierra.
-  async function handleGenerar(deudaADescontar: number) {
+  async function handleGenerar(deudaADescontar: DescuentoDeuda) {
     if (!confirmandoGenerar) return
     const { comision, periodoInicio, periodoFin } = confirmandoGenerar
     setError(null)
@@ -545,7 +551,7 @@ function LiquidacionesPage() {
     }
   }
 
-  async function handleGenerarJefeZona(deudaADescontar: number) {
+  async function handleGenerarJefeZona(deudaADescontar: DescuentoDeuda) {
     if (!confirmandoGenerarJefeZona) return
     const { comision, periodoInicio, periodoFin } = confirmandoGenerarJefeZona
     setError(null)
@@ -842,7 +848,7 @@ function LiquidacionesPage() {
                       icon={Wallet}
                       monto={c.montoPendiente}
                       ordenes={c.cantidadOrdenes}
-                      deuda={c.deudaPendiente}
+                      deuda={c.deuda}
                       acciones={
                         <>
                           {(['diaria', 'semanal'] as const).map((p) => (
@@ -890,7 +896,7 @@ function LiquidacionesPage() {
                       icon={ShieldCheck}
                       monto={c.montoPendiente}
                       ordenes={c.cantidadOrdenes}
-                      deuda={c.deudaPendiente}
+                      deuda={c.deuda}
                       acciones={
                         <>
                           <Button
@@ -1128,7 +1134,7 @@ function LiquidacionesPage() {
           titulo={confirmandoGenerar.rangoLabel ? `Generar liquidación — ${confirmandoGenerar.rangoLabel}` : `Generar liquidación ${confirmandoGenerar.periodicidad}`}
           nombre={confirmandoGenerar.comision.lavadorNombre}
           comisionBruta={confirmandoGenerar.preview.monto}
-          deudaPendiente={confirmandoGenerar.preview.deudaPendiente}
+          deuda={confirmandoGenerar.preview.deuda}
           resumen={`Liquidación ${
             confirmandoGenerar.rangoLabel
               ? `de ${confirmandoGenerar.rangoLabel}`
@@ -1190,7 +1196,7 @@ function LiquidacionesPage() {
           titulo={confirmandoGenerarJefeZona.rangoLabel ? `Generar liquidación — ${confirmandoGenerarJefeZona.rangoLabel}` : `Generar liquidación ${confirmandoGenerarJefeZona.periodicidad}`}
           nombre={confirmandoGenerarJefeZona.comision.responsable}
           comisionBruta={confirmandoGenerarJefeZona.preview.monto}
-          deudaPendiente={confirmandoGenerarJefeZona.preview.deudaPendiente}
+          deuda={confirmandoGenerarJefeZona.preview.deuda}
           resumen={`Liquidación ${
             confirmandoGenerarJefeZona.rangoLabel
               ? `de ${confirmandoGenerarJefeZona.rangoLabel}`
@@ -1349,7 +1355,7 @@ function PendienteCard({
   icon: Icono
   monto: number
   ordenes: number
-  deuda: number
+  deuda: SaldoDeuda
   acciones: ReactNode
   onVerOrdenes?: { cargando: boolean; onClick: () => void }
 }) {
@@ -1379,10 +1385,10 @@ function PendienteCard({
       </div>
       <div>
         <p className="text-2xl font-semibold tabular-nums tracking-tight text-neutral-900">{COP.format(monto)}</p>
-        {deuda > 0 ? (
+        {deuda.total > 0 ? (
           <p className="mt-2 flex items-center gap-1.5 rounded-lg bg-warning-50 px-2.5 py-1.5 text-xs text-warning-700">
             <HandCoins size={13} className="shrink-0" />
-            Debe {COP.format(deuda)} — eliges cuánto descontar al generar
+            Debe préstamos {COP.format(deuda.prestamo)} · tienda {COP.format(deuda.tienda)} — eliges cuánto descontar al generar
           </p>
         ) : null}
       </div>

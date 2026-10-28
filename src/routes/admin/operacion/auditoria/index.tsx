@@ -11,6 +11,7 @@ import {
 } from '../../../../schemas/bitacora'
 import type { Perfil } from '../../../../schemas/perfil'
 import { Card } from '../../../../components/layout/Card'
+import { Modal } from '../../../../components/layout/Modal'
 import { StatCard } from '../../../../components/layout/StatCard'
 import { PageHeader } from '../../../../components/layout/PageHeader'
 import { CustomSelect } from '../../../../components/layout/CustomSelect'
@@ -301,61 +302,46 @@ function DetalleModal({ entrada, onClose }: { entrada: BitacoraEntrada; onClose:
   const campos = Object.keys(entrada.despues ?? {}).sort()
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4" onClick={onClose}>
-      <div
-        className="flex max-h-[92vh] sm:max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl sm:rounded-2xl bg-white shadow-card-hover"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-neutral-100 p-6">
-          <div>
-            <h2 className="text-base font-semibold text-neutral-900">
-              {ACCION_LABEL[entrada.accion] ?? entrada.accion} · {ENTIDAD_LABEL[entrada.entidad] ?? entrada.entidad}
-            </h2>
-            <p className="text-xs text-neutral-500">
-              {formatFecha(entrada.ocurridoEn)}
-              {entrada.personaNombre ? ` · ${entrada.personaNombre}` : ''}
-              {entrada.usuarioRol ? ` · cuenta ${entrada.usuarioRol}` : ''}
-            </p>
-            {entrada.entidadId ? (
-              <p className="mt-1 font-mono text-[11px] text-neutral-400">{entrada.entidadId}</p>
-            ) : null}
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="custom-scroll min-h-0 overflow-auto p-6">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs font-medium text-neutral-500">
-                <th className="bg-white pb-2">Campo</th>
-                {entrada.antes ? <th className="bg-white pb-2">Antes</th> : null}
-                <th className="bg-white pb-2">{entrada.antes ? 'Después' : 'Valor'}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {campos.map((campo) => (
-                <tr key={campo} className="border-t border-neutral-50">
-                  <td className="py-2 pr-3 align-top font-mono text-xs text-neutral-500">{campo}</td>
-                  {entrada.antes ? (
-                    <td className="py-2 pr-3 align-top break-words text-neutral-500 line-through">
-                      {valorLegible(entrada.antes[campo])}
-                    </td>
-                  ) : null}
-                  <td className="py-2 align-top break-words font-medium text-neutral-800">
-                    {valorLegible(entrada.despues?.[campo])}
+    <Modal
+      title={`${ACCION_LABEL[entrada.accion] ?? entrada.accion} · ${ENTIDAD_LABEL[entrada.entidad] ?? entrada.entidad}`}
+      subtitle={
+        <>
+          {formatFecha(entrada.ocurridoEn)}
+          {entrada.personaNombre ? ` · ${entrada.personaNombre}` : ''}
+          {entrada.usuarioRol ? ` · cuenta ${entrada.usuarioRol}` : ''}
+          {entrada.entidadId ? <span className="mt-0.5 block font-mono text-[11px] text-neutral-400">{entrada.entidadId}</span> : null}
+        </>
+      }
+      icon={ScrollText}
+      size="lg"
+      onClose={onClose}
+    >
+      <div className="custom-scroll overflow-x-auto rounded-xl border border-neutral-100">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-neutral-50 text-left text-[11px] font-semibold tracking-wide text-neutral-500 uppercase">
+              <th className="w-1/4 px-3 py-2.5">Campo</th>
+              {entrada.antes ? <th className="px-3 py-2.5">Antes</th> : null}
+              <th className="px-3 py-2.5">{entrada.antes ? 'Después' : 'Valor'}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {campos.map((campo) => (
+              <tr key={campo} className="border-t border-neutral-100">
+                <td className="px-3 py-2.5 align-top font-mono text-xs text-neutral-500">{campo}</td>
+                {entrada.antes ? (
+                  <td className="px-3 py-2.5 align-top break-words text-neutral-500 line-through">
+                    {valorLegible(entrada.antes[campo])}
                   </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                ) : null}
+                <td className="px-3 py-2.5 align-top break-words font-medium text-neutral-800">
+                  {valorLegible(entrada.despues?.[campo])}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
-    </div>
+    </Modal>
   )
 }

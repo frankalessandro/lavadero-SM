@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { Pencil, Plus, X, Tag } from 'lucide-react'
+import { Pencil, Plus, Tag, Package } from 'lucide-react'
 import { fetchCombos, createCombo, updateCombo, setComboActivo, precioComboCalculado } from '../../../../data/combos'
 import { fetchComboServicios, setComboServicios, type ComboServicio } from '../../../../data/comboServicios'
 import { fetchServicios } from '../../../../data/servicios'
@@ -14,6 +14,8 @@ import type { PrecioServicio } from '../../../../schemas/precioServicio'
 import type { PrecioCombo } from '../../../../schemas/precioCombo'
 import { fetchRendimientoCombos, type RendimientoCombo } from '../../../../data/rendimientoCombos'
 import { Card } from '../../../../components/layout/Card'
+import { Modal } from '../../../../components/layout/Modal'
+import { Button } from '../../../../components/layout/Button'
 import { CustomSelect } from '../../../../components/layout/CustomSelect'
 import { ConfirmModal } from '../../../../components/layout/ConfirmModal'
 import { PageHeader } from '../../../../components/layout/PageHeader'
@@ -389,39 +391,27 @@ function RendimientoView({
       )}
 
       {detalle ? (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4"
-          onClick={() => setDetalle(null)}
+        <Modal
+          title={nombreDe(detalle)}
+          subtitle={`${detalle.veces} servicios · ${COP.format(detalle.ingreso)} · ${detalle.participacion.toFixed(1)}% del rango`}
+          icon={Package}
+          size="sm"
+          onClose={() => setDetalle(null)}
         >
-          <div className="w-full max-w-md rounded-t-3xl sm:rounded-2xl custom-scroll max-h-[92vh] overflow-y-auto bg-white sm:max-h-[88vh] p-6 shadow-card-hover" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <div>
-                <h3 className="text-base font-semibold text-neutral-900">{nombreDe(detalle)}</h3>
-                <p className="text-xs text-neutral-500">
-                  {detalle.veces} servicios · {COP.format(detalle.ingreso)} · {detalle.participacion.toFixed(1)}% del rango
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setDetalle(null)}
-                className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <h4 className="mb-1 text-xs font-medium uppercase tracking-wide text-neutral-400">Por tipo de vehículo</h4>
-            <ul className="flex flex-col gap-1 text-sm">
+          <section className="flex flex-col gap-2">
+            <h4 className="text-[11px] font-semibold tracking-wide text-neutral-500 uppercase">Por tipo de vehículo</h4>
+            <ul className="flex flex-col divide-y divide-neutral-100 rounded-xl border border-neutral-100 text-sm">
               {detalle.porTipo.map((t) => (
-                <li key={t.tipoVehiculoId} className="flex items-center justify-between gap-3">
+                <li key={t.tipoVehiculoId} className="flex items-center justify-between gap-3 px-3 py-2.5">
                   <span className="text-neutral-700">
                     {tipoNombre(t.tipoVehiculoId)} <span className="text-xs text-neutral-400">({t.veces})</span>
                   </span>
-                  <span className="font-medium text-neutral-900">{COP.format(t.ingreso)}</span>
+                  <span className="font-semibold text-neutral-900">{COP.format(t.ingreso)}</span>
                 </li>
               ))}
             </ul>
-          </div>
-        </div>
+          </section>
+        </Modal>
       ) : null}
     </div>
   )
@@ -537,25 +527,25 @@ function ComboForm({
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="max-h-[92vh] sm:max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-t-3xl sm:rounded-2xl bg-white p-6 shadow-card-hover sm:p-7">
-        <div className="mb-5 flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-semibold text-neutral-900">
-              {combo ? 'Editar combo' : 'Nuevo combo'}
-            </h3>
-            <p className="text-xs text-neutral-500">Nombre, categoría y cómo se calcula su precio.</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+    <Modal
+      title={combo ? 'Editar combo' : 'Nuevo combo'}
+      subtitle="Nombre, categoría y cómo se calcula su precio."
+      icon={Package}
+      size="lg"
+      onClose={onClose}
+      onSubmit={handleSubmit}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button type="submit" variant="primary" loading={saving}>
+            Guardar combo
+          </Button>
+        </>
+      }
+    >
+        <div className="flex flex-col gap-5">
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-[2fr_1fr]">
             <label className="flex flex-col gap-1.5 text-left text-sm">
               <span className="font-medium text-neutral-700">Nombre</span>
@@ -702,24 +692,7 @@ function ComboForm({
 
           {error ? <p className="text-xs text-danger-600">{error}</p> : null}
 
-          <div className="mt-1 flex justify-end gap-2 border-t border-neutral-100 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg px-4 py-2 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-100"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-xl bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
-            >
-              {saving ? 'Guardando…' : 'Guardar combo'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </div>
+    </Modal>
   )
 }

@@ -1,8 +1,10 @@
-import { Mail, MessageCircle, Phone, User, X } from 'lucide-react'
+import { ChevronRight, Mail, MessageCircle, Phone, UserRound } from 'lucide-react'
 import { whatsappHref } from '../../lib/whatsapp'
+import { Modal } from './Modal'
 
 // Modal de contacto reutilizable — usado en la tarjeta de seguimiento de jefe de zona para
-// avisar por WhatsApp/llamada que el vehículo está listo, sin salir del dashboard.
+// avisar por WhatsApp/llamada que el vehículo está listo, sin salir del dashboard. WhatsApp es la
+// acción principal (lleva el mensaje armado), llamar y correo quedan como opciones de apoyo.
 export function ContactoModal({
   nombre,
   placa,
@@ -18,66 +20,46 @@ export function ContactoModal({
   mensajeWhatsapp: string
   onClose: () => void
 }) {
+  const opcion =
+    'flex min-h-12 items-center gap-3 rounded-xl border border-neutral-200 px-3 py-2.5 text-sm transition-colors hover:border-neutral-300 hover:bg-neutral-50'
   return (
-    <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="w-full max-w-sm rounded-t-3xl sm:rounded-2xl custom-scroll max-h-[92vh] overflow-y-auto bg-white sm:max-h-[88vh] p-6 shadow-card-hover">
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
-              <User size={17} />
-            </span>
-            <div className="min-w-0">
-              <h3 className="truncate text-sm font-semibold text-neutral-900">{nombre}</h3>
-              <p className="font-mono text-xs text-neutral-500">{placa}</p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        {telefono || correo ? (
-          <div className="flex flex-col gap-2">
-            {telefono ? (
-              <>
-                <a
-                  href={whatsappHref(telefono, mensajeWhatsapp)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center gap-2.5 rounded-lg bg-success-50 px-3 py-2.5 text-sm font-semibold text-success-700 transition-colors hover:bg-success-600/10"
-                >
-                  <MessageCircle size={16} />
-                  WhatsApp · {telefono}
-                </a>
-                <a
-                  href={`tel:${telefono.replace(/\s+/g, '')}`}
-                  className="flex items-center gap-2.5 rounded-lg bg-primary-50 px-3 py-2.5 text-sm font-semibold text-primary-700 transition-colors hover:bg-primary-100"
-                >
-                  <Phone size={16} />
-                  Llamar · {telefono}
-                </a>
-              </>
-            ) : null}
-            {correo ? (
+    <Modal title={nombre} subtitle={<span className="font-mono">{placa}</span>} icon={UserRound} size="sm" onClose={onClose}>
+      {telefono || correo ? (
+        <div className="flex flex-col gap-2">
+          {telefono ? (
+            <>
               <a
-                href={`mailto:${correo}`}
-                className="flex items-center gap-2.5 rounded-lg bg-neutral-50 px-3 py-2.5 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-100"
+                href={whatsappHref(telefono, mensajeWhatsapp)}
+                target="_blank"
+                rel="noreferrer"
+                className="flex min-h-14 items-center gap-3 rounded-xl bg-success-600 px-4 py-3 text-white shadow-card transition-colors hover:bg-success-700"
               >
-                <Mail size={16} className="shrink-0" />
-                <span className="min-w-0 truncate">{correo}</span>
+                <MessageCircle size={20} className="shrink-0" />
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="text-sm font-semibold">Escribir por WhatsApp</span>
+                  <span className="truncate text-xs text-white/80">Con el mensaje ya escrito</span>
+                </span>
+                <ChevronRight size={18} className="shrink-0 text-white/70" />
               </a>
-            ) : null}
-          </div>
-        ) : (
-          <p className="rounded-lg bg-neutral-50 px-3 py-3 text-center text-sm text-neutral-500">
-            Sin datos de contacto registrados para este cliente.
-          </p>
-        )}
-      </div>
-    </div>
+              <a href={`tel:${telefono.replace(/\s+/g, '')}`} className={opcion}>
+                <Phone size={16} className="shrink-0 text-primary-600" />
+                <span className="flex-1 font-medium text-neutral-800">Llamar</span>
+                <span className="font-mono text-xs text-neutral-500">{telefono}</span>
+              </a>
+            </>
+          ) : null}
+          {correo ? (
+            <a href={`mailto:${correo}`} className={opcion}>
+              <Mail size={16} className="shrink-0 text-neutral-500" />
+              <span className="min-w-0 flex-1 truncate font-medium text-neutral-800">{correo}</span>
+            </a>
+          ) : null}
+        </div>
+      ) : (
+        <p className="rounded-xl bg-neutral-50 px-4 py-6 text-center text-sm text-neutral-500">
+          Sin teléfono ni correo registrados. Agrégalos con «Editar cliente».
+        </p>
+      )}
+    </Modal>
   )
 }

@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { Pencil, Plus, X } from 'lucide-react'
+import { Pencil, Plus, UserRound } from 'lucide-react'
 import {
   fetchLavadores,
   createLavador,
@@ -12,6 +12,8 @@ import { fetchCombos } from '../../../../data/combos'
 import { fetchProductos } from '../../../../data/productos'
 import { lavadorInputSchema, type Lavador } from '../../../../schemas/lavador'
 import { Card } from '../../../../components/layout/Card'
+import { Modal } from '../../../../components/layout/Modal'
+import { Button } from '../../../../components/layout/Button'
 import { CustomSelect } from '../../../../components/layout/CustomSelect'
 import { ConfirmModal } from '../../../../components/layout/ConfirmModal'
 import { PageHeader } from '../../../../components/layout/PageHeader'
@@ -254,25 +256,24 @@ function LavadorForm({
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="w-full max-w-lg rounded-t-3xl sm:rounded-2xl custom-scroll max-h-[92vh] overflow-y-auto bg-white sm:max-h-[88vh] p-6 shadow-card-hover sm:p-7">
-        <div className="mb-5 flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-semibold text-neutral-900">
-              {lavador ? 'Editar lavador' : 'Nuevo lavador'}
-            </h3>
-            <p className="text-xs text-neutral-500">Perfil básico — sin usuario del sistema (Plan §3).</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+    <Modal
+      title={lavador ? 'Editar lavador' : 'Nuevo lavador'}
+      subtitle="Perfil básico — sin usuario del sistema (Plan §3)."
+      icon={UserRound}
+      onClose={onClose}
+      onSubmit={handleSubmit}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button type="submit" variant="primary" loading={saving}>
+            Guardar
+          </Button>
+        </>
+      }
+    >
+        <div className="flex flex-col gap-5">
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <label className="flex flex-col gap-1.5 text-left text-sm">
               <span className="font-medium text-neutral-700">Nombre</span>
@@ -352,24 +353,7 @@ function LavadorForm({
 
           {error ? <p className="text-xs text-danger-600">{error}</p> : null}
 
-          <div className="mt-1 flex justify-end gap-2 border-t border-neutral-100 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg px-4 py-2 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-100"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-xl bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
-            >
-              {saving ? 'Guardando…' : 'Guardar'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </div>
+    </Modal>
   )
 }

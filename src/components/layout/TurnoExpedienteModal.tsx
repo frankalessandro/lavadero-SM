@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ShieldAlert, X } from 'lucide-react'
+import { ShieldAlert, Wallet } from 'lucide-react'
+import { Modal } from './Modal'
 import { fetchExpedienteTurno, type ExpedienteTurno } from '../../data/expedienteTurno'
 import { METODO_PAGO_LABEL } from '../../lib/metodoPago'
 import type { TurnoCaja } from '../../schemas/turnoCaja'
@@ -56,33 +57,23 @@ export function TurnoExpedienteModal({ turno, comboNombre, lavadorNombre, produc
   const cierreDif = turno.diferencia ?? 0
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-neutral-900/40 p-4">
-      <div className="my-6 w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-card-hover">
-        <div className="flex items-start justify-between gap-3 border-b border-neutral-100 p-6">
-          <div className="min-w-0">
-            <h2 className="text-lg font-semibold text-neutral-900">
-              Turno {turno.rol === 'jefe_zona' ? 'jefe de zona' : 'vigilante'} · {turno.responsable}
-            </h2>
-            <p className="text-sm text-neutral-500">
-              {FECHA_HORA.format(new Date(turno.abiertoEn))} →{' '}
-              {turno.cerrado && turno.cerradoEn ? FECHA_HORA.format(new Date(turno.cerradoEn)) : 'abierto'}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
+    <>
+    <Modal
+      title={`Turno ${turno.rol === 'jefe_zona' ? 'jefe de patio' : 'vigilante'} · ${turno.responsable}`}
+      subtitle={`${FECHA_HORA.format(new Date(turno.abiertoEn))} → ${
+        turno.cerrado && turno.cerradoEn ? FECHA_HORA.format(new Date(turno.cerradoEn)) : 'abierto'
+      }`}
+      icon={Wallet}
+      size="xl"
+      onClose={onClose}
+    >
 
         {error ? (
-          <p className="p-6 text-sm text-danger-600">{error}</p>
+          <p className="py-6 text-center text-sm text-danger-600">{error}</p>
         ) : !data ? (
-          <p className="p-6 text-sm text-neutral-400">Cargando…</p>
+          <p className="py-6 text-center text-sm text-neutral-400">Cargando…</p>
         ) : (
-          <div className="flex flex-col gap-4 p-6">
+          <div className="flex flex-col gap-4">
             {/* Reconstrucción del arqueo */}
             <Card className="flex flex-col gap-2 p-4">
               <h3 className="text-sm font-semibold text-neutral-900">Arqueo del turno</h3>
@@ -326,7 +317,7 @@ export function TurnoExpedienteModal({ turno, comboNombre, lavadorNombre, produc
             </div>
           </div>
         )}
-      </div>
+    </Modal>
       {corrigiendo && onCorregido ? (
         <CorregirTurnoModal
           turno={turno}
@@ -337,7 +328,7 @@ export function TurnoExpedienteModal({ turno, comboNombre, lavadorNombre, produc
           }}
         />
       ) : null}
-    </div>
+    </>
   )
 }
 

@@ -4,7 +4,9 @@ import { useQuery } from '@tanstack/react-query'
 import { fetchVentasDeOrden } from '../../../../data/ventas'
 import { queryKeys } from '../../../../lib/queryKeys'
 import { DestinoProductoAnulado } from '../../../../components/layout/DestinoProductoAnulado'
-import { Ban, ClipboardList, Package, Timer, Users, Wallet, X } from 'lucide-react'
+import { Modal } from '../../../../components/layout/Modal'
+import { Button } from '../../../../components/layout/Button'
+import { Ban, ClipboardList, Package, Timer, Users, Wallet } from 'lucide-react'
 import { anularOrden, fetchOrdenesEnRango } from '../../../../data/ordenes'
 import { fetchLavadores } from '../../../../data/lavadores'
 import { fetchCombos } from '../../../../data/combos'
@@ -485,27 +487,25 @@ function AnularModal({
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="w-full max-w-md rounded-t-3xl sm:rounded-2xl custom-scroll max-h-[92vh] overflow-y-auto bg-white sm:max-h-[88vh] p-6 shadow-card-hover sm:p-7">
-        <div className="mb-5 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-neutral-900">
-            Anular orden #{orden.consecutivo} · {orden.placa}
-          </h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <p className="mb-5 text-xs text-neutral-500">
-          Esta acción no se puede deshacer. La orden queda visible en reportes con el motivo y quién la anuló
-          (control antifraude).
-        </p>
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+    <Modal
+      title={`Anular orden #${orden.consecutivo} · ${orden.placa}`}
+      subtitle="No se puede deshacer. Queda visible en reportes con el motivo y quién la anuló."
+      icon={Ban}
+      tone="danger"
+      onClose={onClose}
+      onSubmit={handleSubmit}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button type="submit" variant="danger" loading={saving}>
+            Anular orden
+          </Button>
+        </>
+      }
+    >
+        <div className="flex flex-col gap-5">
           {tieneProductos ? (
             <div className="flex flex-col gap-2 rounded-lg border border-warning-600/25 bg-warning-50/60 p-3">
               <p className="text-xs text-warning-700">
@@ -540,24 +540,7 @@ function AnularModal({
 
           {error ? <p className="text-xs text-danger-600">{error}</p> : null}
 
-          <div className="mt-1 flex justify-end gap-2 border-t border-neutral-100 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg px-4 py-2 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-100"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-lg bg-danger-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-danger-700 disabled:opacity-60"
-            >
-              {saving ? 'Anulando…' : 'Anular orden'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </div>
+    </Modal>
   )
 }

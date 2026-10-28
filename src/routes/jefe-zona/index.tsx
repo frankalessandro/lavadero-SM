@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -6,10 +6,8 @@ import {
   Users,
   Wallet,
   ArrowRight,
-  X,
   CheckCircle2,
   Banknote,
-  Package,
   Car,
   Clock,
   SprayCan,
@@ -17,7 +15,6 @@ import {
   Timer,
   MessageCircle,
   Motorbike,
-  UserRound,
   Pencil,
   FileWarning,
   Receipt,
@@ -68,6 +65,8 @@ import { PageHeader } from '../../components/layout/PageHeader'
 import { EstadoTurno } from '../../components/layout/EstadoTurno'
 import { BarraFiltros, FiltroBusqueda, FiltroMenu } from '../../components/layout/Filtros'
 import { Card } from '../../components/layout/Card'
+import { Modal } from '../../components/layout/Modal'
+import { Button } from '../../components/layout/Button'
 import { CustomSelect } from '../../components/layout/CustomSelect'
 import { ReciboModal, type ReciboData } from '../../components/layout/ReciboModal'
 import { ConfirmModal } from '../../components/layout/ConfirmModal'
@@ -503,6 +502,8 @@ function JefeZonaDashboard() {
       }
     }
     return {
+      // Minutos promedio de lavado por combo (id) — la barra de tiempo de cada tarjeta en proceso.
+      minutosPorComboId: new Map(Array.from(porCombo.entries()).map(([id, v]) => [id, v.total / v.cantidad])),
       porCombo: Array.from(porCombo.entries()).map(([id, v]) => ({
         nombre: comboNombre(id),
         promedio: v.total / v.cantidad,
@@ -515,6 +516,15 @@ function JefeZonaDashboard() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entregadasHoy])
+
+  // Avance de un lavado en curso contra lo que ese combo tarda hoy en promedio (barra de la
+  // tarjeta). Sin entregas del combo hoy no hay referencia: la barra queda vacía.
+  function progresoLavado(orden: Orden): { progreso?: number; promedioTexto?: string } {
+    const promedio = orden.comboId ? promedios.minutosPorComboId.get(orden.comboId) : undefined
+    if (!promedio) return {}
+    const minutos = (ahora - new Date(orden.creadoEn).getTime()) / 60000
+    return { progreso: minutos / promedio, promedioTexto: `prom. ${formatMinutos(promedio)}` }
+  }
 
   async function handleCobrado(orden: Orden, pagos: PagoLineaInput[], descuento?: DescuentoResumen) {
     // Se capturan ANTES del refresh: tras cobrar dejan de estar 'pendiente' y salen del mapa.
@@ -747,6 +757,7 @@ function JefeZonaDashboard() {
                   tipoVehiculoNombre={tipoVehiculo(orden.tipoVehiculoId)?.nombre ?? '—'}
                   esMoto={tipoVehiculo(orden.tipoVehiculoId)?.categoria === 'moto'}
                   tiempoTexto={tiempoTranscurrido(orden.creadoEn, ahora)}
+                  {...progresoLavado(orden)}
                   productosPendientes={ventasPendientesPorOrden.get(orden.id) ?? []}
                   productoNombre={productoNombre}
                   deOtroDia={deOtroDia(orden)}
@@ -892,6 +903,7 @@ function JefeZonaDashboard() {
       {cobrando ? (
         <CobroModal
           orden={cobrando.orden}
+          comboNombre={comboNombre(cobrando.orden.comboId)}
           finalizarPrimero={cobrando.finalizarPrimero}
           productosPendientes={ventasPendientesPorOrden.get(cobrando.orden.id) ?? []}
           productoNombre={productoNombre}
@@ -1060,73 +1072,75 @@ function CajaDesgloseModal({
   onClose: () => void
 }) {
   return (
-    <div className="fixed inset-0 z-30 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="w-full max-w-sm rounded-t-3xl sm:rounded-2xl custom-scroll max-h-[92vh] overflow-y-auto bg-white sm:max-h-[88vh] p-6 shadow-card-hover">
-        <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-success-50 text-success-700">
-              <Wallet size={18} strokeWidth={2} />
+    <Modal
+      title="Caja del día"
+      subtitle="Cobros de hoy, sin anulados"
+      icon={Wallet}
+      tone="success"
+      size="sm"
+      onClose={onClose}
+      footer={
+        <Button variant="ghost" onClick={onClose}>
+          Cerrar
+        </Button>
+      }
+    >
+      <div className="flex flex-col gap-5">
+        <div className="flex flex-col">
+          <span className="text-[11px] font-semibold tracking-wide text-neutral-500 uppercase">Cobrado hoy</span>
+          <span className="text-3xl font-bold tracking-tight text-neutral-900">{COP.format(total)}</span>
+          {productosPorCobrar > 0 ? (
+            <span className="mt-1 flex items-center gap-1.5 text-xs text-warning-700">
+              <CupSoda size={13} className="shrink-0" />
+              {COP.format(productosPorCobrar)} en productos cargados sin cobrar · {COP.format(total + productosPorCobrar)} con eso
             </span>
-            <div>
-              <h3 className="text-base font-semibold text-neutral-900">Caja del día — desglose</h3>
-              <p className="text-xs text-neutral-500">Solo cobros de hoy, líneas vigentes (sin anuladas).</p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
+          ) : null}
         </div>
-
-        <div className="mb-4 rounded-lg bg-success-50 px-3 py-3 text-center">
-          <p className="text-xl font-bold text-success-700">{COP.format(total)}</p>
-        </div>
-
-        {productosPorCobrar > 0 ? (
-          <div className="mb-4 flex flex-col gap-1.5">
-            <p className="text-xs font-medium text-neutral-500">Acumulado por cobrar</p>
-            <CajaFila icon={CupSoda} label="Productos cargados sin cobrar" valor={productosPorCobrar} />
-            <CajaFila icon={Wallet} label="Total con lo por cobrar" valor={total + productosPorCobrar} />
-          </div>
-        ) : null}
 
         {!hayPagos ? (
-          <p className="py-4 text-center text-sm text-neutral-400">Todavía no hay cobros hoy.</p>
+          <p className="rounded-xl bg-neutral-50 py-6 text-center text-sm text-neutral-400">Todavía no hay cobros hoy.</p>
         ) : (
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <p className="text-xs font-medium text-neutral-500">Por método</p>
-              <CajaFila icon={Banknote} label="Efectivo" valor={porMetodo.efectivo} />
-              <CajaFila icon={Landmark} label="Transferencia" valor={porMetodo.transferencia} />
-              <CajaFila icon={CreditCard} label="Datáfono" valor={porMetodo.datafono} />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <p className="text-xs font-medium text-neutral-500">Por línea</p>
-              <CajaFila icon={Droplets} label="Lavados" valor={lavados} />
-              <CajaFila icon={CupSoda} label="Productos" valor={productos} />
-            </div>
-          </div>
+          <>
+            <section className="flex flex-col gap-2">
+              <h4 className="text-[11px] font-semibold tracking-wide text-neutral-500 uppercase">Por método</h4>
+              <div className="grid grid-cols-3 gap-2">
+                <CajaFila icon={Banknote} label="Efectivo" valor={porMetodo.efectivo} />
+                <CajaFila icon={Landmark} label="Transferencia" valor={porMetodo.transferencia} />
+                <CajaFila icon={CreditCard} label="Datáfono" valor={porMetodo.datafono} />
+              </div>
+            </section>
+            <section className="flex flex-col gap-2">
+              <h4 className="text-[11px] font-semibold tracking-wide text-neutral-500 uppercase">Por línea</h4>
+              <div className="grid grid-cols-2 gap-2">
+                <CajaFila icon={Droplets} label="Lavados" valor={lavados} />
+                <CajaFila icon={CupSoda} label="Productos" valor={productos} />
+              </div>
+            </section>
+          </>
         )}
       </div>
-    </div>
+    </Modal>
   )
 }
 
 function CajaFila({ icon: Icon, label, valor }: { icon: typeof Banknote; label: string; valor: number }) {
   return (
-    <div className="flex items-center justify-between gap-2 rounded-lg bg-neutral-50 px-2.5 py-2 text-sm">
-      <span className="flex min-w-0 items-center gap-1.5 text-neutral-600">
-        <Icon size={14} className="shrink-0 text-neutral-400" />
+    <div className="flex min-w-0 flex-col gap-1 rounded-xl border border-neutral-100 px-3 py-2.5">
+      <span className="flex min-w-0 items-center gap-1.5 text-xs text-neutral-500">
+        <Icon size={13} className="shrink-0 text-neutral-400" />
         <span className="truncate">{label}</span>
       </span>
-      <span className="shrink-0 font-medium text-neutral-900">{COP.format(valor)}</span>
+      <span className={`truncate text-sm font-bold ${valor > 0 ? 'text-neutral-900' : 'text-neutral-300'}`}>{COP.format(valor)}</span>
     </div>
   )
 }
 
+// Tarjeta del tablero de seguimiento (M3). Jerarquía de arriba abajo: estado + tiempo → placa →
+// "cliente · vehículo · combo" → lavador; luego el detalle a cobrar si hay productos, y un pie con
+// el monto a la izquierda y UNA acción principal a la derecha (finalizar / cobrar / asignar).
+// Las acciones de apoyo son botones con ícono en una barra baja (en celular, los de menos uso
+// quedan solo con el ícono). La barra delgada de arriba es el estado:
+// en proceso se llena con el tiempo contra el promedio del combo hoy, listo es verde sólida.
 function OrdenCard({
   orden,
   comboNombre,
@@ -1135,6 +1149,8 @@ function OrdenCard({
   tipoVehiculoNombre,
   esMoto,
   tiempoTexto,
+  progreso,
+  promedioTexto,
   productosPendientes,
   productoNombre,
   deOtroDia = false,
@@ -1159,6 +1175,10 @@ function OrdenCard({
   tipoVehiculoNombre: string
   esMoto: boolean
   tiempoTexto: string
+  /** En proceso: tiempo transcurrido / promedio del combo hoy (puede pasar de 1). Sin promedio, undefined. */
+  progreso?: number
+  /** "prom. 35 min" — se muestra junto al tiempo cuando hay promedio del combo. */
+  promedioTexto?: string
   /** Productos de nevera cargados a esta orden y aún sin cobrar. */
   productosPendientes: Venta[]
   productoNombre: (id: string) => string
@@ -1186,31 +1206,60 @@ function OrdenCard({
   // asignación antes de poder finalizar/cobrar, así que se marca distinto del resto de "en
   // proceso" y no se ofrecen esas acciones todavía.
   const sinAsignar = enProceso && !orden.lavadorId
-  const VehiculoIcon = esMoto ? Motorbike : Car
   const totalProductos = productosPendientes.reduce((suma, v) => suma + v.total, 0)
+  const atrasado = progreso !== undefined && progreso > 1
+
+  const estado = sinAsignar
+    ? { label: 'En cola · sin lavador', chip: 'bg-danger-50 text-danger-700', punto: 'bg-danger-600' }
+    : enProceso
+      ? { label: 'Lavando', chip: 'bg-warning-50 text-warning-700', punto: 'bg-warning-600' }
+      : { label: 'Listo', chip: 'bg-success-50 text-success-700', punto: 'bg-success-600' }
+
+  const botonBarra =
+    'flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-medium text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900'
+
   return (
     <Card
-      className={`group border-l-4 p-0 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-card-hover ${
-        sinAsignar
-          ? 'border-l-danger-600 bg-danger-50/40'
-          : enProceso
-            ? 'border-l-warning-600 bg-warning-50/40'
-            : 'border-l-primary-500 bg-primary-50/40 shadow-nav-active'
+      className={`group p-0 transition-shadow duration-300 hover:shadow-card-hover ${
+        sinAsignar ? 'border-danger-600/30' : ''
       }`}
     >
-      <div
-        role={onVerDetalle ? 'button' : undefined}
-        tabIndex={onVerDetalle ? 0 : undefined}
-        onClick={onVerDetalle}
-        onKeyDown={(e) => {
-          if (onVerDetalle && (e.key === 'Enter' || e.key === ' ')) onVerDetalle()
-        }}
-        className={`flex items-center justify-between gap-2 p-3 pb-2 ${onVerDetalle ? 'cursor-pointer' : ''}`}
-      >
-        <div className="min-w-0 flex-1">
+      {/* Barra de estado: tiempo vs. promedio en proceso, verde sólida en listo */}
+      <div className="h-1 overflow-hidden rounded-t-2xl bg-neutral-100">
+        {sinAsignar ? (
+          <div className="h-full w-full bg-danger-600/60" />
+        ) : enProceso ? (
+          progreso !== undefined ? (
+            <div
+              className={`h-full transition-[width] duration-700 ${atrasado ? 'bg-danger-600' : 'bg-warning-600'}`}
+              style={{ width: `${Math.min(100, Math.max(4, progreso * 100))}%` }}
+            />
+          ) : null
+        ) : (
+          <div className="h-full w-full bg-success-600" />
+        )}
+      </div>
+
+      <div className="flex items-start gap-3 p-4 pb-3">
+        <div
+          role={onVerDetalle ? 'button' : undefined}
+          tabIndex={onVerDetalle ? 0 : undefined}
+          onClick={onVerDetalle}
+          onKeyDown={(e) => {
+            if (onVerDetalle && (e.key === 'Enter' || e.key === ' ')) onVerDetalle()
+          }}
+          className={`flex min-w-0 flex-1 flex-col gap-2 ${onVerDetalle ? 'cursor-pointer' : ''}`}
+        >
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="font-mono text-lg font-bold tracking-tight text-neutral-900">{orden.placa}</span>
-            <span className="text-xs text-neutral-400">#{orden.consecutivo}</span>
+            <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${estado.chip}`}>
+              <span className={`size-1.5 rounded-full ${estado.punto}`} />
+              {estado.label}
+            </span>
+            <span className={`flex items-center gap-1 text-xs ${atrasado ? 'font-semibold text-danger-700' : 'text-neutral-500'}`}>
+              <Clock size={12} className="shrink-0" />
+              {enProceso ? tiempoTexto : `hace ${tiempoTexto}`}
+              {enProceso && promedioTexto ? <span className="font-normal text-neutral-400">· {promedioTexto}</span> : null}
+            </span>
             {deOtroDia ? (
               <span className="inline-flex items-center gap-1 rounded-full bg-danger-600/10 px-2 py-0.5 text-[11px] font-semibold text-danger-700">
                 <AlertTriangle size={11} />
@@ -1219,49 +1268,36 @@ function OrdenCard({
               </span>
             ) : null}
           </div>
-          <p className="mt-0.5 flex items-center gap-1.5 text-sm font-medium text-neutral-700">
-            <UserRound size={14} className="shrink-0 text-neutral-400" />
-            <span className="min-w-0 truncate">{orden.clienteNombre}</span>
-          </p>
 
-          <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-neutral-500">
+          <div className="flex items-baseline gap-2">
+            <span className="font-mono text-2xl font-bold tracking-tight text-neutral-900">{orden.placa}</span>
+            <span className="text-xs text-neutral-400">#{orden.consecutivo}</span>
+          </div>
+
+          <p className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-sm text-neutral-600">
+            <span className="truncate font-semibold text-neutral-800">{orden.clienteNombre}</span>
+            <span className="text-neutral-300">·</span>
             <span className="flex items-center gap-1">
-              <VehiculoIcon size={13} className="text-primary-500" /> {tipoVehiculoNombre}
+              {esMoto ? <Motorbike size={14} className="text-neutral-400" /> : <Car size={14} className="text-neutral-400" />}
+              {tipoVehiculoNombre}
             </span>
-            <span className="flex items-center gap-1">
-              <Package size={13} className="text-primary-500" /> {comboNombre}
-            </span>
-            <span className="flex items-center gap-1">
-              <Users size={13} className="text-primary-500" /> {lavadorNombre}
-              {lavadorNombre2 ? ` + ${lavadorNombre2}` : ''}
-            </span>
-            <span className="flex items-center gap-1 font-medium text-neutral-600">
-              <Clock size={13} /> {tiempoTexto}
-            </span>
+            <span className="text-neutral-300">·</span>
+            <span>{comboNombre}</span>
           </p>
         </div>
 
-        {/* Protagonista pero a la medida del bloque de texto — no un banner aparte. Solo mientras
-            está en proceso y ya tiene lavador; "listo para cobrar" usa ese mismo espacio para el
-            check de "ya avisé", "sin asignar" para el aviso de que hace cola. */}
+        {/* Derecha: la animación mientras se lava; en listo, el aviso al cliente */}
         {enProceso && !sinAsignar ? (
           <LavadoAnimation tipo={esMoto ? 'moto' : 'auto'} className="h-20 w-28 shrink-0 sm:h-24 sm:w-32" />
-        ) : sinAsignar ? (
-          <span className="flex shrink-0 items-center gap-1 rounded-full bg-danger-50 px-2.5 py-1 text-xs font-semibold text-danger-700">
-            <Clock size={12} /> En cola
-          </span>
         ) : onToggleNotificado ? (
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              onToggleNotificado()
-            }}
+            onClick={onToggleNotificado}
             title={orden.notificadoListo ? 'Ya se le avisó al cliente — tocar para desmarcar' : 'Marcar que ya se le avisó al cliente'}
-            className={`flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium transition-colors ${
+            className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-xs font-semibold transition-colors ${
               orden.notificadoListo
                 ? 'bg-success-50 text-success-700 hover:bg-success-600/10'
-                : 'border border-neutral-200 text-neutral-500 hover:bg-neutral-50'
+                : 'border border-success-600/40 text-success-700 hover:bg-success-50'
             }`}
           >
             {orden.notificadoListo ? <BellRing size={14} /> : <Bell size={14} />}
@@ -1270,146 +1306,85 @@ function OrdenCard({
         ) : null}
       </div>
 
-      {productosPendientes.length > 0 ? (
-        <div className="flex flex-col gap-1 border-t border-neutral-100 bg-primary-50/40 px-3 py-2">
-          <span className="flex items-center gap-1.5 text-xs font-semibold text-primary-800">
-            <CupSoda size={13} /> Detalle a cobrar
+      {/* Lavador: dato + su acción pegada (cambiar) */}
+      {!sinAsignar ? (
+        <div className="flex items-center gap-1 px-4 pb-3">
+          <span className="inline-flex min-w-0 items-center gap-2 rounded-full bg-neutral-100 py-1 pr-3 pl-1 text-xs font-semibold text-neutral-700">
+            <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary-600 text-[11px] font-bold text-white">
+              {lavadorNombre.trim().charAt(0).toUpperCase() || '?'}
+            </span>
+            <span className="truncate">
+              {lavadorNombre}
+              {lavadorNombre2 ? ` + ${lavadorNombre2}` : ''}
+            </span>
           </span>
-          <ul className="flex flex-col gap-0.5">
-            <li className="flex items-center justify-between gap-2 text-xs text-neutral-600">
-              <span className="min-w-0 truncate">Lavado · {comboNombre}</span>
-              <span className="shrink-0 font-medium text-neutral-700">{COP.format(orden.precio)}</span>
-            </li>
-            {productosPendientes.map((v) => (
-              <li key={v.id} className="flex items-center justify-between gap-2 text-xs text-neutral-600">
-                <span className="min-w-0 truncate">
-                  {productoNombre(v.productoId)} <span className="text-neutral-400">×{v.cantidad}</span>
-                </span>
-                <span className="flex shrink-0 items-center gap-2">
-                  <span className="font-medium text-neutral-700">{COP.format(v.total)}</span>
-                  {onQuitarProducto ? (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onQuitarProducto(v)
-                      }}
-                      title="Quitar producto"
-                      className="text-danger-600 transition-colors hover:text-danger-700"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  ) : null}
-                </span>
-              </li>
-            ))}
-          </ul>
-          <div className="mt-1 flex items-center justify-between gap-2 border-t border-primary-100 pt-1.5 text-sm font-bold text-primary-800">
-            <span>Total</span>
-            <span>{COP.format(orden.precio + totalProductos)}</span>
-          </div>
-        </div>
-      ) : null}
-
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-neutral-100 bg-white/60 px-3 py-2">
-        <div className="flex flex-wrap items-center gap-1">
-          {onAgregarProducto ? (
-            <button
-              type="button"
-              onClick={onAgregarProducto}
-              className="group/btn flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-primary-50 hover:text-primary-700"
-            >
-              <Plus size={14} className="transition-transform group-hover/btn:scale-110" />
-              Producto
-            </button>
-          ) : null}
-          {onContactar ? (
-            <button
-              type="button"
-              onClick={onContactar}
-              className="group/btn flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-success-50 hover:text-success-700"
-            >
-              <MessageCircle size={14} className="transition-transform group-hover/btn:scale-110" />
-              Contactar
-            </button>
-          ) : null}
-          {onReasignar && !sinAsignar ? (
+          {onReasignar ? (
             <button
               type="button"
               onClick={onReasignar}
-              className="group/btn flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-primary-50 hover:text-primary-700"
+              title="Cambiar lavador"
+              aria-label="Cambiar lavador"
+              className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-primary-50 hover:text-primary-700"
             >
-              <Repeat size={14} className="transition-transform group-hover/btn:rotate-180" />
-              Reasignar
-            </button>
-          ) : null}
-          {onEditarCliente ? (
-            <button
-              type="button"
-              onClick={onEditarCliente}
-              className="group/btn flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-primary-50 hover:text-primary-700"
-            >
-              <Pencil size={14} />
-              Editar cliente
-            </button>
-          ) : null}
-          {/* Corregir = lo que no se puede arreglar editando (el combo, o el precio de una orden
-              ya cobrada): abre recepción con los datos precargados y, al guardar, encadena la
-              orden nueva con la anulación de esta (ver 0046_corregir_orden.sql). */}
-          <Link
-            to="/recepcion"
-            search={{ corrige: orden.id }}
-            title="El combo o el precio están mal — reemplaza esta orden por una nueva"
-            className="group/btn flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-warning-50 hover:text-warning-700"
-          >
-            <FileWarning size={14} />
-            Corregir
-          </Link>
-          {onVolverAProceso ? (
-            <button
-              type="button"
-              onClick={onVolverAProceso}
-              title="Se marcó Listo por equivocación — vuelve a En proceso"
-              className="group/btn flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-warning-50 hover:text-warning-700"
-            >
-              <Undo2 size={14} />
-              Volver a proceso
-            </button>
-          ) : null}
-          {onVerTiquete ? (
-            <button
-              type="button"
-              onClick={onVerTiquete}
-              className="group/btn flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-primary-50 hover:text-primary-700"
-            >
-              <Receipt size={14} />
-              Ver tiquete
+              <Repeat size={14} />
             </button>
           ) : null}
         </div>
+      ) : null}
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          <span className="rounded-md bg-success-50 px-2 py-1 text-sm font-bold text-success-700">
-            {COP.format(orden.precio + totalProductos)}
-          </span>
+      {/* Detalle a cobrar: mini-cuenta (lavado + productos), el total va en el pie */}
+      {productosPendientes.length > 0 ? (
+        <ul className="mx-4 mb-3 flex flex-col divide-y divide-neutral-100 rounded-xl border border-neutral-100 text-sm">
+          <li className="flex items-center justify-between gap-3 px-3 py-2">
+            <span className="flex min-w-0 items-center gap-2 text-neutral-700">
+              <Droplets size={14} className="shrink-0 text-primary-500" />
+              <span className="truncate">Lavado · {comboNombre}</span>
+            </span>
+            <span className="shrink-0 font-semibold text-neutral-900">{COP.format(orden.precio)}</span>
+          </li>
+          {productosPendientes.map((v) => (
+            <li key={v.id} className="group/prod flex items-center justify-between gap-3 py-1 pr-1 pl-3">
+              <span className="flex min-w-0 items-center gap-2 text-neutral-700">
+                <CupSoda size={14} className="shrink-0 text-neutral-400" />
+                <span className="truncate">{productoNombre(v.productoId)}</span>
+                <span className="shrink-0 rounded-md bg-neutral-100 px-1.5 py-0.5 text-[11px] font-semibold text-neutral-500">
+                  ×{v.cantidad}
+                </span>
+              </span>
+              <span className="flex shrink-0 items-center gap-1">
+                <span className="font-semibold text-neutral-900">{COP.format(v.total)}</span>
+                {onQuitarProducto ? (
+                  <button
+                    type="button"
+                    onClick={() => onQuitarProducto(v)}
+                    title="Quitar producto"
+                    aria-label={`Quitar ${productoNombre(v.productoId)}`}
+                    className="flex size-8 items-center justify-center rounded-lg text-neutral-300 transition-colors group-hover/prod:text-neutral-400 hover:bg-danger-50 hover:text-danger-600"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                ) : null}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {/* Pie de cobro: monto + una acción principal */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-neutral-100 px-4 py-3">
+        <div className="flex flex-col">
+          <span className="text-[11px] font-semibold tracking-wide text-neutral-500 uppercase">A cobrar</span>
+          <span className="text-xl font-bold tracking-tight text-neutral-900">{COP.format(orden.precio + totalProductos)}</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
           {sinAsignar && onReasignar ? (
             <button
               type="button"
               onClick={onReasignar}
-              className="flex items-center gap-1.5 rounded-lg bg-danger-600 px-3 py-2 text-xs font-semibold text-white shadow-card transition-all hover:-translate-y-0.5 hover:bg-danger-700 hover:shadow-card-hover"
+              className="flex h-11 items-center gap-1.5 rounded-xl bg-danger-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-danger-700"
             >
-              <Users size={14} />
+              <Users size={16} />
               Asignar lavador
-            </button>
-          ) : null}
-          {onFinalizar && !sinAsignar ? (
-            <button
-              type="button"
-              onClick={onFinalizar}
-              className="flex items-center gap-1.5 rounded-lg bg-warning-600 px-3 py-2 text-xs font-semibold text-white shadow-card transition-all hover:-translate-y-0.5 hover:bg-warning-700 hover:shadow-card-hover"
-            >
-              <SprayCan size={14} />
-              Finalizar lavado
             </button>
           ) : null}
           {onCobrarDirecto && !sinAsignar ? (
@@ -1417,23 +1392,82 @@ function OrdenCard({
               type="button"
               onClick={onCobrarDirecto}
               title="El cliente espera en sala — finaliza el lavado y cobra en un solo paso"
-              className="flex items-center gap-1.5 rounded-lg bg-success-600 px-3 py-2 text-xs font-semibold text-white shadow-nav-active transition-all hover:-translate-y-0.5 hover:bg-success-700 hover:shadow-card-hover"
+              className="flex h-11 items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3.5 text-sm font-semibold text-neutral-700 transition-colors hover:border-success-600/40 hover:bg-success-50 hover:text-success-700"
             >
-              <Banknote size={14} />
+              <Banknote size={16} />
               Finalizar y cobrar
+            </button>
+          ) : null}
+          {onFinalizar && !sinAsignar ? (
+            <button
+              type="button"
+              onClick={onFinalizar}
+              className="flex h-11 items-center gap-1.5 rounded-xl bg-primary-600 px-4 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700"
+            >
+              <SprayCan size={16} />
+              Finalizar lavado
             </button>
           ) : null}
           {onCobrar ? (
             <button
               type="button"
               onClick={onCobrar}
-              className="flex items-center gap-1.5 rounded-lg bg-success-600 px-3 py-2 text-xs font-semibold text-white shadow-nav-active transition-all hover:-translate-y-0.5 hover:bg-success-700 hover:shadow-card-hover"
+              className="flex h-11 items-center gap-1.5 rounded-xl bg-success-600 px-4 text-sm font-semibold text-white shadow-card transition-colors hover:bg-success-700"
             >
-              <Banknote size={14} />
+              <Banknote size={16} />
               Cobrar y entregar
             </button>
           ) : null}
         </div>
+      </div>
+
+      {/* Barra de apoyo: lo frecuente a la vista, el resto en "Más" */}
+      <div className="flex items-center gap-0.5 border-t border-neutral-100 px-2 py-1.5">
+        {onAgregarProducto ? (
+          <button type="button" onClick={onAgregarProducto} className={botonBarra}>
+            <Plus size={14} /> Producto
+          </button>
+        ) : null}
+        {onContactar ? (
+          <button type="button" onClick={onContactar} className={botonBarra}>
+            <MessageCircle size={14} /> WhatsApp
+          </button>
+        ) : null}
+        {onVerTiquete ? (
+          <button type="button" onClick={onVerTiquete} className={botonBarra}>
+            <Receipt size={14} /> Tiquete
+          </button>
+        ) : null}
+        <span className="flex-1" />
+        {onVolverAProceso ? (
+          <button
+            type="button"
+            onClick={onVolverAProceso}
+            title="Se marcó Listo por equivocación — vuelve a En proceso"
+            className="flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-medium text-neutral-500 transition-colors hover:bg-warning-50 hover:text-warning-700"
+          >
+            <Undo2 size={14} />
+            <span className="hidden sm:inline">Volver a proceso</span>
+          </button>
+        ) : null}
+        {onEditarCliente ? (
+          <button type="button" onClick={onEditarCliente} title="Editar placa, cliente o tipo de vehículo" className={botonBarra}>
+            <Pencil size={14} />
+            <span className="hidden sm:inline">Editar</span>
+          </button>
+        ) : null}
+        {/* Corregir = lo que no se puede arreglar editando (el combo, o el precio de una orden ya
+            cobrada): abre recepción con los datos precargados y, al guardar, encadena la orden
+            nueva con la anulación de esta (ver 0046_corregir_orden.sql). */}
+        <Link
+          to="/recepcion"
+          search={{ corrige: orden.id }}
+          title="El combo o el precio están mal — reemplaza esta orden por una nueva"
+          className="flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-medium text-neutral-500 transition-colors hover:bg-warning-50 hover:text-warning-700"
+        >
+          <FileWarning size={14} />
+          <span className="hidden sm:inline">Corregir</span>
+        </Link>
       </div>
     </Card>
   )
@@ -1537,15 +1571,24 @@ function EntregadosHoyTable({
   )
 }
 
-const ESTADO_DETALLE_LABEL: Record<Orden['estado'], string> = {
-  en_proceso: 'En proceso',
-  listo: 'Listo para cobrar',
-  entregado: 'Entregado',
-  anulada: 'Anulada',
+const ESTADO_DETALLE: Record<Orden['estado'], { label: string; chip: string; punto: string }> = {
+  en_proceso: { label: 'Lavando', chip: 'bg-warning-50 text-warning-700', punto: 'bg-warning-600' },
+  listo: { label: 'Listo para cobrar', chip: 'bg-success-50 text-success-700', punto: 'bg-success-600' },
+  entregado: { label: 'Entregado', chip: 'bg-neutral-100 text-neutral-600', punto: 'bg-neutral-400' },
+  anulada: { label: 'Anulada', chip: 'bg-danger-50 text-danger-700', punto: 'bg-danger-600' },
 }
 
-// Vista completa de una orden al tocar su tarjeta en el tablero de seguimiento — incluye
-// observaciones (no se mostraban en ningún lado antes) y todos los datos de contacto/servicio.
+// Encabezado común de los modales de una orden: placa grande + consecutivo y, debajo, un dato
+// de contexto. Va como `title` del Modal para que todos se lean igual.
+function TituloOrden({ orden }: { orden: Orden }) {
+  return (
+    <span className="flex items-baseline gap-2">
+      <span className="font-mono text-lg font-bold tracking-tight">{orden.placa}</span>
+      <span className="text-xs font-normal text-neutral-400">#{orden.consecutivo}</span>
+    </span>
+  )
+}
+
 function DetalleOrdenModal({
   orden,
   comboNombre,
@@ -1563,101 +1606,133 @@ function DetalleOrdenModal({
   onClose: () => void
   onVerTiquete: () => void
 }) {
+  const estado = ESTADO_DETALLE[orden.estado]
   return (
-    <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="max-h-[92vh] sm:max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-3xl sm:rounded-2xl bg-white p-6 shadow-card-hover">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h3 className="flex items-center gap-2 text-base font-semibold text-neutral-900">
-              <span className="font-mono">{orden.placa}</span>
-              <span className="text-xs font-normal text-neutral-400">#{orden.consecutivo}</span>
-            </h3>
-            <span
-              className={`mt-1 inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
-                orden.estado === 'en_proceso' ? 'bg-warning-50 text-warning-700' : 'bg-primary-50 text-primary-700'
-              }`}
-            >
-              {ESTADO_DETALLE_LABEL[orden.estado]}
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="flex flex-col gap-4 text-sm">
-          <div>
-            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-neutral-400">Cliente</p>
-            <div className="flex flex-col gap-1 rounded-lg bg-neutral-50 p-3">
-              <DetalleFila label="Nombre" valor={orden.clienteNombre} />
-              <DetalleFila label="Teléfono" valor={orden.clienteTelefono ?? 'Sin registrar'} />
-              <DetalleFila label="Correo" valor={orden.clienteCorreo ?? 'Sin registrar'} />
-            </div>
-          </div>
-
-          <div>
-            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-neutral-400">Servicio</p>
-            <div className="flex flex-col gap-1 rounded-lg bg-neutral-50 p-3">
-              <DetalleFila label="Tipo de vehículo" valor={tipoVehiculoNombre} />
-              <DetalleFila label="Combo" valor={comboNombre} />
-              {orden.serviciosAdicionales.length > 0 ? (
-                <DetalleFila label="Adicionales" valor={orden.serviciosAdicionales.map((s) => s.nombre).join(', ')} />
-              ) : null}
-              <DetalleFila label={lavadorNombre2 ? 'Lavadores' : 'Lavador'} valor={lavadorNombre2 ? `${lavadorNombre} + ${lavadorNombre2}` : lavadorNombre} />
-              <DetalleFila label="Precio" valor={COP.format(orden.precio)} />
-            </div>
-          </div>
-
-          <div>
-            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-neutral-400">Observaciones</p>
-            <p
-              className={`rounded-lg p-3 ${
-                orden.observaciones ? 'bg-warning-50 text-warning-700' : 'bg-neutral-50 text-neutral-400 italic'
-              }`}
-            >
-              {orden.observaciones ?? 'Sin observaciones.'}
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-5 flex gap-2 border-t border-neutral-100 pt-4">
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex-1 rounded-lg px-4 py-2.5 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-100"
-          >
+    <Modal
+      title={<TituloOrden orden={orden} />}
+      subtitle={
+        <span className={`mt-1 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${estado.chip}`}>
+          <span className={`size-1.5 rounded-full ${estado.punto}`} />
+          {estado.label}
+        </span>
+      }
+      icon={ClipboardCheck}
+      size="sm"
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
             Cerrar
-          </button>
-          <button
-            type="button"
-            onClick={onVerTiquete}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700"
-          >
-            <Receipt size={15} />
+          </Button>
+          <Button variant="primary" icon={Receipt} onClick={onVerTiquete}>
             Ver tiquete
-          </button>
-        </div>
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-5 text-sm">
+        <DetalleSeccion titulo="Cliente">
+          <DetalleFila label="Nombre" valor={orden.clienteNombre} />
+          <DetalleFila label="Teléfono" valor={orden.clienteTelefono ?? 'Sin registrar'} vacio={!orden.clienteTelefono} />
+          <DetalleFila label="Correo" valor={orden.clienteCorreo ?? 'Sin registrar'} vacio={!orden.clienteCorreo} />
+        </DetalleSeccion>
+
+        <DetalleSeccion titulo="Servicio">
+          <DetalleFila label="Vehículo" valor={tipoVehiculoNombre} />
+          <DetalleFila label="Combo" valor={comboNombre} />
+          {orden.serviciosAdicionales.length > 0 ? (
+            <DetalleFila label="Adicionales" valor={orden.serviciosAdicionales.map((s) => s.nombre).join(', ')} />
+          ) : null}
+          <DetalleFila
+            label={lavadorNombre2 ? 'Lavadores' : 'Lavador'}
+            valor={lavadorNombre2 ? `${lavadorNombre} + ${lavadorNombre2}` : lavadorNombre}
+          />
+          <DetalleFila label="Precio" valor={COP.format(orden.precio)} fuerte />
+        </DetalleSeccion>
+
+        {orden.observaciones ? (
+          <DetalleSeccion titulo="Observaciones">
+            <p className="rounded-xl bg-warning-50 px-3 py-2.5 text-warning-700">{orden.observaciones}</p>
+          </DetalleSeccion>
+        ) : null}
       </div>
-    </div>
+    </Modal>
   )
 }
 
-function DetalleFila({ label, valor }: { label: string; valor: string }) {
+function DetalleSeccion({ titulo, children }: { titulo: string; children: ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-3">
+    <section className="flex flex-col gap-2">
+      <h4 className="text-[11px] font-semibold tracking-wide text-neutral-500 uppercase">{titulo}</h4>
+      <div className="flex flex-col divide-y divide-neutral-100 rounded-xl border border-neutral-100">{children}</div>
+    </section>
+  )
+}
+
+function DetalleFila({ label, valor, vacio = false, fuerte = false }: { label: string; valor: string; vacio?: boolean; fuerte?: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-3 px-3 py-2.5">
       <span className="shrink-0 text-neutral-500">{label}</span>
-      <span className="min-w-0 truncate text-right font-medium text-neutral-900">{valor}</span>
+      <span
+        className={`min-w-0 truncate text-right ${
+          vacio ? 'text-neutral-400 italic' : fuerte ? 'font-bold text-neutral-900' : 'font-medium text-neutral-900'
+        }`}
+      >
+        {valor}
+      </span>
     </div>
   )
 }
 
 const SIN_ASIGNAR = '__sin_asignar__'
 
-const SIN_SEGUNDO = '__sin_segundo__'
+// Rejilla de lavadores para elegir con un toque (en vez de un desplegable): son pocos y el jefe
+// de patio lo hace desde el celular. `extra` agrega opciones especiales al inicio (sin asignar).
+function ElegirLavador({
+  value,
+  onChange,
+  lavadores,
+  extra = [],
+  deshabilitado,
+}: {
+  value: string
+  onChange: (id: string) => void
+  lavadores: { id: string; nombre: string }[]
+  extra?: { id: string; nombre: string }[]
+  deshabilitado?: string
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {[...extra, ...lavadores].map((l) => {
+        const marcado = value === l.id
+        const especial = extra.some((e) => e.id === l.id)
+        return (
+          <button
+            key={l.id}
+            type="button"
+            disabled={l.id === deshabilitado}
+            onClick={() => onChange(l.id)}
+            aria-pressed={marcado}
+            className={`flex min-h-11 items-center gap-2.5 rounded-xl border px-3 py-2 text-left text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+              marcado
+                ? 'border-primary-500 bg-primary-50 text-primary-700 ring-1 ring-primary-500'
+                : 'border-neutral-200 text-neutral-700 hover:border-neutral-300 hover:bg-neutral-50'
+            }`}
+          >
+            <span
+              className={`flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                especial ? 'bg-neutral-100 text-neutral-400' : marcado ? 'bg-primary-600 text-white' : 'bg-neutral-100 text-neutral-600'
+              }`}
+            >
+              {especial ? '—' : l.nombre.trim().charAt(0).toUpperCase()}
+            </span>
+            <span className="min-w-0 truncate">{l.nombre}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
 
 // Maneja el lavador principal y, si aplica, el segundo ("lavar entre 2") en un solo modal —
 // mismo lugar donde ya se asignaba/reasignaba el principal. Permite agregar un segundo lavador a
@@ -1679,18 +1754,22 @@ function ReasignarModal({
   // "todavía no elegí nada" — eso último sigue dejando el submit deshabilitado.
   const esAsignacion = !orden.lavadorId
   const [lavadorId, setLavadorId] = useState(orden.lavadorId ?? '')
-  const [lavadorId2, setLavadorId2] = useState(orden.lavadorId2 ?? SIN_SEGUNDO)
+  const [entreDos, setEntreDos] = useState(Boolean(orden.lavadorId2))
+  const [lavadorId2, setLavadorId2] = useState(orden.lavadorId2 ?? '')
   const [saving, setSaving] = useState(false)
+  const enVueloRef = useRef(false)
 
   async function handleConfirmar() {
+    if (enVueloRef.current) return
     const nuevoPrincipal = lavadorId === SIN_ASIGNAR ? null : lavadorId
-    const nuevoSegundo = lavadorId2 === SIN_SEGUNDO ? null : lavadorId2
+    const nuevoSegundo = entreDos && lavadorId2 && lavadorId2 !== lavadorId ? lavadorId2 : null
     const cambioPrincipal = lavadorId && nuevoPrincipal !== (orden.lavadorId ?? null)
     const cambioSegundo = nuevoSegundo !== (orden.lavadorId2 ?? null)
     if (!lavadorId || (!cambioPrincipal && !cambioSegundo)) {
       onClose()
       return
     }
+    enVueloRef.current = true
     setSaving(true)
     try {
       if (cambioPrincipal) await reasignarLavador(orden.id, nuevoPrincipal, 1)
@@ -1700,70 +1779,72 @@ function ReasignarModal({
     } catch (err) {
       toast.desdeError(err, 'No se pudo reasignar el lavador')
     } finally {
+      enVueloRef.current = false
       setSaving(false)
     }
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="w-full max-w-sm rounded-t-3xl sm:rounded-2xl custom-scroll max-h-[92vh] overflow-y-auto bg-white sm:max-h-[88vh] p-6 shadow-card-hover">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-neutral-900">
-            {esAsignacion ? 'Asignar lavador' : 'Reasignar lavador'}
-          </h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
+    <Modal
+      title={esAsignacion ? 'Asignar lavador' : 'Cambiar lavador'}
+      subtitle={`${orden.placa} · #${orden.consecutivo}`}
+      icon={Users}
+      size="sm"
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button variant="primary" loading={saving} disabled={!lavadorId || (entreDos && !lavadorId2)} onClick={handleConfirmar}>
+            {esAsignacion ? 'Asignar' : 'Guardar'}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-2">
+          <span className="text-sm font-medium text-neutral-700">¿Quién lo lava?</span>
+          <ElegirLavador
+            value={lavadorId}
+            onChange={(id) => {
+              setLavadorId(id)
+              if (id === lavadorId2) setLavadorId2('')
+            }}
+            lavadores={lavadores}
+            extra={esAsignacion ? [] : [{ id: SIN_ASIGNAR, nombre: 'Sin asignar' }]}
+          />
         </div>
-        <p className="mb-4 text-xs text-neutral-500">
-          {orden.placa} · #{orden.consecutivo}
-        </p>
-        <div className="flex flex-col gap-3">
-          <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium text-neutral-700">Lavador</span>
-            <CustomSelect
-              size="sm"
-              value={lavadorId}
-              onChange={setLavadorId}
-              placeholder="Selecciona…"
-              options={[
-                ...(esAsignacion ? [] : [{ value: SIN_ASIGNAR, label: 'Sin asignar' }]),
-                ...lavadores.map((l) => ({ value: l.id, label: l.nombre })),
-              ]}
-            />
-          </label>
-          <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium text-neutral-700">
-              Segundo lavador <span className="font-normal text-neutral-400">(lavar entre 2, opcional)</span>
-            </span>
-            <CustomSelect
-              size="sm"
-              value={lavadorId2}
-              onChange={setLavadorId2}
-              placeholder="Ninguno…"
-              options={[
-                { value: SIN_SEGUNDO, label: 'Ninguno' },
-                ...lavadores.filter((l) => l.id !== lavadorId).map((l) => ({ value: l.id, label: l.nombre })),
-              ]}
-            />
-          </label>
-        </div>
-        <button
-          type="button"
-          onClick={handleConfirmar}
-          disabled={saving || !lavadorId}
-          className="mt-5 w-full rounded-xl bg-primary-600 py-2.5 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
-        >
-          {saving ? 'Guardando…' : esAsignacion ? 'Confirmar asignación' : 'Guardar cambios'}
-        </button>
+
+        {lavadorId && lavadorId !== SIN_ASIGNAR ? (
+          <div className="flex flex-col gap-3 rounded-xl border border-neutral-100 p-3">
+            <label className="flex items-center justify-between gap-3 text-sm">
+              <span className="flex flex-col">
+                <span className="font-medium text-neutral-700">Lavar entre 2</span>
+                <span className="text-xs text-neutral-500">La comisión se reparte mitad y mitad.</span>
+              </span>
+              <input
+                type="checkbox"
+                checked={entreDos}
+                onChange={(e) => {
+                  setEntreDos(e.target.checked)
+                  if (!e.target.checked) setLavadorId2('')
+                }}
+                className="size-5 accent-primary-600"
+              />
+            </label>
+            {entreDos ? (
+              <ElegirLavador value={lavadorId2} onChange={setLavadorId2} lavadores={lavadores} deshabilitado={lavadorId} />
+            ) : null}
+          </div>
+        ) : null}
       </div>
-    </div>
+    </Modal>
   )
 }
+
+const INPUT_MODAL =
+  'w-full rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500'
 
 function EditarClienteModal({
   orden,
@@ -1783,6 +1864,7 @@ function EditarClienteModal({
   const [tipoId, setTipoId] = useState(orden.tipoVehiculoId)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const enVueloRef = useRef(false)
 
   // Solo tipos de la misma categoría que el actual — cambiar de categoría rompería el combo
   // (auto ↔ camioneta ↔ camioneta de platón, no auto → moto).
@@ -1792,8 +1874,9 @@ function EditarClienteModal({
   )
   const tipoCambio = tipoId !== orden.tipoVehiculoId
 
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault()
+  async function handleSubmit(event?: FormEvent) {
+    event?.preventDefault()
+    if (enVueloRef.current) return
     const parsed = clienteInfoInputSchema.safeParse({
       placa,
       clienteNombre,
@@ -1805,6 +1888,7 @@ function EditarClienteModal({
       return
     }
     setError(null)
+    enVueloRef.current = true
     setSaving(true)
     try {
       await editarInfoCliente(orden.id, parsed.data)
@@ -1817,92 +1901,88 @@ function EditarClienteModal({
       setError(err instanceof Error ? err.message : 'No se pudo guardar el cambio')
       toast.desdeError(err, 'No se pudo guardar el cambio')
     } finally {
+      enVueloRef.current = false
       setSaving(false)
     }
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <form
-        onSubmit={handleSubmit}
-        className="custom-scroll max-h-[92vh] sm:max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-t-3xl sm:rounded-2xl bg-white p-6 shadow-card-hover"
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-neutral-900">Editar datos del cliente</h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-        <p className="mb-4 text-xs text-neutral-500">
-          {orden.placa} · #{orden.consecutivo}
-        </p>
-        <div className="flex flex-col gap-3">
-          <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium text-neutral-700">Placa</span>
-            <input
-              value={placa}
-              onChange={(event) =>
-                setPlaca(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))
-              }
-              maxLength={6}
-              className="rounded-lg border border-neutral-300 px-3 py-2.5 font-mono text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-            />
-          </label>
+    <Modal
+      title="Editar datos"
+      subtitle={`${orden.placa} · #${orden.consecutivo}`}
+      icon={Pencil}
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button variant="primary" loading={saving} onClick={() => void handleSubmit()}>
+            Guardar cambios
+          </Button>
+        </>
+      }
+    >
+      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+        <section className="flex flex-col gap-3">
+          <h4 className="text-[11px] font-semibold tracking-wide text-neutral-500 uppercase">Vehículo</h4>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="flex flex-col gap-1.5 text-sm">
+              <span className="font-medium text-neutral-700">Placa</span>
+              <input
+                value={placa}
+                onChange={(event) => setPlaca(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))}
+                maxLength={6}
+                className={`${INPUT_MODAL} font-mono tracking-wider`}
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 text-sm">
+              <span className="font-medium text-neutral-700">Tipo de vehículo</span>
+              <CustomSelect
+                size="sm"
+                value={tipoId}
+                onChange={setTipoId}
+                placeholder="Selecciona…"
+                options={opcionesTipo.map((t) => ({ value: t.id, label: t.nombre }))}
+              />
+            </label>
+          </div>
+          {tipoCambio ? (
+            <p className="flex items-center gap-1.5 rounded-lg bg-warning-50 px-3 py-2 text-xs font-medium text-warning-700">
+              <AlertTriangle size={13} className="shrink-0" />
+              Al guardar se recalculan el precio del lavado y las comisiones.
+            </p>
+          ) : null}
+        </section>
+
+        <section className="flex flex-col gap-3">
+          <h4 className="text-[11px] font-semibold tracking-wide text-neutral-500 uppercase">Cliente</h4>
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-medium text-neutral-700">Nombre</span>
-            <input
-              value={clienteNombre}
-              onChange={(event) => setClienteNombre(event.target.value)}
-              className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-            />
+            <input value={clienteNombre} onChange={(event) => setClienteNombre(event.target.value)} className={INPUT_MODAL} />
           </label>
-          <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium text-neutral-700">Teléfono</span>
-            <input
-              value={clienteTelefono}
-              onChange={(event) => setClienteTelefono(event.target.value)}
-              className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-            />
-          </label>
-          <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium text-neutral-700">Correo</span>
-            <input
-              type="email"
-              value={clienteCorreo}
-              onChange={(event) => setClienteCorreo(event.target.value)}
-              className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-            />
-          </label>
-          <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium text-neutral-700">Tipo de vehículo</span>
-            <CustomSelect
-              size="sm"
-              value={tipoId}
-              onChange={setTipoId}
-              placeholder="Selecciona…"
-              options={opcionesTipo.map((t) => ({ value: t.id, label: t.nombre }))}
-            />
-            {tipoCambio ? (
-              <span className="text-xs font-medium text-warning-600">
-                Recalcula el precio del lavado y las comisiones al guardar.
-              </span>
-            ) : null}
-          </label>
-        </div>
-        {error ? <p className="mt-3 text-xs text-danger-600">{error}</p> : null}
-        <button
-          type="submit"
-          disabled={saving}
-          className="mt-5 w-full rounded-xl bg-primary-600 py-2.5 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
-        >
-          {saving ? 'Guardando…' : 'Guardar cambios'}
-        </button>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="flex flex-col gap-1.5 text-sm">
+              <span className="font-medium text-neutral-700">Teléfono</span>
+              <input
+                inputMode="tel"
+                value={clienteTelefono}
+                onChange={(event) => setClienteTelefono(event.target.value)}
+                className={INPUT_MODAL}
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 text-sm">
+              <span className="font-medium text-neutral-700">Correo</span>
+              <input type="email" value={clienteCorreo} onChange={(event) => setClienteCorreo(event.target.value)} className={INPUT_MODAL} />
+            </label>
+          </div>
+        </section>
+
+        {error ? <p className="rounded-lg bg-danger-50 px-3 py-2.5 text-sm text-danger-700">{error}</p> : null}
+        {/* Enter en cualquier campo guarda */}
+        <button type="submit" className="hidden" aria-hidden="true" tabIndex={-1} />
       </form>
-    </div>
+    </Modal>
   )
 }
 
@@ -1911,8 +1991,12 @@ interface DescuentoResumen {
   motivo: string
 }
 
+// Cobro de una orden: arriba el total grande y su desglose (lavado, descuento, productos), luego
+// cómo paga y, si es solo efectivo, cuánto entrega y el cambio. El botón del pie dice el monto
+// exacto que se cobra. El descuento va cerrado por defecto (regla antifraude).
 function CobroModal({
   orden,
+  comboNombre,
   finalizarPrimero,
   productosPendientes,
   productoNombre,
@@ -1920,6 +2004,7 @@ function CobroModal({
   onCobrado,
 }: {
   orden: Orden
+  comboNombre: string
   /** Orden todavía en_proceso (cliente esperando en sala) — marca el lavado terminado antes de
    * cobrar, en el mismo submit, para no obligar a pasar primero por "Listo para cobrar". */
   finalizarPrimero?: boolean
@@ -1960,16 +2045,23 @@ function CobroModal({
   const [montoRecibido, setMontoRecibido] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const enVueloRef = useRef(false)
 
   const descIncompleto = descuentoMonto > 0 && (!descMotivo.trim() || !descAutoriza.trim())
-  const cuadra =
-    !descIncompleto && (esCortesia || pagoLineasCuadra(lineasEfectivas, totalCobro))
+  const cuadra = !descIncompleto && (esCortesia || pagoLineasCuadra(lineasEfectivas, totalCobro))
   const soloEfectivo = lineasEfectivas.length === 1 && lineasEfectivas[0].metodo === 'efectivo'
   const cambio = soloEfectivo && montoRecibido ? Number(montoRecibido) - totalCobro : undefined
 
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault()
-    if (descuentoMonto > 0 && (!descMotivo.trim() || !descAutoriza.trim())) {
+  function quitarDescuento() {
+    setDescAbierto(false)
+    setDescValor('')
+    setDescMotivo('')
+    setDescAutoriza('')
+  }
+
+  async function handleSubmit() {
+    if (enVueloRef.current) return
+    if (descIncompleto) {
       setError('El descuento exige un motivo y quién lo autoriza')
       return
     }
@@ -1978,6 +2070,7 @@ function CobroModal({
       return
     }
     setError(null)
+    enVueloRef.current = true
     setSaving(true)
     try {
       if (finalizarPrimero) {
@@ -1998,167 +2091,182 @@ function CobroModal({
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo registrar el cobro')
       toast.desdeError(err, 'No se pudo registrar el cobro')
-    } finally {
+      enVueloRef.current = false
       setSaving(false)
     }
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="custom-scroll max-h-[92vh] sm:max-h-[92vh] w-full max-w-sm overflow-y-auto rounded-t-2xl bg-white p-5 shadow-card-hover sm:max-w-md sm:rounded-t-3xl sm:rounded-2xl sm:p-6 lg:max-w-lg">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-semibold text-neutral-900">Cobrar y entregar</h3>
-            <p className="text-xs text-neutral-500">
-              {orden.placa} · #{orden.consecutivo}
-            </p>
-            {finalizarPrimero ? (
-              <p className="mt-1 text-xs font-medium text-primary-700">
-                También marca el lavado como terminado — cliente esperando en sala.
-              </p>
-            ) : null}
-          </div>
+    <Modal
+      title="Cobrar y entregar"
+      subtitle={`${orden.placa} · #${orden.consecutivo} · ${orden.clienteNombre}`}
+      icon={Banknote}
+      tone="success"
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
           <button
             type="button"
-            onClick={onClose}
-            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
+            onClick={() => void handleSubmit()}
+            disabled={saving || !cuadra}
+            className="flex h-11 items-center justify-center gap-2 rounded-xl bg-success-600 px-5 text-sm font-semibold text-white shadow-card transition-colors hover:bg-success-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <X size={18} />
+            <CheckCircle2 size={16} />
+            {saving ? 'Registrando…' : esCortesia ? 'Entregar (cortesía)' : `Cobrar ${COP.format(totalCobro)}`}
           </button>
-        </div>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-5">
+        {finalizarPrimero ? (
+          <p className="flex items-center gap-2 rounded-xl bg-primary-50 px-3 py-2.5 text-xs font-medium text-primary-700">
+            <SprayCan size={14} className="shrink-0" />
+            También marca el lavado como terminado — el cliente espera en sala.
+          </p>
+        ) : null}
 
-        <div className="mb-4 flex flex-col gap-1 rounded-lg bg-primary-50 px-3 py-2.5 text-sm">
-          <div className="flex items-center justify-between text-primary-900">
-            <span>Lavado</span>
-            <span>{COP.format(orden.precio)}</span>
-          </div>
-          {descuentoMonto > 0 ? (
-            <div className="flex items-center justify-between text-xs font-medium text-danger-700">
-              <span>Descuento{descModo === 'pct' && descValor ? ` (${Math.min(Number(descValor), 100)}%)` : ''}</span>
-              <span>−{COP.format(descuentoMonto)}</span>
+        {/* Total y desglose */}
+        <section className="flex flex-col gap-3">
+          <div className="flex items-end justify-between gap-3">
+            <div className="flex flex-col">
+              <span className="text-[11px] font-semibold tracking-wide text-neutral-500 uppercase">Total a cobrar</span>
+              <span className="text-3xl font-bold tracking-tight text-neutral-900">{COP.format(totalCobro)}</span>
             </div>
-          ) : null}
-          {productosPendientes.map((v) => (
-            <div key={v.id} className="flex items-center justify-between text-xs text-primary-800">
-              <span className="min-w-0 truncate">
-                {productoNombre(v.productoId)} ×{v.cantidad}
+            {!descAbierto ? (
+              <button
+                type="button"
+                onClick={() => setDescAbierto(true)}
+                className="flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-medium text-neutral-500 transition-colors hover:bg-warning-50 hover:text-warning-700"
+              >
+                <Percent size={13} /> Descuento
+              </button>
+            ) : null}
+          </div>
+          <ul className="flex flex-col divide-y divide-neutral-100 rounded-xl border border-neutral-100 text-sm">
+            <li className="flex items-center justify-between gap-3 px-3 py-2.5">
+              <span className="flex min-w-0 items-center gap-2 text-neutral-700">
+                <Droplets size={14} className="shrink-0 text-primary-500" />
+                <span className="truncate">Lavado · {comboNombre}</span>
               </span>
-              <span className="shrink-0">{COP.format(v.total)}</span>
-            </div>
-          ))}
-          <div className="mt-1 flex items-center justify-between border-t border-primary-200 pt-1.5 font-semibold text-primary-900">
-            <span>Total a cobrar</span>
-            <span>{COP.format(totalCobro)}</span>
-          </div>
-        </div>
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          {/* Descuento — cerrado por defecto; el negocio lo absorbe, no toca comisiones */}
-          {descAbierto ? (
-            <div className="flex flex-col gap-3 rounded-lg border border-warning-600/25 bg-warning-50/50 p-3">
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-xs font-semibold text-warning-700">
-                  <Percent size={13} /> Descuento (lo absorbe el negocio)
+              <span className="shrink-0 font-medium text-neutral-900">{COP.format(orden.precio)}</span>
+            </li>
+            {descuentoMonto > 0 ? (
+              <li className="flex items-center justify-between gap-3 px-3 py-2.5 text-warning-700">
+                <span className="flex items-center gap-2">
+                  <Percent size={14} className="shrink-0" />
+                  Descuento{descModo === 'pct' && descValor ? ` ${Math.min(Number(descValor), 100)}%` : ''}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDescAbierto(false)
-                    setDescValor('')
-                    setDescMotivo('')
-                    setDescAutoriza('')
-                  }}
-                  className="text-xs font-medium text-neutral-500 hover:text-danger-600"
-                >
-                  Quitar
-                </button>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
+                <span className="shrink-0 font-medium">−{COP.format(descuentoMonto)}</span>
+              </li>
+            ) : null}
+            {productosPendientes.map((v) => (
+              <li key={v.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                <span className="flex min-w-0 items-center gap-2 text-neutral-700">
+                  <CupSoda size={14} className="shrink-0 text-neutral-400" />
+                  <span className="truncate">{productoNombre(v.productoId)}</span>
+                  <span className="shrink-0 rounded-md bg-neutral-100 px-1.5 py-0.5 text-[11px] font-semibold text-neutral-500">×{v.cantidad}</span>
+                </span>
+                <span className="shrink-0 font-medium text-neutral-900">{COP.format(v.total)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        {/* Descuento — cerrado por defecto; el negocio lo absorbe, no toca comisiones */}
+        {descAbierto ? (
+          <section className="flex flex-col gap-3 rounded-xl border border-warning-600/25 bg-warning-50/50 p-3">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-warning-700">
+                <Percent size={13} /> Descuento — lo absorbe el negocio
+              </span>
+              <button type="button" onClick={quitarDescuento} className="text-xs font-medium text-neutral-500 hover:text-danger-600">
+                Quitar
+              </button>
+            </div>
+            <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-2">
+              <div className="grid grid-cols-2 gap-1 rounded-lg bg-white p-1">
                 {(['monto', 'pct'] as const).map((m) => (
                   <button
                     key={m}
                     type="button"
                     onClick={() => setDescModo(m)}
-                    className={`rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
-                      descModo === m
-                        ? 'border-primary-600 bg-primary-50 text-primary-700'
-                        : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
+                    aria-pressed={descModo === m}
+                    className={`rounded-md px-3 py-2 text-xs font-semibold transition-colors ${
+                      descModo === m ? 'bg-warning-600 text-white' : 'text-neutral-500 hover:text-neutral-700'
                     }`}
                   >
-                    {m === 'monto' ? 'Monto fijo' : 'Porcentaje'}
+                    {m === 'monto' ? '$' : '%'}
                   </button>
                 ))}
               </div>
               {descModo === 'monto' ? (
-                <CurrencyInput value={descValor} onChange={setDescValor} placeholder="0" />
+                <CurrencyInput size="sm" value={descValor} onChange={setDescValor} placeholder="0" />
               ) : (
-                <div className="flex items-center gap-2 rounded-lg border border-neutral-300 px-3 py-3 focus-within:border-primary-500 focus-within:ring-1 focus-within:ring-primary-500">
+                <div className="flex items-center gap-2 rounded-lg border border-neutral-300 bg-white px-3 py-2.5 focus-within:border-primary-500 focus-within:ring-1 focus-within:ring-primary-500">
                   <input
                     inputMode="numeric"
                     value={descValor}
                     onChange={(e) => setDescValor(e.target.value.replace(/\D/g, '').slice(0, 3))}
                     placeholder="0"
-                    className="w-full min-w-0 bg-transparent text-base outline-none"
+                    className="w-full min-w-0 bg-transparent text-sm outline-none"
                   />
                   <span className="shrink-0 text-neutral-400">%</span>
                 </div>
               )}
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
               <input
                 value={descMotivo}
                 onChange={(e) => setDescMotivo(e.target.value)}
-                placeholder="Motivo (amigo, regateo, cortesía…)"
-                className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                placeholder="Motivo (amigo, cortesía…)"
+                className={`${INPUT_MODAL} bg-white`}
               />
               <input
                 value={descAutoriza}
                 onChange={(e) => setDescAutoriza(e.target.value)}
                 placeholder="Quién lo autoriza"
-                className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                className={`${INPUT_MODAL} bg-white`}
               />
             </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setDescAbierto(true)}
-              className="flex items-center gap-1.5 self-start rounded-lg border border-dashed border-neutral-300 px-3 py-2 text-xs font-medium text-neutral-600 transition-colors hover:border-warning-600/70 hover:text-warning-700"
-            >
-              <Percent size={13} /> Aplicar descuento
-            </button>
-          )}
+          </section>
+        ) : null}
 
-          {esCortesia ? (
-            <p className="rounded-lg bg-success-50 px-3 py-3 text-center text-sm font-medium text-success-700">
-              Cortesía total — no se cobra nada. La comisión del lavador se paga igual (la cubre el
-              negocio).
-            </p>
-          ) : (
-            <PagoLineas lineas={lineasEfectivas} onChange={setLineas} total={totalCobro} />
-          )}
+        {/* Cómo paga */}
+        {esCortesia ? (
+          <p className="rounded-xl bg-success-50 px-3 py-3 text-center text-sm font-medium text-success-700">
+            Cortesía total — no se cobra nada. La comisión del lavador se paga igual (la cubre el negocio).
+          </p>
+        ) : (
+          <section className="flex flex-col gap-2">
+            <h4 className="text-[11px] font-semibold tracking-wide text-neutral-500 uppercase">Cómo paga</h4>
+            <PagoLineas lineas={lineasEfectivas} onChange={setLineas} total={totalCobro} size="sm" />
+          </section>
+        )}
 
-          {!esCortesia && soloEfectivo ? (
+        {!esCortesia && soloEfectivo ? (
+          <section className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2">
             <label className="flex flex-col gap-1.5 text-sm">
-              <span className="font-medium text-neutral-700">Con cuánto paga (opcional)</span>
-              <CurrencyInput value={montoRecibido} onChange={setMontoRecibido} placeholder="0" />
-              {cambio !== undefined ? (
-                <span className={`text-xs font-medium ${cambio < 0 ? 'text-danger-600' : 'text-neutral-500'}`}>
-                  {cambio < 0 ? `Falta ${COP.format(Math.abs(cambio))}` : `Devolver ${COP.format(cambio)}`}
-                </span>
-              ) : null}
+              <span className="font-medium text-neutral-700">
+                Con cuánto paga <span className="font-normal text-neutral-400">(opcional)</span>
+              </span>
+              <CurrencyInput size="sm" value={montoRecibido} onChange={setMontoRecibido} placeholder="0" />
             </label>
-          ) : null}
+            {cambio !== undefined ? (
+              <div
+                className={`flex flex-col rounded-xl px-3 py-2 ${cambio < 0 ? 'bg-danger-50 text-danger-700' : 'bg-success-50 text-success-700'}`}
+              >
+                <span className="text-[11px] font-semibold tracking-wide uppercase">{cambio < 0 ? 'Falta' : 'Devolver'}</span>
+                <span className="text-xl font-bold">{COP.format(Math.abs(cambio))}</span>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
 
-          {error ? <p className="text-xs text-danger-600">{error}</p> : null}
-
-          <button
-            type="submit"
-            disabled={saving || !cuadra}
-            className="flex items-center justify-center gap-2 rounded-xl bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
-          >
-            <CheckCircle2 size={16} />
-            {saving ? 'Registrando…' : esCortesia ? 'Entregar (cortesía)' : 'Confirmar cobro y entrega'}
-          </button>
-        </form>
+        {error ? <p className="rounded-lg bg-danger-50 px-3 py-2.5 text-sm text-danger-700">{error}</p> : null}
       </div>
-    </div>
+    </Modal>
   )
 }

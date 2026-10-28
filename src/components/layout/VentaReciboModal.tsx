@@ -1,9 +1,9 @@
-import { X } from 'lucide-react'
+import { ShoppingBag } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import type { MetodoPago, MetodoPagoBase } from '../../schemas/orden'
 import { METODO_PAGO_LABEL } from '../../lib/metodoPago'
 import { EncabezadoTiquete, PieTiquete } from './EncabezadoTiquete'
-import { useAjustesNegocio } from '../../lib/useAjustesNegocio'
+import { ComprobanteDesglose, ComprobanteModal, type DatoComprobante } from './ComprobanteModal'
 
 export interface VentaReciboItem {
   nombre: string
@@ -47,107 +47,56 @@ function metodoLabel(metodo: MetodoPago): string {
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 const FECHA_HORA = new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium', timeStyle: 'short' })
 
-// Comprobante de venta de producto (agua, cerveza, etc.) — mismo patrón pantalla + portal a
-// document.body que ReciboModal/TiquetePrint (impresora térmica de 58mm), sin auto-imprimir:
-// no hay impresora real configurada todavía, el admin/jefe de zona imprime con el botón.
+// Comprobante de venta de producto (agua, cerveza, etc.) — vista con ComprobanteModal; lo que se
+// imprime es VentaTicketPrint (térmica de 58mm), sin auto-imprimir: el jefe de patio imprime con
+// el botón.
 export function VentaReciboModal({ venta, onClose }: { venta: VentaReciboData; onClose: () => void }) {
-  const negocio = useAjustesNegocio()
+  const partido = Boolean(venta.pagos && venta.pagos.length > 1)
+  const conItems = Boolean(venta.items && venta.items.length > 0)
+
+  const datos: DatoComprobante[] = []
+  if (venta.titular) datos.push({ label: 'Cuenta', valor: venta.titular })
+  if (!conItems) {
+    datos.push(
+      { label: 'Producto', valor: venta.productoNombre },
+      { label: 'Cantidad', valor: `${venta.cantidad} × ${COP.format(venta.precioUnitario)}` },
+    )
+  }
+  if (!partido) {
+    datos.push({ label: 'Método de pago', valor: metodoLabel(venta.metodoPago) })
+    if (venta.referenciaPago) datos.push({ label: 'Referencia', valor: venta.referenciaPago })
+  }
+  datos.push({ label: 'Vendido por', valor: venta.vendidoPor }, { label: 'Fecha', valor: FECHA_HORA.format(new Date(venta.fecha)) })
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-neutral-900/50 p-0 backdrop-blur-sm sm:items-center sm:p-6">
-      <div className="custom-scroll flex max-h-full w-[calc(100vw-2rem)] max-w-sm flex-col overflow-y-auto rounded-t-2xl bg-white shadow-card-hover sm:w-full sm:rounded-2xl">
-        <div className="h-2 bg-success-600" />
-        <div className="flex items-center justify-between px-6 pt-6">
-          <p className="text-sm font-semibold text-neutral-900">{negocio.nombre}</p>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-        <p className="px-6 pb-4 text-xs text-neutral-400">Comprobante de venta</p>
-
-        <div className="flex flex-col items-center gap-0.5 border-y border-dashed border-neutral-200 bg-neutral-50 px-6 py-4">
-          <span className="text-xs font-medium uppercase tracking-wide text-neutral-400">Número de referencia</span>
-          <span className="font-mono text-lg font-semibold text-primary-700">{refTexto(venta)}</span>
-        </div>
-
-        <div className="flex flex-col gap-2.5 px-6 py-5 text-sm">
-          {venta.titular ? <VentaReciboRow label="Cuenta" value={venta.titular} /> : null}
-          {venta.items && venta.items.length > 0 ? (
-            <div className="flex flex-col gap-1.5 rounded-lg bg-neutral-50 px-3 py-2.5">
-              {venta.items.map((it, i) => (
-                <VentaReciboRow key={i} label={`${it.nombre} ×${it.cantidad}`} value={COP.format(it.total)} />
-              ))}
-            </div>
-          ) : (
-            <>
-              <VentaReciboRow label="Producto" value={venta.productoNombre} />
-              <VentaReciboRow label="Cantidad" value={String(venta.cantidad)} />
-              <VentaReciboRow label="Precio unitario" value={COP.format(venta.precioUnitario)} />
-            </>
-          )}
-          {venta.pagos && venta.pagos.length > 1 ? (
-            <div className="flex flex-col gap-1.5 rounded-lg bg-neutral-50 px-3 py-2.5">
-              <span className="text-xs font-medium uppercase tracking-wide text-neutral-400">Pago partido</span>
-              {venta.pagos.map((p, i) => (
-                <VentaReciboRow
-                  key={i}
-                  label={p.referencia ? `${METODO_PAGO_LABEL[p.metodo]} · ${p.referencia}` : METODO_PAGO_LABEL[p.metodo]}
-                  value={COP.format(p.monto)}
-                />
-              ))}
-            </div>
-          ) : (
-            <>
-              <VentaReciboRow label="Método de pago" value={metodoLabel(venta.metodoPago)} />
-              {venta.referenciaPago ? <VentaReciboRow label="Referencia" value={venta.referenciaPago} /> : null}
-            </>
-          )}
-          <VentaReciboRow label="Vendido por" value={venta.vendidoPor} />
-          <VentaReciboRow label="Fecha" value={FECHA_HORA.format(new Date(venta.fecha))} />
-
-          <div className="mt-1 flex items-center justify-between rounded-lg bg-success-50 px-3 py-3">
-            <span className="text-sm font-medium text-success-700">Total pagado</span>
-            <span className="text-xl font-bold text-success-700">{COP.format(venta.total)}</span>
-          </div>
-        </div>
-
-        <div className="relative border-t border-dashed border-neutral-200 px-6 pt-4 pb-6">
-          <div className="pointer-events-none absolute inset-x-0 -top-1.5 flex justify-between px-4">
-            {Array.from({ length: 12 }).map((_, i) => (
-              <span key={i} className="size-3 rounded-full bg-neutral-50" />
-            ))}
-          </div>
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="w-full rounded-lg border border-neutral-200 py-3 text-sm font-semibold text-neutral-700 transition-colors hover:bg-neutral-50"
-          >
-            Imprimir tiquete
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="mt-2.5 w-full rounded-lg bg-success-600 py-3.5 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-success-700"
-          >
-            Registrar otra venta
-          </button>
-          <p className="mt-2.5 text-center text-[11px] text-neutral-400">Impresión pensada para POS térmica de 58mm.</p>
-        </div>
-      </div>
-      <VentaTicketPrint venta={venta} />
-    </div>
-  )
-}
-
-function VentaReciboRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <span className="min-w-0 break-words text-neutral-500">{label}</span>
-      <span className="min-w-0 truncate text-right font-medium text-neutral-900">{value}</span>
-    </div>
+    <ComprobanteModal
+      titulo="Comprobante de venta"
+      referencia={refTexto(venta)}
+      icon={ShoppingBag}
+      tono="success"
+      total={{ label: 'Total pagado', valor: COP.format(venta.total) }}
+      datos={datos}
+      imprimirLabel="Imprimir tiquete"
+      cerrarLabel="Listo"
+      onClose={onClose}
+      impresion={<VentaTicketPrint venta={venta} />}
+    >
+      {conItems ? (
+        <ComprobanteDesglose
+          titulo="Productos"
+          lineas={(venta.items ?? []).map((it) => ({ label: `${it.nombre} ×${it.cantidad}`, valor: COP.format(it.total) }))}
+        />
+      ) : null}
+      {partido ? (
+        <ComprobanteDesglose
+          titulo="Pago partido"
+          lineas={(venta.pagos ?? []).map((p) => ({
+            label: p.referencia ? `${METODO_PAGO_LABEL[p.metodo]} · ${p.referencia}` : METODO_PAGO_LABEL[p.metodo],
+            valor: COP.format(p.monto),
+          }))}
+        />
+      ) : null}
+    </ComprobanteModal>
   )
 }
 

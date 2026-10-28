@@ -3,7 +3,8 @@ import { limitesLocalesISO } from '../lib/periodo'
 import { liquidacionJefeZonaSchema, type LiquidacionJefeZona } from '../schemas/liquidacionJefeZona'
 import { fetchOrdenesEnRango } from './ordenes'
 import { fetchPerfiles } from './perfiles'
-import { fetchDeudaPendiente, fetchDeudaPendientePorPersona } from './deudasPersonal'
+import { fetchSaldoDeuda, fetchSaldosDeuda, registrarDescuentoLiquidacion, validarDescuentoDeuda } from './deudasPersonal'
+import { SALDO_DEUDA_CERO, type DescuentoDeuda, type SaldoDeuda } from '../schemas/deudaPersonal'
 
 const LIQUIDACION_SELECT =
   'id, responsable, personaId:persona_id, periodoInicio:periodo_inicio, periodoFin:periodo_fin, monto, comisionBruta:comision_bruta, deudaDescontada:deuda_descontada, pagada, pagadaEn:pagada_en, anulada, motivoAnulacion:motivo_anulacion, anuladaPor:anulada_por, anuladaEn:anulada_en, creadoEn:creado_en'
@@ -23,6 +24,7 @@ export interface ComisionPendienteJefeZona {
   montoPendiente: number
   cantidadOrdenes: number
   deudaPendiente: number // 0070
+  deuda: SaldoDeuda // 0089: por bolsa
 }
 
 // Agrupa por `jefe_zona_persona_id`, NO por el texto `jefe_zona_responsable`. Ese texto se tecleaba
@@ -32,14 +34,14 @@ export interface ComisionPendienteJefeZona {
 // quedan fuera (no hay a quién pagarles); las migraciones 0043 y 0056 abortan si existiera alguna
 // así, de modo que en la práctica no las hay.
 export async function fetchComisionesPendientesJefeZona(): Promise<ComisionPendienteJefeZona[]> {
-  const [{ data, error }, personal, deudaPorPersona] = await Promise.all([
+  const [{ data, error }, personal, { porPersona: deudaPorPersona }] = await Promise.all([
     db
       .from('ordenes')
       .select('jefe_zona_persona_id, comision_jefe_zona')
       .is('liquidacion_jefe_zona_id', null)
       .neq('estado', 'anulada'),
     fetchPerfiles(),
-    fetchDeudaPendientePorPersona(),
+    fetchSaldosDeuda(),
   ])
   if (error) throw new Error(error.message)
 
@@ -59,7 +61,8 @@ export async function fetchComisionesPendientesJefeZona(): Promise<ComisionPendi
       responsable: nombrePorId.get(personaId) ?? 'Persona no encontrada',
       montoPendiente: v.monto,
       cantidadOrdenes: v.cantidad,
-      deudaPendiente: deudaPorPersona.get(personaId) ?? 0,
+      deudaPendiente: (deudaPorPersona.get(personaId) ?? SALDO_DEUDA_CERO).total,
+      deuda: deudaPorPersona.get(personaId) ?? SALDO_DEUDA_CERO,
     }))
     .sort((a, b) => b.montoPendiente - a.montoPendiente)
 }
@@ -170,6 +173,7 @@ export interface MontoPeriodoJefeZona {
   cantidadOrdenes: number
   // Deuda pendiente de la persona (0070): préstamos, consumo de nevera, faltantes cobrados.
   deudaPendiente: number
+  deuda: SaldoDeuda
 }
 
 export async function fetchMontoPeriodoJefeZona(
@@ -177,14 +181,15 @@ export async function fetchMontoPeriodoJefeZona(
   periodoInicio: string,
   periodoFin: string,
 ): Promise<MontoPeriodoJefeZona> {
-  const [ordenes, deudaPendiente] = await Promise.all([
+  const [ordenes, deuda] = await Promise.all([
     ordenesElegiblesJefeZona(personaId, periodoInicio, periodoFin),
-    fetchDeudaPendiente({ tipo: 'persona', id: personaId }),
+    fetchSaldoDeuda({ tipo: 'persona', id: personaId }),
   ])
   return {
     monto: ordenes.reduce((suma, orden) => suma + orden.comisionJefeZona, 0),
     cantidadOrdenes: ordenes.length,
-    deudaPendiente,
+    deudaPendiente: deuda.total,
+    deuda,
   }
 }
 
@@ -197,18 +202,15 @@ export async function generarLiquidacionJefeZona(
   responsable: string,
   periodoInicio: string,
   periodoFin: string,
-  deudaADescontar: number,
+  deudaADescontar: DescuentoDeuda,
 ): Promise<LiquidacionJefeZona> {
-  const [ordenes, deudaPendiente] = await Promise.all([
+  const [ordenes, saldo] = await Promise.all([
     ordenesElegiblesJefeZona(personaId, periodoInicio, periodoFin),
-    fetchDeudaPendiente({ tipo: 'persona', id: personaId }),
+    fetchSaldoDeuda({ tipo: 'persona', id: personaId }),
   ])
   const comisionBruta = ordenes.reduce((suma, orden) => suma + orden.comisionJefeZona, 0)
-  const maximo = Math.min(Math.max(deudaPendiente, 0), comisionBruta)
-  const deudaDescontada = Math.round(deudaADescontar)
-  if (deudaDescontada < 0 || deudaDescontada > maximo) {
-    throw new Error(`El descuento debe estar entre $0 y $${maximo} (deuda pendiente o comisión del corte, lo menor)`)
-  }
+  const descuento = validarDescuentoDeuda(deudaADescontar, saldo, comisionBruta)
+  const deudaDescontada = descuento.prestamo + descuento.tienda
   const monto = comisionBruta - deudaDescontada
 
   const { data: creada, error: errorInsert } = await db
@@ -230,20 +232,19 @@ export async function generarLiquidacionJefeZona(
 
   const liquidacion = liquidacionJefeZonaSchema.parse(creada)
 
-  if (deudaDescontada > 0) {
-    const { error: errorDeuda } = await db.from('deudas_personal').insert({
-      persona_id: personaId,
-      tipo: 'liquidacion',
-      monto: -deudaDescontada,
-      liquidacion_jefe_zona_id: liquidacion.id,
-      motivo: `Descontado al liquidar (periodo ${periodoInicio} → ${periodoFin})`,
-      registrado_por: 'Generación de liquidación',
-    })
-    if (errorDeuda) {
-      throw new Error(
-        `La liquidación ${liquidacion.id} se generó por $${monto} (descuento de deuda $${deudaDescontada}) pero no se pudo registrar el descuento: ${errorDeuda.message}. Revisar manualmente.`,
-      )
-    }
+  try {
+    await registrarDescuentoLiquidacion(
+      { tipo: 'persona', id: personaId },
+      descuento,
+      { liquidacion_jefe_zona_id: liquidacion.id },
+      periodoInicio,
+      periodoFin,
+    )
+  } catch (errorDeuda) {
+    throw new Error(
+      `La liquidación ${liquidacion.id} se generó por $${monto} (descuento de deuda $${deudaDescontada}) pero no se pudo registrar el descuento: ${errorDeuda instanceof Error ? errorDeuda.message : String(errorDeuda)}. Revisar manualmente.`,
+      { cause: errorDeuda },
+    )
   }
 
   if (ordenes.length > 0) {

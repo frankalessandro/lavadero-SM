@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { X } from 'lucide-react'
+import { ClipboardList } from 'lucide-react'
 import { fetchPagosDeOrden } from '../../data/pagos'
 import { fetchVentasDeOrden } from '../../data/ventas'
 import type { Orden } from '../../schemas/orden'
 import type { Pago } from '../../schemas/pago'
 import type { Venta } from '../../schemas/venta'
 import { OrdenDetalleCard } from './OrdenDetalleCard'
+import { Modal } from './Modal'
 
 interface Props {
   orden: Orden
@@ -35,26 +36,26 @@ export function OrdenExpedienteModal({ orden, comboNombre, lavadorNombre, produc
   }, [orden.id])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-neutral-900/40 p-4" onClick={onClose}>
-      <div className="my-6 w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-2 flex justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 items-center justify-center rounded-lg bg-white text-neutral-400 shadow-card transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-        <OrdenDetalleCard
-          orden={orden}
-          pagos={pagos}
-          productos={productos}
-          comboNombre={comboNombre}
-          lavadorNombre={lavadorNombre}
-          productoNombre={productoNombre}
-        />
-      </div>
-    </div>
+    <Modal
+      title={
+        <span className="flex items-baseline gap-2">
+          <span className="font-mono">{orden.placa}</span>
+          <span className="text-xs font-normal text-neutral-400">#{orden.consecutivo}</span>
+        </span>
+      }
+      subtitle={orden.clienteNombre}
+      icon={ClipboardList}
+      size="lg"
+      onClose={onClose}
+    >
+      <OrdenDetalleCard
+        orden={orden}
+        pagos={pagos}
+        productos={productos}
+        comboNombre={comboNombre}
+        lavadorNombre={lavadorNombre}
+        productoNombre={productoNombre}
+      />
+    </Modal>
   )
 }

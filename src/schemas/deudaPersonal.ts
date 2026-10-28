@@ -8,6 +8,9 @@ import { z } from 'zod'
 // Ledger con signo: la deuda pendiente es la suma de las filas 'activo'.
 export const tipoDeudaSchema = z.enum(['prestamo', 'consumo', 'faltante', 'abono', 'liquidacion'])
 export const metodoAbonoSchema = z.enum(['efectivo', 'fuera'])
+// Dos bolsas (0089): préstamos de caja, y tienda (consumo de nevera + faltantes cobrados). Cada
+// abono y cada descuento de liquidación dice a cuál va; ninguna queda negativa.
+export const bolsaDeudaSchema = z.enum(['prestamo', 'tienda'])
 
 const nullableTrimmedString = z
   .string()
@@ -20,6 +23,7 @@ export const deudaPersonalSchema = z.object({
   lavadorId: nullableTrimmedString,
   personaId: nullableTrimmedString,
   tipo: tipoDeudaSchema,
+  bolsa: bolsaDeudaSchema,
   monto: z.number().int(),
   turnoId: nullableTrimmedString,
   cuentaId: nullableTrimmedString,
@@ -53,10 +57,11 @@ export const abonoInputSchema = z
     deudor: deudorSchema,
     monto: z.number().int().positive('El abono debe ser mayor a cero'),
     metodo: metodoAbonoSchema,
+    bolsa: bolsaDeudaSchema,
     motivo: z.string().trim().optional(),
   })
   .refine((d) => d.metodo === 'efectivo' || (d.motivo ?? '').length >= 5, {
-    message: 'Indica cómo se pagó (ej. transferencia Nequi, descuento de nómina)',
+    message: 'Indica cómo se pagó (ej. transferencia Nequi, directo a gerencia)',
     path: ['motivo'],
   })
 
@@ -68,7 +73,30 @@ export const TIPO_DEUDA_LABEL: Record<TipoDeuda, string> = {
   liquidacion: 'Descuento en liquidación',
 }
 
+export const BOLSA_DEUDA_LABEL: Record<BolsaDeuda, string> = {
+  prestamo: 'Préstamos',
+  tienda: 'Tienda',
+}
+
+// Saldo de una persona por bolsa. `tienda` ya incluye `enCuenta`: lo cargado en sus cuentas
+// abiertas que todavía no pasó al ledger (se consolida al abonar o descontar tienda).
+export interface SaldoDeuda {
+  prestamo: number
+  tienda: number
+  enCuenta: number
+  total: number
+}
+
+export const SALDO_DEUDA_CERO: SaldoDeuda = { prestamo: 0, tienda: 0, enCuenta: 0, total: 0 }
+
+// Cuánto se descuenta de cada bolsa al generar una liquidación.
+export interface DescuentoDeuda {
+  prestamo: number
+  tienda: number
+}
+
 export type TipoDeuda = z.infer<typeof tipoDeudaSchema>
+export type BolsaDeuda = z.infer<typeof bolsaDeudaSchema>
 export type MetodoAbono = z.infer<typeof metodoAbonoSchema>
 export type DeudaPersonal = z.infer<typeof deudaPersonalSchema>
 export type Deudor = z.infer<typeof deudorSchema>

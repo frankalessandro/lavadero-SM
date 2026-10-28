@@ -1,8 +1,10 @@
 import { useRef, useState, type FormEvent } from 'react'
-import { X, Plus, Trash2, Wallet, Landmark } from 'lucide-react'
+import { Plus, Trash2, Wallet, Landmark, Ban, ShoppingBag } from 'lucide-react'
 import type { Producto } from '../../schemas/producto'
 import { anularCompraInputSchema, type Compra, type CompraInput } from '../../schemas/compra'
 import { CustomSelect } from './CustomSelect'
+import { Modal } from './Modal'
+import { Button } from './Button'
 import { CurrencyInput } from './CurrencyInput'
 import { toast } from '../../lib/toast'
 
@@ -119,27 +121,25 @@ export function CompraForm({
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div
-        className={`custom-scroll flex max-h-[92vh] sm:max-h-[90vh] w-full flex-col overflow-y-auto rounded-t-2xl bg-white p-5 shadow-card-hover sm:rounded-t-3xl sm:rounded-2xl ${
-          size === 'sm' ? 'max-w-2xl sm:p-7' : 'max-w-xl sm:p-7'
-        }`}
-      >
-        <div className="mb-5 flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-semibold text-neutral-900">Registrar compra</h3>
-            <p className="text-xs text-neutral-500">Proveedor, factura y los productos que llegaron.</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+    <Modal
+      title="Registrar compra"
+      subtitle="Proveedor, factura y los productos que llegaron."
+      icon={ShoppingBag}
+      size="lg"
+      onClose={onClose}
+      onSubmit={handleSubmit}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button type="submit" variant="primary" loading={saving}>
+            Registrar compra
+          </Button>
+        </>
+      }
+    >
+        <div className="flex flex-col gap-6">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <label className={labelCls}>
               <span className={spanCls}>Proveedor</span>
@@ -304,25 +304,8 @@ export function CompraForm({
 
           {error ? <p className="text-xs text-danger-600">{error}</p> : null}
 
-          <div className="flex justify-end gap-2 border-t border-neutral-100 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg px-4 py-2.5 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-100"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
-            >
-              {saving ? 'Guardando…' : 'Registrar compra'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </div>
+    </Modal>
   )
 }
 
@@ -368,27 +351,25 @@ export function AnularCompraModal({
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="w-full max-w-md rounded-t-3xl sm:rounded-2xl custom-scroll max-h-[92vh] overflow-y-auto bg-white sm:max-h-[88vh] p-6 shadow-card-hover sm:p-7">
-        <div className="mb-5 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-neutral-900">
-            Anular compra #{compra.consecutivo} · {compra.proveedor}
-          </h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <p className="mb-5 text-xs text-neutral-500">
-          Esta acción no se puede deshacer. El stock se repone automáticamente (sin costo, para no mover el
-          promedio ponderado) y la compra queda visible en reportes con el motivo y quién la anuló.
-        </p>
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+    <Modal
+      title={`Anular compra #${compra.consecutivo} · ${compra.proveedor}`}
+      subtitle="No se puede deshacer. El stock se repone sin costo (no mueve el promedio) y la compra queda en reportes con el motivo."
+      icon={Ban}
+      tone="danger"
+      onClose={onClose}
+      onSubmit={handleSubmit}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button type="submit" variant="danger" loading={saving}>
+            Anular compra
+          </Button>
+        </>
+      }
+    >
+        <div className="flex flex-col gap-5">
           <label className="flex flex-col gap-1.5 text-left text-sm">
             <span className="font-medium text-neutral-700">Motivo de anulación</span>
             <textarea
@@ -413,24 +394,7 @@ export function AnularCompraModal({
 
           {error ? <p className="text-xs text-danger-600">{error}</p> : null}
 
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg px-4 py-2.5 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-100"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-lg bg-danger-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-danger-700 disabled:opacity-60"
-            >
-              {saving ? 'Anulando…' : 'Anular compra'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </div>
+    </Modal>
   )
 }

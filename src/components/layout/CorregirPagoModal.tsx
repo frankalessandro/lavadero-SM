@@ -1,6 +1,8 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import { X } from 'lucide-react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { Shuffle } from 'lucide-react'
 import { PagoLineas } from './PagoLineas'
+import { Modal } from './Modal'
+import { Button } from './Button'
 import {
   borradorAPagos,
   nuevaLineaBorrador,
@@ -37,6 +39,7 @@ export function CorregirPagoModal({
   const [error, setError] = useState<string | null>(null)
   const [cargando, setCargando] = useState(true)
   const [saving, setSaving] = useState(false)
+  const enVueloRef = useRef(false)
 
   // Dependemos de los ids primitivos, no del objeto `target`: los llamadores lo pasan como
   // literal nuevo en cada render (`target={{ ordenId: ... }}`), y algunos —el tablero de jefe de
@@ -83,6 +86,7 @@ export function CorregirPagoModal({
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    if (enVueloRef.current) return
     if (totalVigente == null || !cuadra) return
     if (motivo.trim().length < 3) {
       setError('El motivo de la corrección es obligatorio')
@@ -93,6 +97,7 @@ export function CorregirPagoModal({
       return
     }
     setError(null)
+    enVueloRef.current = true
     setSaving(true)
     try {
       await corregirReparto(target, borradorAPagos(lineas), motivo.trim(), corregidoPor.trim())
@@ -102,59 +107,65 @@ export function CorregirPagoModal({
       setError(err instanceof Error ? err.message : 'No se pudo corregir el pago')
       toast.desdeError(err, 'No se pudo corregir el pago')
     } finally {
+      enVueloRef.current = false
       setSaving(false)
     }
   }
 
   return (
-    <div className="fixed inset-0 z-30 flex items-end justify-center bg-neutral-900/40 p-0 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="custom-scroll max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white p-6 shadow-card-hover sm:rounded-2xl sm:p-7">
-        <div className="mb-4 flex items-start justify-between">
-          <div>
-            <h3 className="text-base font-semibold text-neutral-900">Corregir reparto del pago</h3>
-            <p className="mt-0.5 text-xs text-neutral-500">{referencia}</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
+    <Modal
+      title="Corregir reparto del pago"
+      subtitle={referencia}
+      icon={Shuffle}
+      size="lg"
+      onClose={onClose}
+      onSubmit={handleSubmit}
+      footerInfo={
+        totalVigente != null ? (
+          <>
+            Total cobrado (no cambia): <span className="font-semibold text-neutral-900">{COP.format(totalVigente)}</span>
+          </>
+        ) : null
+      }
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button
+            type="submit"
+            variant="primary"
+            loading={saving}
+            disabled={totalVigente == null || !cuadra || motivo.trim().length < 3 || !corregidoPor.trim()}
           >
-            <X size={18} />
-          </button>
-        </div>
-
-        <p className="mb-4 text-xs text-neutral-500">
-          Solo cambia cómo se repartió entre efectivo, transferencia y datáfono — el total cobrado no
-          cambia. El registro anterior queda visible en auditoría con el motivo. Si el turno de ese cobro
-          ya está cerrado, su arqueo no se recalcula; la corrección aparece en el reporte de correcciones.
-        </p>
-
-        {cargando ? (
-          <p className="py-8 text-center text-sm text-neutral-400">Cargando pago…</p>
-        ) : totalVigente == null ? (
-          <p className="py-8 text-center text-sm text-danger-600">{error ?? 'No hay un cobro para corregir.'}</p>
-        ) : (
-          <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-            <div className="rounded-lg bg-primary-50 px-3 py-2.5 text-sm">
-              <div className="flex items-center justify-between font-semibold text-primary-900">
-                <span>Total cobrado (fijo)</span>
-                <span>{COP.format(totalVigente)}</span>
-              </div>
-            </div>
-
+            Guardar corrección
+          </Button>
+        </>
+      }
+    >
+      {cargando ? (
+        <p className="py-8 text-center text-sm text-neutral-400">Cargando pago…</p>
+      ) : totalVigente == null ? (
+        <p className="py-8 text-center text-sm text-danger-600">{error ?? 'No hay un cobro para corregir.'}</p>
+      ) : (
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+          <section className="flex flex-col gap-3">
+            <h4 className="text-[11px] font-semibold tracking-wide text-neutral-500 uppercase">Cómo se pagó en realidad</h4>
             <PagoLineas lineas={lineas} onChange={setLineas} total={totalVigente} size="sm" totalLabel="Total" />
+          </section>
 
+          <section className="flex flex-col gap-4">
+            <h4 className="text-[11px] font-semibold tracking-wide text-neutral-500 uppercase">Por qué</h4>
             <label className="flex flex-col gap-1.5 text-sm">
               <span className="font-medium text-neutral-700">Motivo de la corrección</span>
               <textarea
                 value={motivo}
                 onChange={(e) => setMotivo(e.target.value)}
-                rows={2}
+                rows={3}
                 placeholder="p. ej. Se anotó todo en efectivo pero $10.000 fueron por transferencia"
                 className="resize-none rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
               />
             </label>
-
             <label className="flex flex-col gap-1.5 text-sm">
               <span className="font-medium text-neutral-700">Quién corrige</span>
               <input
@@ -164,28 +175,15 @@ export function CorregirPagoModal({
                 className="rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
               />
             </label>
-
-            {error ? <p className="text-xs text-danger-600">{error}</p> : null}
-
-            <div className="flex justify-end gap-2 border-t border-neutral-100 pt-4">
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-lg px-4 py-2 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-100"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={saving || !cuadra || motivo.trim().length < 3 || !corregidoPor.trim()}
-                className="rounded-xl bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
-              >
-                {saving ? 'Guardando…' : 'Guardar corrección'}
-              </button>
-            </div>
-          </form>
-        )}
-      </div>
-    </div>
+            <p className="rounded-xl bg-neutral-50 px-3 py-2.5 text-xs leading-relaxed text-neutral-500">
+              Solo cambia cómo se repartió entre efectivo, transferencia y datáfono. El registro anterior queda en
+              auditoría con el motivo. Si el turno ya está cerrado, su arqueo no se recalcula: la corrección sale en el
+              reporte de correcciones.
+            </p>
+            {error ? <p className="rounded-lg bg-danger-50 px-3 py-2.5 text-sm text-danger-700">{error}</p> : null}
+          </section>
+        </div>
+      )}
+    </Modal>
   )
 }

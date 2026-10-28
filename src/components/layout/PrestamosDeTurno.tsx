@@ -1,20 +1,21 @@
 import { useMemo, useRef, useState, type FormEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { HandCoins, Plus, Printer, X } from 'lucide-react'
+import { Banknote, HandCoins, Plus, Printer, X } from 'lucide-react'
 import {
-  fetchDeudaPendiente,
   fetchPersonasDeudoras,
-  registrarAbono,
+  fetchSaldoDeuda,
   registrarPrestamo,
   type DeudaPersonal,
 } from '../../data/deudasPersonal'
-import { abonoInputSchema, prestamoInputSchema, type Deudor, type MetodoAbono } from '../../schemas/deudaPersonal'
+import { BOLSA_DEUDA_LABEL, prestamoInputSchema, type Deudor } from '../../schemas/deudaPersonal'
 import type { Lavador } from '../../schemas/lavador'
 import type { TurnoCaja } from '../../schemas/turnoCaja'
 import { Card } from './Card'
 import { ComprobantePrestamoModal, type ComprobantePrestamoData } from './ComprobantePrestamoModal'
 import { CustomSelect } from './CustomSelect'
 import { CurrencyInput } from './CurrencyInput'
+import { AbonoDeudaModal } from '../deudas/AbonoDeudaModal'
+import { TarjetasBolsa } from '../deudas/TarjetasBolsa'
 import { toast } from '../../lib/toast'
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
@@ -33,16 +34,16 @@ interface PrestamosDeTurnoProps {
   size?: 'sm' | 'md'
 }
 
-// Deudas del personal que mueven efectivo de la caja del turno (0065 → 0070):
-//   · Préstamo: sale del cajón AHORA (se resta del arqueo) y queda como deuda.
-//   · Abono: la persona paga en efectivo (entra al cajón, suma al arqueo) o por fuera
-//     (transferencia, nómina — no toca caja). Nunca deja saldo a favor.
+// Deudas del personal que mueven efectivo de la caja del turno (0065 → 0070 → 0089):
+//   · Préstamo: sale del cajón AHORA (se resta del arqueo) y queda como deuda de préstamos.
+//   · Abono: a préstamos o a tienda (AbonoDeudaModal), en efectivo (entra al cajón, suma al
+//     arqueo) o directo a gerencia (no toca caja). Nunca deja saldo a favor.
 // A lavadores, jefes de patio y gerencia. Queda a nombre del responsable del turno.
 export function PrestamosDeTurno({ turno, lavadores, prestamos, onRegistrado, size = 'sm' }: PrestamosDeTurnoProps) {
-  const [modo, setModo] = useState<'prestamo' | 'abono' | null>(null)
+  const [prestando, setPrestando] = useState(false)
+  const [abonando, setAbonando] = useState(false)
   const [deudorKey, setDeudorKey] = useState('')
   const [monto, setMonto] = useState('')
-  const [metodo, setMetodo] = useState<MetodoAbono>('efectivo')
   const [motivo, setMotivo] = useState('')
   const [errores, setErrores] = useState<Record<string, string>>({})
   const [guardando, setGuardando] = useState(false)
@@ -57,7 +58,7 @@ export function PrestamosDeTurno({ turno, lavadores, prestamos, onRegistrado, si
     : undefined
   const saldoQuery = useQuery({
     queryKey: ['deudas', 'saldo', deudorKey],
-    queryFn: () => fetchDeudaPendiente(deudor as Deudor),
+    queryFn: () => fetchSaldoDeuda(deudor as Deudor),
     enabled: Boolean(deudor),
   })
 
@@ -104,21 +105,20 @@ export function PrestamosDeTurno({ turno, lavadores, prestamos, onRegistrado, si
       ? 'rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500'
       : 'rounded-lg border border-neutral-300 px-3 py-3 text-base outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500'
 
-  function cerrar() {
-    setModo(null)
+  function cerrarPrestamo() {
+    setPrestando(false)
     setDeudorKey('')
     setMonto('')
-    setMetodo('efectivo')
     setMotivo('')
     setErrores({})
   }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    if (enVueloRef.current || !modo) return
+    if (enVueloRef.current) return
 
     const base = { deudor: deudor ?? { tipo: 'lavador' as const, id: '' }, monto: Number(monto || 0), motivo: motivo.trim() || undefined }
-    const parsed = modo === 'prestamo' ? prestamoInputSchema.safeParse(base) : abonoInputSchema.safeParse({ ...base, metodo })
+    const parsed = prestamoInputSchema.safeParse(base)
     if (!parsed.success) {
       const mapa: Record<string, string> = {}
       for (const issue of parsed.error.issues) {
@@ -132,16 +132,12 @@ export function PrestamosDeTurno({ turno, lavadores, prestamos, onRegistrado, si
     enVueloRef.current = true
     setGuardando(true)
     try {
-      const creado =
-        modo === 'prestamo'
-          ? await registrarPrestamo(prestamoInputSchema.parse(base))
-          : await registrarAbono(abonoInputSchema.parse({ ...base, metodo }))
-      // Un abono por fuera no toca esta caja: no se lista acá.
-      if (creado.turnoId) onRegistrado(creado)
+      const creado = await registrarPrestamo(parsed.data)
+      onRegistrado(creado)
       // El préstamo se firma: se abre el comprobante para imprimir con las dos firmas.
-      if (modo === 'prestamo') setComprobante(datosComprobante(creado))
-      toast.exito(modo === 'prestamo' ? 'Préstamo registrado' : 'Abono registrado')
-      cerrar()
+      setComprobante(datosComprobante(creado))
+      toast.exito('Préstamo registrado')
+      cerrarPrestamo()
     } catch (error) {
       setErrores({ general: error instanceof Error ? error.message : 'No se pudo registrar' })
       toast.desdeError(error, 'No se pudo registrar')
@@ -160,7 +156,7 @@ export function PrestamosDeTurno({ turno, lavadores, prestamos, onRegistrado, si
           </span>
           <div className="flex flex-col">
             <h2 className="text-sm font-semibold text-neutral-900">Préstamos y abonos del personal</h2>
-            <p className="text-xs text-neutral-500">Lavadores, jefes de patio y gerencia</p>
+            <p className="text-xs text-neutral-500">Préstamos de caja y abonos a préstamos o tienda</p>
           </div>
         </div>
         <div className="text-right text-xs text-neutral-500">
@@ -183,10 +179,20 @@ export function PrestamosDeTurno({ turno, lavadores, prestamos, onRegistrado, si
               className={`flex items-center justify-between gap-3 rounded-lg bg-neutral-50 px-3 py-2.5 ${p.estado === 'anulado' ? 'opacity-60' : ''}`}
             >
               <div className="flex min-w-0 flex-col">
-                <span className="truncate text-sm font-medium text-neutral-800">
-                  {p.tipo === 'abono' ? 'Abono · ' : 'Préstamo · '}
-                  {nombreDeudor(p)}
-                  {p.estado === 'anulado' ? <span className="text-danger-600"> · anulado</span> : null}
+                <span className="flex min-w-0 items-center gap-1.5 text-sm font-medium text-neutral-800">
+                  <span
+                    className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                      p.tipo === 'prestamo'
+                        ? 'bg-warning-50 text-warning-700'
+                        : p.bolsa === 'tienda'
+                          ? 'bg-primary-50 text-primary-700'
+                          : 'bg-success-50 text-success-700'
+                    }`}
+                  >
+                    {p.tipo === 'prestamo' ? 'Préstamo' : `Abono ${BOLSA_DEUDA_LABEL[p.bolsa].toLowerCase()}`}
+                  </span>
+                  <span className="truncate">{nombreDeudor(p)}</span>
+                  {p.estado === 'anulado' ? <span className="shrink-0 text-danger-600">· anulado</span> : null}
                 </span>
                 <span className="truncate text-xs text-neutral-500">
                   {p.motivo ?? 'Sin motivo'} · {p.registradoPor} · {formatHora(p.creadoEn)}
@@ -212,9 +218,11 @@ export function PrestamosDeTurno({ turno, lavadores, prestamos, onRegistrado, si
         </ul>
       ) : null}
 
-      {modo ? (
+      {prestando ? (
         <form onSubmit={handleSubmit} className="flex flex-col gap-4 border-t border-neutral-100 pt-4">
-          <p className="text-sm font-semibold text-neutral-900">{modo === 'prestamo' ? 'Nuevo préstamo' : 'Nuevo abono'}</p>
+          <p className="flex items-center gap-2 text-sm font-semibold text-neutral-900">
+            <Banknote size={16} className="text-warning-700" /> Nuevo préstamo
+          </p>
 
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-medium text-neutral-700">Persona</span>
@@ -225,75 +233,33 @@ export function PrestamosDeTurno({ turno, lavadores, prestamos, onRegistrado, si
               placeholder={personasQuery.isPending ? 'Cargando…' : 'Selecciona a quién'}
               options={opciones}
             />
-            {deudor ? (
-              <span className="text-xs text-neutral-500">
-                Debe hoy:{' '}
-                <span className="font-semibold text-neutral-800">
-                  {saldoQuery.data === undefined ? '…' : COP.format(saldoQuery.data)}
-                </span>
-              </span>
-            ) : null}
             {errores.deudor ? <span className="text-xs text-danger-600">{errores.deudor}</span> : null}
           </label>
 
-          <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium text-neutral-700">Monto</span>
-            <CurrencyInput value={monto} onChange={setMonto} size={size} />
-            {errores.monto ? <span className="text-xs text-danger-600">{errores.monto}</span> : null}
-          </label>
-
-          {modo === 'abono' ? (
+          {deudor ? (
             <div className="flex flex-col gap-1.5 text-sm">
-              <span className="font-medium text-neutral-700">Cómo paga</span>
-              <div className="grid grid-cols-2 gap-1 rounded-lg bg-neutral-100 p-1">
-                {(
-                  [
-                    ['efectivo', 'Efectivo a la caja'],
-                    ['fuera', 'Por fuera'],
-                  ] as const
-                ).map(([valor, label]) => (
-                  <button
-                    key={valor}
-                    type="button"
-                    onClick={() => setMetodo(valor)}
-                    className={`rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
-                      metodo === valor ? 'bg-white text-neutral-900 shadow-card' : 'text-neutral-500 hover:text-neutral-700'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <span className="text-xs text-neutral-500">
-                {metodo === 'efectivo'
-                  ? 'Entra al cajón de este turno y suma al arqueo.'
-                  : 'Transferencia, nómina u otro — no toca la caja.'}
-              </span>
+              <span className="font-medium text-neutral-700">Ya debe</span>
+              <TarjetasBolsa saldo={saldoQuery.data} />
             </div>
           ) : null}
 
           <label className="flex flex-col gap-1.5 text-sm">
+            <span className="font-medium text-neutral-700">Monto</span>
+            <CurrencyInput value={monto} onChange={setMonto} size={size} />
+            <span className="text-xs text-neutral-500">Sale del cajón ahora y se resta del arqueo.</span>
+            {errores.monto ? <span className="text-xs text-danger-600">{errores.monto}</span> : null}
+          </label>
+
+          <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-medium text-neutral-700">
-              {modo === 'abono' && metodo === 'fuera' ? 'Cómo se pagó' : 'Motivo'}{' '}
-              {modo === 'abono' && metodo === 'fuera' ? (
-                <span className="text-danger-600">*</span>
-              ) : (
-                <span className="font-normal text-neutral-400">(opcional)</span>
-              )}
+              Motivo <span className="font-normal text-neutral-400">(opcional)</span>
             </span>
             <input
               value={motivo}
               onChange={(e) => setMotivo(e.target.value)}
-              placeholder={
-                modo === 'prestamo'
-                  ? 'Ej. le urgía plata para el transporte'
-                  : metodo === 'fuera'
-                    ? 'Ej. transferencia Nequi 15/09'
-                    : 'Ej. abono semanal'
-              }
+              placeholder="Ej. le urgía plata para el transporte"
               className={inputClass}
             />
-            {errores.motivo ? <span className="text-xs text-danger-600">{errores.motivo}</span> : null}
           </label>
 
           <p className="text-xs text-neutral-500">
@@ -307,7 +273,7 @@ export function PrestamosDeTurno({ turno, lavadores, prestamos, onRegistrado, si
           <div className="flex justify-end gap-2 border-t border-neutral-100 pt-4">
             <button
               type="button"
-              onClick={cerrar}
+              onClick={cerrarPrestamo}
               className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-100"
             >
               <X size={16} />
@@ -318,7 +284,7 @@ export function PrestamosDeTurno({ turno, lavadores, prestamos, onRegistrado, si
               disabled={guardando}
               className="rounded-xl bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
             >
-              {guardando ? 'Guardando…' : modo === 'prestamo' ? 'Registrar préstamo' : 'Registrar abono'}
+              {guardando ? 'Guardando…' : 'Registrar préstamo'}
             </button>
           </div>
         </form>
@@ -326,22 +292,35 @@ export function PrestamosDeTurno({ turno, lavadores, prestamos, onRegistrado, si
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
-            onClick={() => setModo('prestamo')}
-            className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-neutral-300 px-3 py-2.5 text-sm font-medium text-neutral-600 transition-colors hover:border-primary-400 hover:bg-primary-50/40 hover:text-primary-700"
+            onClick={() => setPrestando(true)}
+            className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-neutral-300 px-3 py-2.5 text-sm font-medium text-neutral-600 transition-colors hover:border-warning-600/40 hover:bg-warning-50/40 hover:text-warning-700"
           >
             <Plus size={16} />
             Préstamo
           </button>
           <button
             type="button"
-            onClick={() => setModo('abono')}
+            onClick={() => setAbonando(true)}
             className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-neutral-300 px-3 py-2.5 text-sm font-medium text-neutral-600 transition-colors hover:border-success-600/40 hover:bg-success-50/40 hover:text-success-700"
           >
             <Plus size={16} />
-            Abono
+            Recibir abono
           </button>
         </div>
       )}
+
+      {abonando ? (
+        <AbonoDeudaModal
+          opcionesDeudor={opciones}
+          turnoAbierto
+          responsable={turno.responsableActual}
+          onClose={() => setAbonando(false)}
+          // Un abono directo a gerencia no toca esta caja: no se lista acá.
+          onRegistrado={(creado) => {
+            if (creado.turnoId) onRegistrado(creado)
+          }}
+        />
+      ) : null}
       {comprobante ? <ComprobantePrestamoModal data={comprobante} onClose={() => setComprobante(null)} /> : null}
     </Card>
   )

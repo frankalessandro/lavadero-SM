@@ -7,41 +7,50 @@ import {
   type DeudaPersonal,
   type Deudor,
   type PrestamoInput,
+  type DescuentoDeuda,
+  type SaldoDeuda,
+  SALDO_DEUDA_CERO,
 } from '../schemas/deudaPersonal'
-export type { DeudaPersonal, Deudor, PrestamoInput, AbonoInput } from '../schemas/deudaPersonal'
+export type { DeudaPersonal, Deudor, PrestamoInput, AbonoInput, SaldoDeuda, DescuentoDeuda } from '../schemas/deudaPersonal'
 export { fetchPersonasDeudoras } from './perfiles'
 
 const DEUDA_SELECT =
-  'id, lavadorId:lavador_id, personaId:persona_id, tipo, monto, turnoId:turno_id, cuentaId:cuenta_id, liquidacionId:liquidacion_id, liquidacionJefeZonaId:liquidacion_jefe_zona_id, conteoLineaId:conteo_linea_id, metodoAbono:metodo_abono, motivo, registradoPor:registrado_por, estado, motivoAnulacion:motivo_anulacion, anuladaPor:anulada_por, anuladaEn:anulada_en, creadoEn:creado_en'
+  'id, lavadorId:lavador_id, personaId:persona_id, tipo, bolsa, monto, turnoId:turno_id, cuentaId:cuenta_id, liquidacionId:liquidacion_id, liquidacionJefeZonaId:liquidacion_jefe_zona_id, conteoLineaId:conteo_linea_id, metodoAbono:metodo_abono, motivo, registradoPor:registrado_por, estado, motivoAnulacion:motivo_anulacion, anuladaPor:anulada_por, anuladaEn:anulada_en, creadoEn:creado_en'
 
 const deudorParams = (deudor: Deudor) => ({
   p_lavador_id: deudor.tipo === 'lavador' ? deudor.id : null,
   p_persona_id: deudor.tipo === 'persona' ? deudor.id : null,
 })
 
-async function saldoPor(columna: 'lavador_id' | 'persona_id'): Promise<Map<string, number>> {
-  const { data, error } = await db.from('deudas_personal').select(`${columna}, monto`).eq('estado', 'activo').not(columna, 'is', null)
+// Saldos de todo el personal por bolsa en una consulta (0089): préstamos y tienda, contando en
+// tienda lo pendiente de sus cuentas abiertas vinculadas — tarjetas de comisiones, colilla, deudas.
+export async function fetchSaldosDeuda(): Promise<{ porLavador: Map<string, SaldoDeuda>; porPersona: Map<string, SaldoDeuda> }> {
+  const { data, error } = await db.rpc('saldos_deuda_personal')
   if (error) throw new Error(error.message)
-  const mapa = new Map<string, number>()
-  for (const fila of data as Record<string, string | number>[]) {
-    const id = fila[columna] as string
-    mapa.set(id, (mapa.get(id) ?? 0) + (fila.monto as number))
+  const porLavador = new Map<string, SaldoDeuda>()
+  const porPersona = new Map<string, SaldoDeuda>()
+  for (const fila of (data ?? []) as {
+    lavador_id: string | null
+    persona_id: string | null
+    prestamo: number
+    tienda: number
+    tienda_en_cuenta: number
+  }[]) {
+    const saldo: SaldoDeuda = {
+      prestamo: fila.prestamo,
+      tienda: fila.tienda,
+      enCuenta: fila.tienda_en_cuenta,
+      total: fila.prestamo + fila.tienda,
+    }
+    if (fila.lavador_id) porLavador.set(fila.lavador_id, saldo)
+    else if (fila.persona_id) porPersona.set(fila.persona_id, saldo)
   }
-  return mapa
+  return { porLavador, porPersona }
 }
 
-// Deuda pendiente de TODOS en una consulta — tarjetas de comisiones y pantalla de deudas.
-export const fetchDeudaPendientePorLavador = () => saldoPor('lavador_id')
-export const fetchDeudaPendientePorPersona = () => saldoPor('persona_id')
-
-export async function fetchDeudaPendiente(deudor: Deudor): Promise<number> {
-  const { data, error } = await db
-    .from('deudas_personal')
-    .select('monto')
-    .eq(deudor.tipo === 'lavador' ? 'lavador_id' : 'persona_id', deudor.id)
-    .eq('estado', 'activo')
-  if (error) throw new Error(error.message)
-  return (data ?? []).reduce((total, d) => total + (d.monto as number), 0)
+export async function fetchSaldoDeuda(deudor: Deudor): Promise<SaldoDeuda> {
+  const { porLavador, porPersona } = await fetchSaldosDeuda()
+  return (deudor.tipo === 'lavador' ? porLavador : porPersona).get(deudor.id) ?? SALDO_DEUDA_CERO
 }
 
 // Historial completo de un deudor — incluye anuladas (regla 13).
@@ -80,8 +89,10 @@ export async function registrarPrestamo(input: PrestamoInput): Promise<DeudaPers
   return deudaPersonalSchema.parse(data)
 }
 
-// Abono entre semana: en efectivo entra a la caja del turno abierto (suma al arqueo); por fuera
-// (transferencia, nómina) no toca caja y pide explicar cómo se pagó. Nunca deja saldo a favor.
+// Abono entre semana a préstamos o a tienda: en efectivo entra a la caja del turno abierto (suma al
+// arqueo); por fuera (directo a gerencia, transferencia) no toca caja y pide explicar cómo se pagó.
+// Nunca deja saldo a favor. Un abono a tienda primero pasa al ledger lo pendiente de sus cuentas
+// abiertas (lo hace la base, 0089) — la cuenta sigue abierta.
 export async function registrarAbono(input: AbonoInput): Promise<DeudaPersonal> {
   const parsed = abonoInputSchema.parse(input)
   const { data, error } = await db
@@ -90,6 +101,7 @@ export async function registrarAbono(input: AbonoInput): Promise<DeudaPersonal> 
       p_monto: parsed.monto,
       p_metodo: parsed.metodo,
       p_motivo: parsed.motivo ?? null,
+      p_bolsa: parsed.bolsa,
     })
     .select(DEUDA_SELECT)
     .single()
@@ -111,5 +123,47 @@ export async function cobrarFaltante(lineaId: string, personaId?: string): Promi
 
 export async function descartarFaltante(lineaId: string, motivo: string): Promise<void> {
   const { error } = await db.rpc('descartar_faltante', { p_linea_id: lineaId, p_motivo: motivo })
+  if (error) throw new Error(error.message)
+}
+
+// Descuento de deuda al generar una liquidación (lavador o jefe de patio), por bolsa: cada parte
+// no puede pasar su bolsa y la suma no puede pasar la comisión del corte.
+export function validarDescuentoDeuda(descuento: DescuentoDeuda, saldo: SaldoDeuda, comisionBruta: number): DescuentoDeuda {
+  const limpio = { prestamo: Math.round(descuento.prestamo), tienda: Math.round(descuento.tienda) }
+  if (limpio.prestamo < 0 || limpio.prestamo > Math.max(0, saldo.prestamo)) {
+    throw new Error(`El descuento de préstamos debe estar entre $0 y $${Math.max(0, saldo.prestamo)}`)
+  }
+  if (limpio.tienda < 0 || limpio.tienda > Math.max(0, saldo.tienda)) {
+    throw new Error(`El descuento de tienda debe estar entre $0 y $${Math.max(0, saldo.tienda)}`)
+  }
+  if (limpio.prestamo + limpio.tienda > comisionBruta) {
+    throw new Error(`El descuento total no puede pasar la comisión del corte ($${comisionBruta})`)
+  }
+  return limpio
+}
+
+// Filas 'liquidacion' del ledger, una por bolsa con descuento — en un solo insert (atómico entre
+// sí). La de tienda hace que la base pase primero al ledger lo pendiente de sus cuentas abiertas.
+export async function registrarDescuentoLiquidacion(
+  deudor: Deudor,
+  descuento: DescuentoDeuda,
+  liquidacion: { liquidacion_id: string } | { liquidacion_jefe_zona_id: string },
+  periodoInicio: string,
+  periodoFin: string,
+): Promise<void> {
+  const filas = (['prestamo', 'tienda'] as const)
+    .filter((bolsa) => descuento[bolsa] > 0)
+    .map((bolsa) => ({
+      lavador_id: deudor.tipo === 'lavador' ? deudor.id : null,
+      persona_id: deudor.tipo === 'persona' ? deudor.id : null,
+      tipo: 'liquidacion',
+      bolsa,
+      monto: -descuento[bolsa],
+      ...liquidacion,
+      motivo: `Descontado al liquidar (periodo ${periodoInicio} → ${periodoFin})`,
+      registrado_por: 'Generación de liquidación',
+    }))
+  if (filas.length === 0) return
+  const { error } = await db.from('deudas_personal').insert(filas)
   if (error) throw new Error(error.message)
 }

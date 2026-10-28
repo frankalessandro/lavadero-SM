@@ -1,9 +1,13 @@
-import { useRef, useState, type FormEvent } from 'react'
-import { X } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { Trash2 } from 'lucide-react'
 import { anularVentaInputSchema } from '../../schemas/venta'
 import type { Venta } from '../../schemas/venta'
 import { toast } from '../../lib/toast'
 import { DestinoProductoAnulado } from './DestinoProductoAnulado'
+import { Modal } from './Modal'
+import { Button } from './Button'
+
+const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 
 // Quitar un producto ya cargado a un destino pendiente (orden o cuenta abierta) antes de
 // cobrar/cerrar — regla de negocio 13: se anula con motivo, no se borra, queda visible en
@@ -26,8 +30,7 @@ export function QuitarProductoModal({
   const [saving, setSaving] = useState(false)
   const enVueloRef = useRef(false)
 
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault()
+  async function handleSubmit() {
     if (enVueloRef.current) return
     const parsed = anularVentaInputSchema.pick({ motivo: true, seConsumio: true }).safeParse({ motivo, seConsumio })
     if (!parsed.success) {
@@ -49,53 +52,46 @@ export function QuitarProductoModal({
   }
 
   return (
-    <div className="fixed inset-0 z-30 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="w-full max-w-md rounded-t-3xl sm:rounded-2xl custom-scroll max-h-[92vh] overflow-y-auto bg-white sm:max-h-[88vh] p-6 shadow-card-hover">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-neutral-900">
-            Quitar {productoNombre} ×{venta.cantidad}
-          </h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
+    <Modal
+      title="Quitar producto"
+      subtitle="Queda anulado con el motivo, visible en reportes."
+      icon={Trash2}
+      tone="danger"
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button variant="danger" loading={saving} disabled={seConsumio === null} onClick={() => void handleSubmit()}>
+            Quitar producto
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-5">
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-neutral-100 px-4 py-3">
+          <span className="flex min-w-0 items-center gap-2 text-sm font-medium text-neutral-800">
+            <span className="truncate">{productoNombre}</span>
+            <span className="shrink-0 rounded-md bg-neutral-100 px-1.5 py-0.5 text-[11px] font-semibold text-neutral-500">×{venta.cantidad}</span>
+          </span>
+          <span className="shrink-0 text-sm font-bold text-neutral-900">{COP.format(venta.total)}</span>
         </div>
-        <p className="mb-4 text-xs text-neutral-500">
-          Queda anulado con el motivo, visible en reportes (control antifraude).
-        </p>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <DestinoProductoAnulado value={seConsumio} onChange={setSeConsumio} />
-          <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium text-neutral-700">Motivo</span>
-            <textarea
-              value={motivo}
-              onChange={(e) => setMotivo(e.target.value)}
-              rows={2}
-              className="resize-none rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-            />
-          </label>
-          {error ? <p className="text-xs text-danger-600">{error}</p> : null}
-          <div className="flex justify-end gap-2 border-t border-neutral-100 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg px-4 py-2 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-100"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-lg bg-danger-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-danger-700 disabled:opacity-60"
-            >
-              {saving ? 'Quitando…' : 'Quitar producto'}
-            </button>
-          </div>
-        </form>
+
+        <DestinoProductoAnulado value={seConsumio} onChange={setSeConsumio} />
+
+        <label className="flex flex-col gap-1.5 text-sm">
+          <span className="font-medium text-neutral-700">Motivo</span>
+          <textarea
+            value={motivo}
+            onChange={(e) => setMotivo(e.target.value)}
+            rows={2}
+            className="resize-none rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+          />
+        </label>
+
+        {error ? <p className="rounded-lg bg-danger-50 px-3 py-2.5 text-sm text-danger-700">{error}</p> : null}
       </div>
-    </div>
+    </Modal>
   )
 }

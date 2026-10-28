@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { X } from 'lucide-react'
+import { Package } from 'lucide-react'
+import { Modal } from './Modal'
 import { fetchMovimientos } from '../../data/movimientosInventario'
 import { fetchVentasDeProducto } from '../../data/ventas'
 import type { StockProducto } from '../../data/movimientosInventario'
@@ -67,26 +68,15 @@ export function ProductoExpedienteModal({ producto, stock, onClose }: Props) {
   const diasDeStock = ritmoDiario > 0 ? Math.round(stockActual / ritmoDiario) : null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-neutral-900/40 p-4">
-      <div className="my-6 w-full max-w-xl rounded-2xl bg-white shadow-card-hover">
-        <div className="flex items-start justify-between gap-3 border-b border-neutral-100 p-6">
-          <div>
-            <h2 className="text-lg font-semibold text-neutral-900">{producto.nombre}</h2>
-            <p className="text-sm text-neutral-500">
-              {producto.unidadMedida}
-              {!producto.activo ? ' · inactivo' : ''}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
+    <Modal
+      title={producto.nombre}
+      subtitle={`${producto.unidadMedida}${!producto.activo ? ' · inactivo' : ''}`}
+      icon={Package}
+      size="lg"
+      onClose={onClose}
+    >
 
-        <div className="flex flex-col gap-4 p-6">
+        <div className="flex flex-col gap-4">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Card className="flex flex-col gap-0.5 p-3">
               <p className="text-xs font-medium text-neutral-500">Stock actual</p>
@@ -163,7 +153,6 @@ export function ProductoExpedienteModal({ producto, stock, onClose }: Props) {
             )}
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }

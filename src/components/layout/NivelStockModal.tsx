@@ -1,5 +1,6 @@
-import { X } from 'lucide-react'
+import { Package } from 'lucide-react'
 import { NIVEL_LABEL, NIVEL_BADGE_CLASS, type NivelStock } from '../../lib/nivelStock'
+import { Modal } from './Modal'
 
 export interface ProductoNivelFila {
   id: string
@@ -12,7 +13,8 @@ export interface ProductoNivelFila {
 // tarjeta de nivel en /admin/inventario/stock y /jefe-zona/inventario, que en celular no se ve
 // y con muchos productos queda ilegible. Mismo componente para los dos paneles: ninguno de los
 // dos muestra costo acá (jefe de zona no lo ve por rol, y esta es una lista operativa de "qué
-// reponer", no de valorización — esa ya vive en la tarjeta de "Valorización total").
+// reponer", no de valorización — esa ya vive en la tarjeta de "Valorización total"). En
+// escritorio la lista va en dos columnas.
 export function NivelStockModal({
   nivel,
   productos,
@@ -23,53 +25,31 @@ export function NivelStockModal({
   onClose: () => void
 }) {
   return (
-    <div
-      className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4"
-      onClick={onClose}
+    <Modal
+      title={NIVEL_LABEL[nivel]}
+      subtitle={`${productos.length} producto${productos.length === 1 ? '' : 's'}`}
+      icon={Package}
+      tone={nivel === 'bajo' ? 'danger' : nivel === 'medio' ? 'warning' : 'success'}
+      size="lg"
+      onClose={onClose}
     >
-      <div
-        className="w-full max-w-md rounded-t-3xl sm:rounded-2xl custom-scroll max-h-[92vh] overflow-y-auto bg-white sm:max-h-[88vh] p-6 shadow-card-hover sm:p-7"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div>
-            <h3 className="text-base font-semibold text-neutral-900">{NIVEL_LABEL[nivel]}</h3>
-            <p className="text-xs text-neutral-500">
-              {productos.length} producto{productos.length === 1 ? '' : 's'}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-            aria-label="Cerrar"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="max-h-[60vh] overflow-y-auto">
-          {productos.length === 0 ? (
-            <p className="py-6 text-center text-sm text-neutral-400">Sin productos en este nivel.</p>
-          ) : (
-            <ul className="flex flex-col divide-y divide-neutral-100">
-              {productos.map((p) => (
-                <li key={p.id} className="flex items-center justify-between gap-3 py-2.5">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-neutral-900">{p.nombre}</p>
-                    <p className="text-xs text-neutral-500">{p.unidad}</p>
-                  </div>
-                  <span
-                    className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${NIVEL_BADGE_CLASS[nivel]}`}
-                  >
-                    {p.stock} {p.unidad}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
-    </div>
+      {productos.length === 0 ? (
+        <p className="rounded-xl bg-neutral-50 py-6 text-center text-sm text-neutral-400">Sin productos en este nivel.</p>
+      ) : (
+        <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {productos.map((p) => (
+            <li key={p.id} className="flex items-center justify-between gap-3 rounded-xl border border-neutral-100 px-3 py-2.5">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-neutral-900">{p.nombre}</p>
+                <p className="text-xs text-neutral-500">{p.unidad}</p>
+              </div>
+              <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${NIVEL_BADGE_CLASS[nivel]}`}>
+                {p.stock} {p.unidad}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Modal>
   )
 }

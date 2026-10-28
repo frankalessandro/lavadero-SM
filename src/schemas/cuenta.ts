@@ -33,12 +33,19 @@ export const cuentaSchema = z.object({
   destinatarioId: nullableTrimmedString,
   motivo: nullableTrimmedString,
   autorizadoPor: nullableTrimmedString,
+  // Cuenta de un trabajador (0089): lo pendiente cuenta como su deuda de tienda. Una cuenta a costo
+  // queda a nombre de su gerente (`personaId` = `destinatarioId`).
+  lavadorId: nullableTrimmedString,
+  personaId: nullableTrimmedString,
   creadoEn: z.string(),
 })
 
 export const abrirCuentaInputSchema = z
   .object({
-    titular: z.string().trim().min(2, 'El nombre de la cuenta es obligatorio'),
+    // Con trabajador (o a costo) la base pone su nombre si no se escribe uno.
+    titular: z.string().trim().optional(),
+    lavadorId: z.string().optional(),
+    personaId: z.string().optional(),
     nota: z.string().trim().optional(),
     abiertaPor: z.string().trim().min(1, 'Indica quién abre la cuenta'),
     // A costo (0073): solo para una cuenta de gerencia, con motivo y quién autoriza obligatorios.
@@ -46,6 +53,10 @@ export const abrirCuentaInputSchema = z
     destinatarioId: z.string().optional(),
     motivo: z.string().trim().optional(),
     autorizadoPor: z.string().trim().optional(),
+  })
+  .refine((d) => d.aCosto || Boolean(d.lavadorId || d.personaId) || (d.titular ?? '').length >= 2, {
+    message: 'El nombre de la cuenta es obligatorio',
+    path: ['titular'],
   })
   .refine((d) => !d.aCosto || Boolean(d.destinatarioId), {
     message: 'Selecciona a qué gerente se le entrega',

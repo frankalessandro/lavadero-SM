@@ -11,7 +11,7 @@ import type { PagoLineaInput } from '../schemas/pago'
 import type { Deudor } from '../schemas/deudaPersonal'
 
 const CUENTA_SELECT =
-  'id, titular, nota, estado, abiertaPor:abierta_por, abiertaEn:abierta_en, cerradaEn:cerrada_en, cerradaPor:cerrada_por, turnoId:turno_id, aCosto:a_costo, destinatarioId:destinatario_id, motivo, autorizadoPor:autorizado_por, creadoEn:creado_en'
+  'id, titular, nota, estado, abiertaPor:abierta_por, abiertaEn:abierta_en, cerradaEn:cerrada_en, cerradaPor:cerrada_por, turnoId:turno_id, aCosto:a_costo, destinatarioId:destinatario_id, motivo, autorizadoPor:autorizado_por, lavadorId:lavador_id, personaId:persona_id, creadoEn:creado_en'
 
 function inicioDeHoyISO(): string {
   const ahora = new Date()
@@ -46,7 +46,9 @@ export async function abrirCuenta(input: AbrirCuentaInput): Promise<Cuenta> {
   const parsed = abrirCuentaInputSchema.parse(input)
   const { data, error } = await db
     .rpc('abrir_cuenta', {
-      p_titular: parsed.titular,
+      p_titular: parsed.titular || null,
+      p_lavador_id: parsed.aCosto ? null : (parsed.lavadorId ?? null),
+      p_persona_id: parsed.aCosto ? null : (parsed.personaId ?? null),
       p_nota: parsed.nota ?? null,
       p_abierta_por: parsed.abiertaPor,
       p_a_costo: parsed.aCosto,
@@ -79,9 +81,9 @@ export async function cerrarCuenta(cuentaId: string, pagos: PagoLineaInput[], ce
 
 // Cierra la cuenta cargándola a un trabajador (lavador, jefe de patio o gerencia; 0065 → 0070) en
 // vez de cobrar plata — mismo descuento de stock/costo que cerrarCuenta, sin pago hoy: el total
-// queda como deuda de esa persona (src/data/deudasPersonal.ts), que se salda con abonos o
-// descontándola al liquidar. Si la cuenta es a costo (0073), el servidor ignora `deudor` y carga
-// siempre al gerente con el que se abrió — ya quedó fijo (y autorizado) al abrir.
+// queda como deuda de tienda de esa persona (src/data/deudasPersonal.ts), que se salda con abonos
+// o descontándola al liquidar. Si la cuenta ya es de alguien (abierta a nombre de un trabajador,
+// 0089, o a costo, 0073), el servidor ignora `deudor` y carga siempre a esa persona.
 export async function cargarCuentaAPersonal(cuentaId: string, deudor: Deudor, cerradaPor: string): Promise<Cuenta> {
   const { data, error } = await db
     .rpc('cargar_cuenta_a_personal', {

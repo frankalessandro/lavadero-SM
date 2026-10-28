@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { Pencil, Plus, X } from 'lucide-react'
+import { Car, Pencil, Plus } from 'lucide-react'
 import {
   fetchTiposVehiculo,
   createTipoVehiculo,
@@ -13,6 +13,8 @@ import {
   type TipoVehiculo,
 } from '../../../../schemas/tipoVehiculo'
 import { Card } from '../../../../components/layout/Card'
+import { Modal, ModalSeccion } from '../../../../components/layout/Modal'
+import { Button } from '../../../../components/layout/Button'
 import { CustomSelect } from '../../../../components/layout/CustomSelect'
 import { ConfirmModal } from '../../../../components/layout/ConfirmModal'
 import { PageHeader } from '../../../../components/layout/PageHeader'
@@ -181,15 +183,18 @@ function TipoVehiculoForm({
   const [categoria, setCategoria] = useState<CategoriaVehiculo>(tipo?.categoria ?? 'auto')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const enVueloRef = useRef(false)
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    if (enVueloRef.current) return
     const parsed = tipoVehiculoInputSchema.safeParse({ nombre, categoria })
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'Datos inválidos')
       return
     }
     setError(null)
+    enVueloRef.current = true
     setSaving(true)
     try {
       if (tipo) {
@@ -203,30 +208,31 @@ function TipoVehiculoForm({
       setError(err instanceof Error ? err.message : 'No se pudo guardar')
       toast.desdeError(err, 'No se pudo guardar')
     } finally {
+      enVueloRef.current = false
       setSaving(false)
     }
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="w-full max-w-lg rounded-t-3xl sm:rounded-2xl custom-scroll max-h-[92vh] overflow-y-auto bg-white sm:max-h-[88vh] p-6 shadow-card-hover sm:p-7">
-        <div className="mb-5 flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-semibold text-neutral-900">
-              {tipo ? 'Editar tipo de vehículo' : 'Nuevo tipo de vehículo'}
-            </h3>
-            <p className="text-xs text-neutral-500">Base para la matriz de precios de combos.</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+    <Modal
+      title={tipo ? 'Editar tipo de vehículo' : 'Nuevo tipo de vehículo'}
+      subtitle="Base para la matriz de precios de combos."
+      icon={Car}
+      onClose={onClose}
+      onSubmit={handleSubmit}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button type="submit" variant="primary" loading={saving}>
+            Guardar
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <ModalSeccion columnas={2}>
           <label className="flex flex-col gap-1.5 text-left text-sm">
             <span className="font-medium text-neutral-700">Nombre</span>
             <input
@@ -250,32 +256,15 @@ function TipoVehiculoForm({
                 { value: 'moto', label: CATEGORIA_LABEL.moto },
               ]}
             />
-            <span className="text-xs text-neutral-400">
-              Determina qué catálogo de combos aplica a este tipo en recepción — el catálogo de
-              autos/camionetas es distinto al de motos (Plan de Alcance §5).
-            </span>
           </label>
+        </ModalSeccion>
+        <p className="rounded-xl bg-neutral-50 px-3 py-2.5 text-xs text-neutral-500">
+          La categoría decide qué catálogo de combos aplica a este tipo en recepción: el de autos y camionetas es
+          distinto al de motos (Plan de Alcance §5).
+        </p>
 
-          {error ? <p className="text-xs text-danger-600">{error}</p> : null}
-
-          <div className="mt-1 flex justify-end gap-2 border-t border-neutral-100 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg px-4 py-2 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-100"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-xl bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
-            >
-              {saving ? 'Guardando…' : 'Guardar'}
-            </button>
-          </div>
-        </form>
+        {error ? <p className="rounded-lg bg-danger-50 px-3 py-2.5 text-sm text-danger-700">{error}</p> : null}
       </div>
-    </div>
+    </Modal>
   )
 }

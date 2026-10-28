@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { X } from 'lucide-react'
+import { UserRound } from 'lucide-react'
+import { Modal } from './Modal'
 import { fetchExpedienteLavador, type ExpedienteLavador, type ResumenLavador } from '../../data/expedienteLavador'
 import type { Lavador } from '../../schemas/lavador'
 import { Card } from './Card'
@@ -73,31 +74,20 @@ export function LavadorExpedienteModal({ lavador, resumen, comboNombre, producto
   const pctAsistencia = data && diasRango > 0 ? Math.round((data.diasTrabajados / diasRango) * 100) : 0
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-neutral-900/40 p-4">
-      <div className="my-6 w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-card-hover">
-        <div className="flex items-start justify-between gap-3 border-b border-neutral-100 p-6">
-          <div className="min-w-0">
-            <h2 className="text-lg font-semibold text-neutral-900">{lavador.nombre}</h2>
-            <p className="text-sm text-neutral-500">
-              Ingresó el {FECHA.format(new Date(`${lavador.fechaIngreso}T00:00:00`))}
-              {!lavador.activo ? ' · inactivo' : ''}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
+    <Modal
+      title={lavador.nombre}
+      subtitle={`Ingresó el ${FECHA.format(new Date(`${lavador.fechaIngreso}T00:00:00`))}${!lavador.activo ? ' · inactivo' : ''}`}
+      icon={UserRound}
+      size="xl"
+      onClose={onClose}
+    >
 
         {error ? (
-          <p className="p-6 text-sm text-danger-600">{error}</p>
+          <p className="py-6 text-center text-sm text-danger-600">{error}</p>
         ) : !data ? (
-          <p className="p-6 text-sm text-neutral-400">Cargando…</p>
+          <p className="py-6 text-center text-sm text-neutral-400">Cargando…</p>
         ) : (
-          <div className="flex flex-col gap-4 p-6">
+          <div className="flex flex-col gap-4">
             {/* KPIs */}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <Card className="flex flex-col gap-1 p-4">
@@ -172,7 +162,6 @@ export function LavadorExpedienteModal({ lavador, resumen, comboNombre, producto
             </div>
           </div>
         )}
-      </div>
-    </div>
+    </Modal>
   )
 }

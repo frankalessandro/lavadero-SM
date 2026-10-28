@@ -1,27 +1,7 @@
 import { useMemo, useRef, useState, type FormEvent } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  ShoppingCart,
-  Receipt,
-  X,
-  Plus,
-  Minus,
-  Trash2,
-  Wallet,
-  Users,
-  UserPlus,
-  PackagePlus,
-  StickyNote,
-  Banknote,
-  Landmark,
-  CreditCard,
-  ChevronDown,
-  Ban,
-  CupSoda,
-  Clock,
-  History,
-} from 'lucide-react'
+import { ShoppingCart, Receipt, Plus, Minus, Trash2, Wallet, Users, UserPlus, PackagePlus, StickyNote, Banknote, Landmark, CreditCard, ChevronDown, Ban, CupSoda, Clock, History, HandCoins } from 'lucide-react'
 import { fetchTurnoAbierto } from '../../../data/turnos'
 import { fetchProductosOperativo } from '../../../data/productos'
 import { fetchStockProductosOperativo } from '../../../data/movimientosInventario'
@@ -35,7 +15,8 @@ import {
   cargarCuentaAPersonal,
 } from '../../../data/cuentas'
 import { fetchLavadores } from '../../../data/lavadores'
-import { fetchPersonasDeudoras } from '../../../data/deudasPersonal'
+import { fetchPersonasDeudoras, fetchSaldosDeuda } from '../../../data/deudasPersonal'
+import { AbonoDeudaModal } from '../../../components/deudas/AbonoDeudaModal'
 import type { Deudor } from '../../../schemas/deudaPersonal'
 import { anularVentaInputSchema, type Venta } from '../../../schemas/venta'
 import { abrirCuentaInputSchema, anularCuentaInputSchema, type Cuenta } from '../../../schemas/cuenta'
@@ -43,6 +24,7 @@ import type { Producto } from '../../../schemas/producto'
 import type { Lavador } from '../../../schemas/lavador'
 import type { PagoLineaInput } from '../../../schemas/pago'
 import { Card } from '../../../components/layout/Card'
+import { Modal } from '../../../components/layout/Modal'
 import { StatCard } from '../../../components/layout/StatCard'
 import { CustomSelect } from '../../../components/layout/CustomSelect'
 import { AbrirTurnoPrompt } from '../../../components/layout/TurnoResponsableBanner'
@@ -170,6 +152,16 @@ function VenderPage() {
   const [quitandoDeCuenta, setQuitandoDeCuenta] = useState<Venta | null>(null)
   const [cerrandoCuenta, setCerrandoCuenta] = useState<Cuenta | null>(null)
   const [anulandoCuenta, setAnulandoCuenta] = useState<Cuenta | null>(null)
+  // Cuenta de un trabajador a la que se le recibe un abono de tienda (0089).
+  const [abonandoCuenta, setAbonandoCuenta] = useState<Cuenta | null>(null)
+  // Lo que debe cada trabajador por bolsa — para mostrarlo en su cuenta abierta.
+  const saldosQuery = useQuery({ queryKey: ['deudas', 'saldos'], queryFn: fetchSaldosDeuda })
+  const saldoDeCuenta = (cuenta: Cuenta) =>
+    cuenta.lavadorId
+      ? saldosQuery.data?.porLavador.get(cuenta.lavadorId)
+      : cuenta.personaId
+        ? saldosQuery.data?.porPersona.get(cuenta.personaId)
+        : undefined
 
   // Invalida todo lo que esta pantalla lee — mismo alcance que el refresh() manual de antes, pero
   // como UNA sola ronda de refetch deduplicada por TanStack Query (no dos descargas por acción).
@@ -185,6 +177,8 @@ function VenderPage() {
         queryKeys.cuentasAbiertas,
         queryKeys.cuentasHoy,
         queryKeys.ventasPendientes,
+        // Lo cargado a la cuenta de un trabajador es su deuda de tienda (0089).
+        ['deudas'],
       ].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
     )
   }
@@ -411,6 +405,14 @@ function VenderPage() {
                             >
                               <Clock size={12} className="shrink-0" /> {hace(cuenta.abiertaEn)} · {cuenta.abiertaPor}
                             </p>
+                            {cuenta.lavadorId || cuenta.personaId ? (
+                              <p className="mt-1 inline-flex rounded-full bg-warning-50 px-2 py-0.5 text-[11px] font-medium text-warning-700">
+                                {/* Si debe más en tienda que lo de esta cuenta (consumos anteriores), se dice. */}
+                                {(saldoDeCuenta(cuenta)?.tienda ?? 0) > total
+                                  ? `Trabajador · debe ${COP.format(saldoDeCuenta(cuenta)?.tienda ?? 0)} en tienda`
+                                  : 'Trabajador · va a su deuda de tienda'}
+                              </p>
+                            ) : null}
                             {cuenta.nota ? (
                               <p className="mt-1 flex items-start gap-1 text-xs text-neutral-500">
                                 <StickyNote size={12} className="mt-0.5 shrink-0" /> {cuenta.nota}
@@ -466,20 +468,31 @@ function VenderPage() {
                         >
                           <Wallet size={15} /> Cobrar y cerrar
                         </button>
-                        <div className="flex items-center justify-between gap-2">
+                        {/* Acciones secundarias en una sola fila; "Abono" solo en cuentas de trabajador (va a tienda). */}
+                        <div className="flex items-center gap-1">
                           <button
                             type="button"
                             onClick={() => setAgregandoACuenta(cuenta)}
-                            className="flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
+                            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900"
                           >
                             <PackagePlus size={14} /> Producto
                           </button>
+                          {cuenta.lavadorId || cuenta.personaId ? (
+                            <button
+                              type="button"
+                              disabled={(saldoDeCuenta(cuenta)?.tienda ?? 0) <= 0}
+                              onClick={() => setAbonandoCuenta(cuenta)}
+                              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-success-700 transition-colors hover:bg-success-50 disabled:opacity-40"
+                            >
+                              <HandCoins size={14} /> Abono
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             onClick={() => setAnulandoCuenta(cuenta)}
-                            className="rounded-lg px-2 py-1.5 text-xs font-medium text-neutral-400 transition-colors hover:bg-danger-50 hover:text-danger-600"
+                            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-neutral-400 transition-colors hover:bg-danger-50 hover:text-danger-600"
                           >
-                            Anular cuenta
+                            <Ban size={14} /> Anular
                           </button>
                         </div>
                       </div>
@@ -557,6 +570,7 @@ function VenderPage() {
       {abriendoCuenta ? (
         <AbrirCuentaModal
           responsableSugerido={turno?.responsableActual ?? ''}
+          lavadores={lavadores}
           onClose={() => setAbriendoCuenta(false)}
           onAbierta={async () => {
             setAbriendoCuenta(false)
@@ -621,6 +635,22 @@ function VenderPage() {
             )
             await refresh()
           }}
+        />
+      ) : null}
+
+      {abonandoCuenta ? (
+        <AbonoDeudaModal
+          deudor={
+            abonandoCuenta.lavadorId
+              ? { tipo: 'lavador', id: abonandoCuenta.lavadorId }
+              : { tipo: 'persona', id: abonandoCuenta.personaId ?? '' }
+          }
+          nombre={abonandoCuenta.titular}
+          soloBolsa="tienda"
+          turnoAbierto={Boolean(turno)}
+          responsable={turno?.responsableActual}
+          onClose={() => setAbonandoCuenta(null)}
+          onRegistrado={() => void refresh()}
         />
       ) : null}
 
@@ -998,30 +1028,25 @@ function AnularVentaModal({
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="w-full max-w-md rounded-t-3xl sm:rounded-2xl custom-scroll max-h-[92vh] overflow-y-auto bg-white sm:max-h-[88vh] p-6 shadow-card-hover sm:p-7">
-        <div className="mb-5 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-neutral-900">
-            Anular venta VTA-{venta.consecutivo} · {productoNombre}
-          </h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <p className="mb-5 text-xs text-neutral-500">
-          Esta acción no se puede deshacer. La venta queda visible en reportes con el motivo y quién la anuló
-          (control antifraude).
-          {venta.ventaGrupoId
-            ? ' Esta venta se cobró junto con otras en un mismo comprobante: se anulará el comprobante completo.'
-            : ''}
-        </p>
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+    <Modal
+      title={`Anular venta VTA-${venta.consecutivo} · ${productoNombre}`}
+      subtitle={`No se puede deshacer; queda en reportes con el motivo.${venta.ventaGrupoId ? ' Se cobró junto con otras: se anula el comprobante completo.' : ''}`}
+      icon={Ban}
+      tone="danger"
+      onClose={onClose}
+      onSubmit={handleSubmit}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button type="submit" variant="danger" loading={saving}>
+            Anular venta
+          </Button>
+        </>
+      }
+    >
+        <div className="flex flex-col gap-5">
           <DestinoProductoAnulado value={seConsumio} onChange={setSeConsumio} plural={Boolean(venta.ventaGrupoId)} />
           <label className="flex flex-col gap-1.5 text-left text-sm">
             <span className="font-medium text-neutral-700">Motivo de anulación</span>
@@ -1047,25 +1072,8 @@ function AnularVentaModal({
 
           {error ? <p className="text-xs text-danger-600">{error}</p> : null}
 
-          <div className="mt-1 flex justify-end gap-2 border-t border-neutral-100 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg px-4 py-2 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-100"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-lg bg-danger-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-danger-700 disabled:opacity-60"
-            >
-              {saving ? 'Anulando…' : 'Anular venta'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </div>
+    </Modal>
   )
 }
 
@@ -1073,15 +1081,24 @@ function AnularVentaModal({
 // producto que se le cargue después se valora al costo del producto, no al precio de venta, desde
 // que se agrega — el modo queda fijo al abrir, junto con el motivo y quién autoriza (sin PIN,
 // control posterior por bitácora). Solo una cuenta de gerencia puede ser el destinatario.
+//
+// Desde 0089 la cuenta se abre a nombre de un trabajador (lavador, jefe de patio o gerencia)
+// elegido de la lista: lo que se le cargue cuenta de una vez como su deuda de tienda (colilla,
+// liquidación, abonos). "Cliente u otro" sigue siendo un nombre libre, sin deuda.
 function AbrirCuentaModal({
   responsableSugerido,
+  lavadores,
   onClose,
   onAbierta,
 }: {
   responsableSugerido: string
+  lavadores: Lavador[]
   onClose: () => void
   onAbierta: () => Promise<void>
 }) {
+  const [deQuien, setDeQuien] = useState<'trabajador' | 'otro'>('trabajador')
+  // 'l:<id>' = lavador · 'p:<id>' = jefe de patio o gerencia — mismo formato que al cerrar.
+  const [trabajadorKey, setTrabajadorKey] = useState('')
   const [titular, setTitular] = useState('')
   const [nota, setNota] = useState('')
   const [abiertaPor, setAbiertaPor] = useState(responsableSugerido)
@@ -1096,12 +1113,26 @@ function AbrirCuentaModal({
   const opcionesGerencia = (personasQuery.data ?? [])
     .filter((p) => p.roles.includes('admin'))
     .map((p) => ({ value: p.id, label: p.nombre?.trim() || 'Sin nombre' }))
+  const opcionesTrabajador = [
+    ...lavadores.filter((l) => l.activo).map((l) => ({ value: `l:${l.id}`, label: `${l.nombre} · lavador` })),
+    ...(personasQuery.data ?? []).map((p) => ({
+      value: `p:${p.id}`,
+      label: `${p.nombre?.trim() || 'Sin nombre'} · ${p.roles.includes('admin') ? 'gerencia' : 'jefe de patio'}`,
+    })),
+  ]
+  const esTrabajador = !aCosto && deQuien === 'trabajador'
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     if (enVueloRef.current) return
+    if (esTrabajador && !trabajadorKey) {
+      setError('Selecciona de qué trabajador es la cuenta')
+      return
+    }
     const parsed = abrirCuentaInputSchema.safeParse({
-      titular,
+      titular: esTrabajador || aCosto ? undefined : titular,
+      lavadorId: esTrabajador && trabajadorKey.startsWith('l:') ? trabajadorKey.slice(2) : undefined,
+      personaId: esTrabajador && trabajadorKey.startsWith('p:') ? trabajadorKey.slice(2) : undefined,
       nota: nota || undefined,
       abiertaPor,
       aCosto,
@@ -1129,29 +1160,76 @@ function AbrirCuentaModal({
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="custom-scroll flex max-h-[92vh] sm:max-h-[90vh] w-full max-w-sm flex-col overflow-y-auto rounded-t-2xl bg-white p-5 shadow-card-hover sm:rounded-t-3xl sm:rounded-2xl sm:p-6">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-neutral-900">Abrir cuenta</h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium text-neutral-700">A nombre de</span>
-            <input
-              autoFocus
-              value={titular}
-              onChange={(e) => setTitular(e.target.value)}
-              placeholder="p. ej. Andrés (lavador), acompañante del Mazda"
-              className="rounded-lg border border-neutral-300 px-3 py-3 text-base outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-            />
-          </label>
+    <Modal
+      title="Abrir cuenta"
+      subtitle="Para un trabajador (va a su deuda de tienda) o un cliente."
+      icon={UserPlus}
+      onClose={onClose}
+      onSubmit={handleSubmit}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button type="submit" variant="primary" loading={saving}>
+            {aCosto ? 'Abrir cuenta a costo' : 'Abrir cuenta'}
+          </Button>
+        </>
+      }
+    >
+        <div className="flex flex-col gap-4">
+          {aCosto ? null : (
+            <div className="flex flex-col gap-1.5 text-sm">
+              <span className="font-medium text-neutral-700">¿De quién es?</span>
+              <div className="grid grid-cols-2 gap-1 rounded-lg bg-neutral-100 p-1">
+                {(
+                  [
+                    ['trabajador', 'Un trabajador'],
+                    ['otro', 'Cliente u otro'],
+                  ] as const
+                ).map(([valor, label]) => (
+                  <button
+                    key={valor}
+                    type="button"
+                    onClick={() => {
+                      setDeQuien(valor)
+                      setError(null)
+                    }}
+                    className={`rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
+                      deQuien === valor ? 'bg-white text-neutral-900 shadow-card' : 'text-neutral-500 hover:text-neutral-700'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {esTrabajador ? (
+            <label className="flex flex-col gap-1.5 text-sm">
+              <span className="font-medium text-neutral-700">Trabajador</span>
+              <CustomSelect
+                value={trabajadorKey}
+                onChange={setTrabajadorKey}
+                placeholder={personasQuery.isPending ? 'Cargando…' : 'Lavador, jefe de patio o gerencia'}
+                options={opcionesTrabajador}
+              />
+              <span className="text-xs text-neutral-500">
+                Lo que se le cargue cuenta como su deuda de tienda: sale en su colilla y se le puede descontar o abonar.
+              </span>
+            </label>
+          ) : aCosto ? null : (
+            <label className="flex flex-col gap-1.5 text-sm">
+              <span className="font-medium text-neutral-700">A nombre de</span>
+              <input
+                autoFocus
+                value={titular}
+                onChange={(e) => setTitular(e.target.value)}
+                placeholder="p. ej. acompañante del Mazda"
+                className="rounded-lg border border-neutral-300 px-3 py-3 text-base outline-none transition-colors focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+              />
+            </label>
+          )}
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-medium text-neutral-700">
               Nota <span className="font-normal text-neutral-400">(opcional)</span>
@@ -1223,16 +1301,8 @@ function AbrirCuentaModal({
           ) : null}
 
           {error ? <p className="text-xs text-danger-600">{error}</p> : null}
-          <button
-            type="submit"
-            disabled={saving}
-            className="rounded-xl bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
-          >
-            {saving ? 'Abriendo…' : aCosto ? 'Abrir cuenta a costo' : 'Abrir cuenta'}
-          </button>
-        </form>
-      </div>
-    </div>
+        </div>
+    </Modal>
   )
 }
 
@@ -1281,6 +1351,14 @@ function CerrarCuentaModal({
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const enVueloRef = useRef(false)
+  // Cuenta que ya es de alguien (de un trabajador, 0089, o a costo, 0073): no se elige a quién cargar.
+  const deudorFijo: Deudor | null = cuenta.lavadorId
+    ? { tipo: 'lavador', id: cuenta.lavadorId }
+    : cuenta.personaId
+      ? { tipo: 'persona', id: cuenta.personaId }
+      : cuenta.aCosto && cuenta.destinatarioId
+        ? { tipo: 'persona', id: cuenta.destinatarioId }
+        : null
 
   const pagoLineasEfectivas: PagoLineaBorrador[] =
     pagoLineas.length === 1 ? [{ ...pagoLineas[0], monto: total > 0 ? String(total) : '' }] : pagoLineas
@@ -1294,13 +1372,11 @@ function CerrarCuentaModal({
       return
     }
     if (modo === 'lavador') {
-      if (!cuenta.aCosto && !lavadorId) {
+      if (!deudorFijo && !lavadorId) {
         setError('Selecciona a quién se le carga')
         return
       }
-      const deudor: Deudor = cuenta.aCosto
-        ? { tipo: 'persona', id: cuenta.destinatarioId ?? '' }
-        : { tipo: lavadorId.startsWith('l:') ? 'lavador' : 'persona', id: lavadorId.slice(2) }
+      const deudor: Deudor = deudorFijo ?? { tipo: lavadorId.startsWith('l:') ? 'lavador' : 'persona', id: lavadorId.slice(2) }
       setError(null)
       enVueloRef.current = true
       setSaving(true)
@@ -1334,20 +1410,31 @@ function CerrarCuentaModal({
   }
 
   return (
-    <div className="fixed inset-0 z-30 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="custom-scroll flex max-h-[92vh] sm:max-h-[90vh] w-full max-w-sm flex-col overflow-y-auto rounded-t-2xl bg-white p-5 shadow-card-hover sm:rounded-t-3xl sm:rounded-2xl sm:p-6">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-neutral-900">Cerrar cuenta — {cuenta.titular}</h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
+    <Modal
+      title={`Cerrar cuenta — ${cuenta.titular}`}
+      subtitle={`${items.length} producto${items.length === 1 ? '' : 's'}`}
+      icon={Wallet}
+      tone="success"
+      onClose={onClose}
+      onSubmit={handleSubmit}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button
+            type="submit"
+            variant="primary"
+            icon={Wallet}
+            loading={saving}
+            disabled={(modo === 'cobrar' && !cuadra) || (modo === 'lavador' && !deudorFijo && !lavadorId)}
           >
-            <X size={18} />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            {modo === 'cobrar' ? `Cobrar ${COP.format(total)}` : `Cargar ${COP.format(total)} como deuda`}
+          </Button>
+        </>
+      }
+    >
+        <div className="flex flex-col gap-4">
           {cuenta.aCosto ? (
             <p className="rounded-lg bg-primary-50 px-3 py-2 text-xs text-primary-700">Cuenta a costo — {cuenta.motivo}</p>
           ) : null}
@@ -1384,7 +1471,7 @@ function CerrarCuentaModal({
                 modo === 'lavador' ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-neutral-300 text-neutral-600 hover:bg-neutral-50'
               }`}
             >
-              Cargar a un trabajador
+              {deudorFijo ? 'Pasar a su deuda' : 'Cargar a un trabajador'}
             </button>
           </div>
 
@@ -1395,7 +1482,7 @@ function CerrarCuentaModal({
             </div>
           ) : (
             <div className="flex flex-col gap-1.5 text-sm">
-              {cuenta.aCosto ? null : (
+              {deudorFijo ? null : (
                 <>
                   <span className="font-medium text-neutral-700">¿A quién se le carga?</span>
                   <CustomSelect
@@ -1407,8 +1494,8 @@ function CerrarCuentaModal({
                 </>
               )}
               <p className="rounded-lg bg-warning-50 px-3 py-2 text-xs text-warning-700">
-                No entra plata hoy — el total ({COP.format(total)}) queda como deuda de esa persona: la paga con abonos o
-                se le descuenta al liquidar.
+                No entra plata hoy — el total ({COP.format(total)}) queda como deuda de tienda de{' '}
+                {deudorFijo ? cuenta.titular : 'esa persona'}: la paga con abonos o se le descuenta al liquidar.
               </p>
             </div>
           )}
@@ -1424,17 +1511,8 @@ function CerrarCuentaModal({
 
           {error ? <p className="text-xs text-danger-600">{error}</p> : null}
 
-          <button
-            type="submit"
-            disabled={saving || (modo === 'cobrar' && !cuadra) || (modo === 'lavador' && !cuenta.aCosto && !lavadorId)}
-            className="flex items-center justify-center gap-2 rounded-xl bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
-          >
-            <Wallet size={16} />
-            {saving ? 'Cerrando…' : modo === 'cobrar' ? `Cobrar ${COP.format(total)}` : `Cargar ${COP.format(total)} como deuda`}
-          </button>
-        </form>
-      </div>
-    </div>
+        </div>
+    </Modal>
   )
 }
 
@@ -1478,23 +1556,25 @@ function AnularCuentaModal({
   }
 
   return (
-    <div className="fixed inset-0 z-30 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="w-full max-w-md rounded-t-3xl sm:rounded-2xl custom-scroll max-h-[92vh] overflow-y-auto bg-white sm:max-h-[88vh] p-6 shadow-card-hover">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-neutral-900">Anular cuenta — {cuenta.titular}</h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-        <p className="mb-4 text-xs text-neutral-500">
-          Sus productos quedan anulados sin cobrar. Si ya se pagó por fuera, no la anules: ciérrala con el método real.
-          Queda visible en reportes con el motivo (control antifraude).
-        </p>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+    <Modal
+      title={`Anular cuenta — ${cuenta.titular}`}
+      subtitle="Sus productos quedan anulados sin cobrar. Si ya se pagó por fuera, no la anules: ciérrala con el método real."
+      icon={Ban}
+      tone="danger"
+      onClose={onClose}
+      onSubmit={handleSubmit}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button type="submit" variant="danger" loading={saving}>
+            Anular cuenta
+          </Button>
+        </>
+      }
+    >
+        <div className="flex flex-col gap-4">
           <DestinoProductoAnulado value={seConsumio} onChange={setSeConsumio} plural />
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-medium text-neutral-700">Motivo</span>
@@ -1516,24 +1596,7 @@ function AnularCuentaModal({
             />
           </label>
           {error ? <p className="text-xs text-danger-600">{error}</p> : null}
-          <div className="flex justify-end gap-2 border-t border-neutral-100 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg px-4 py-2 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-100"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-lg bg-danger-600 px-4 py-2 text-sm font-medium text-white shadow-nav-active transition-colors hover:bg-danger-700 disabled:opacity-60"
-            >
-              {saving ? 'Anulando…' : 'Anular cuenta'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </div>
+    </Modal>
   )
 }

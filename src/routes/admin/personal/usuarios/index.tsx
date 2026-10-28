@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { Pencil, X, Plus, UserPlus, KeyRound, Copy, Check, Loader2, UserRound } from 'lucide-react'
+import { Pencil, Plus, UserPlus, KeyRound, Copy, Check, Loader2, UserRound } from 'lucide-react'
 import {
   fetchPerfiles,
   fetchEmailUsuario,
@@ -19,6 +19,7 @@ import {
 } from '../../../../schemas/perfil'
 import { USE_LOCAL_DB } from '../../../../lib/db'
 import { Card } from '../../../../components/layout/Card'
+import { Modal } from '../../../../components/layout/Modal'
 import { BarraFiltros, FiltroCombo, FiltroMenu } from '../../../../components/layout/Filtros'
 import { coincide } from '../../../../lib/tableFilters'
 import { toast } from '../../../../lib/toast'
@@ -405,6 +406,7 @@ function CredencialFila({ label, valor }: { label: string; valor: string }) {
   )
 }
 
+// Envoltorio de los modales de usuarios sobre el Modal del sistema (mismas props de siempre).
 function ModalShell({ title, subtitle, icon, onClose, children }: {
   title: string
   subtitle?: string
@@ -413,27 +415,18 @@ function ModalShell({ title, subtitle, icon, onClose, children }: {
   children: ReactNode
 }) {
   return (
-    <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="w-full max-w-lg rounded-t-3xl sm:rounded-2xl custom-scroll max-h-[92vh] overflow-y-auto bg-white sm:max-h-[88vh] p-6 shadow-card-hover sm:p-7">
-        <div className="mb-5 flex items-center justify-between">
-          <div>
-            <h3 className="flex items-center gap-2 text-base font-semibold text-neutral-900">
-              {icon}
-              {title}
-            </h3>
-            {subtitle ? <p className="text-xs text-neutral-500">{subtitle}</p> : null}
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
+    <Modal
+      title={
+        <span className="flex items-center gap-2">
+          {icon}
+          {title}
+        </span>
+      }
+      subtitle={subtitle}
+      onClose={onClose}
+    >
+      {children}
+    </Modal>
   )
 }
 

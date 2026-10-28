@@ -1,7 +1,8 @@
-import { Printer, X } from 'lucide-react'
+import { FileText } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import type { GastoConCategoria } from '../../data/gastos'
 import { EncabezadoTiquete } from './EncabezadoTiquete'
+import { ComprobanteModal } from './ComprobanteModal'
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 const FECHA = new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium' })
@@ -14,72 +15,31 @@ function referencia(gasto: GastoConCategoria): string {
   return `EGR-${gasto.id.slice(0, 8).toUpperCase()}`
 }
 
-// Comprobante de egreso para un gasto ya registrado — mismo patrón pantalla + portal a
-// document.body que ReciboModal/ColillaLiquidacionModal, térmica de 58mm, con bloques de firma
-// para quien emite y quien recibe.
+// Comprobante de egreso para un gasto ya registrado — vista con ComprobanteModal; lo que se
+// imprime es ComprobanteEgresoPrint (térmica 58mm, con bloques de firma para quien emite y quien
+// recibe).
 export function ComprobanteEgresoModal({ gasto, onClose }: { gasto: GastoConCategoria; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-30 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="custom-scroll max-h-[92vh] sm:max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-t-3xl sm:rounded-2xl bg-white p-6 shadow-card-hover">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-semibold text-neutral-900">Comprobante de egreso</h3>
-            <p className="text-xs text-neutral-500">{referencia(gasto)}</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="flex flex-col gap-3 text-sm">
-          <CampoResumen label="Fecha" valor={FECHA.format(new Date(`${gasto.fecha}T00:00:00`))} />
-          <CampoResumen label="Categoría" valor={gasto.categoriaNombre} />
-          <CampoResumen label="Descripción" valor={gasto.descripcion} />
-          <CampoResumen label="Responsable" valor={gasto.responsable} />
-          <CampoResumen label="Origen" valor={gasto.origen === 'caja' ? 'Caja' : 'Otro'} />
-        </div>
-
-        <div className="mt-3 flex items-center justify-between rounded-lg bg-primary-50 px-3 py-2.5 text-sm">
-          <span className="font-medium text-primary-900">Monto del egreso</span>
-          <span className="text-lg font-bold text-primary-700">{COP.format(gasto.monto)}</span>
-        </div>
-
-        <p className="mt-3 text-[11px] leading-relaxed text-neutral-400">
-          Al imprimir se deja espacio en blanco para la firma de quien emite el egreso y de quien lo recibe.
-        </p>
-
-        <button
-          type="button"
-          onClick={() => window.print()}
-          className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-neutral-200 py-3 text-sm font-semibold text-neutral-700 transition-colors hover:bg-neutral-50"
-        >
-          <Printer size={16} />
-          Imprimir comprobante
-        </button>
-        <button
-          type="button"
-          onClick={onClose}
-          className="mt-2.5 w-full rounded-xl bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700"
-        >
-          Cerrar
-        </button>
-        <p className="mt-2.5 text-center text-[11px] text-neutral-400">Impresión pensada para POS térmica de 58mm.</p>
-      </div>
-      <ComprobanteEgresoPrint gasto={gasto} />
-    </div>
-  )
-}
-
-function CampoResumen({ label, valor }: { label: string; valor: string }) {
-  return (
-    <div className="flex items-center justify-between gap-3 border-b border-neutral-100 pb-2 last:border-0 last:pb-0">
-      <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">{label}</span>
-      <span className="text-right font-medium text-neutral-900">{valor}</span>
-    </div>
+    <ComprobanteModal
+      titulo="Comprobante de egreso"
+      referencia={referencia(gasto)}
+      icon={FileText}
+      total={{
+        label: 'Monto del egreso',
+        valor: COP.format(gasto.monto),
+        nota: 'Al imprimir queda espacio para la firma de quien emite el egreso y de quien lo recibe.',
+      }}
+      datos={[
+        { label: 'Fecha', valor: FECHA.format(new Date(`${gasto.fecha}T00:00:00`)) },
+        { label: 'Categoría', valor: gasto.categoriaNombre },
+        { label: 'Descripción', valor: gasto.descripcion, ancho: true },
+        { label: 'Responsable', valor: gasto.responsable },
+        { label: 'Origen', valor: gasto.origen === 'caja' ? 'Caja' : 'Otro' },
+      ]}
+      imprimirLabel="Imprimir comprobante"
+      onClose={onClose}
+      impresion={<ComprobanteEgresoPrint gasto={gasto} />}
+    />
   )
 }
 

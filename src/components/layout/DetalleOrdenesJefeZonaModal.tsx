@@ -1,4 +1,6 @@
-import { X, ShieldCheck } from 'lucide-react'
+import { ShieldCheck } from 'lucide-react'
+import { Modal } from './Modal'
+import { Button } from './Button'
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 const FECHA_HORA = new Intl.DateTimeFormat('es-CO', { dateStyle: 'short', timeStyle: 'short' })
@@ -28,31 +30,25 @@ export function DetalleOrdenesJefeZonaModal({ responsable, filas, onClose }: Pro
   const totalPrecio = filas.reduce((s, f) => s + f.precio, 0)
 
   return (
-    <div className="fixed inset-0 z-30 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="flex max-h-[92vh] sm:max-h-[90vh] w-full max-w-2xl flex-col rounded-t-3xl sm:rounded-2xl bg-white p-6 shadow-card-hover sm:p-7">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
-              <ShieldCheck size={18} strokeWidth={2} />
-            </span>
-            <div className="min-w-0 pt-1">
-              <h3 className="text-base font-semibold text-neutral-900">Órdenes sin liquidar — {responsable}</h3>
-              <p className="mt-1 text-sm text-neutral-500">
-                {filas.length} orden{filas.length === 1 ? '' : 'es'} · comisión de jefe de patio por cobrar{' '}
-                <span className="font-medium text-neutral-700">{COP.format(totalComision)}</span>
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="custom-scroll mt-5 -mx-1 flex-1 overflow-auto">
+    <Modal
+      title={`Órdenes sin liquidar — ${responsable}`}
+      subtitle={
+        <>
+          {filas.length} orden{filas.length === 1 ? '' : 'es'} · comisión por cobrar{' '}
+          <span className="font-semibold text-neutral-700">{COP.format(totalComision)}</span>
+        </>
+      }
+      icon={ShieldCheck}
+      size="xl"
+      flush
+      onClose={onClose}
+      footer={
+        <Button variant="ghost" onClick={onClose}>
+          Cerrar
+        </Button>
+      }
+    >
+        <div className="custom-scroll overflow-x-auto px-3 py-2 sm:px-4">
           <table className="w-full min-w-[30rem] text-sm">
             <thead>
               <tr className="border-b border-neutral-200 text-left text-xs font-medium uppercase tracking-wide text-neutral-500">
@@ -107,17 +103,6 @@ export function DetalleOrdenesJefeZonaModal({ responsable, filas, onClose }: Pro
             ) : null}
           </table>
         </div>
-
-        <div className="mt-5 flex justify-end border-t border-neutral-100 pt-4">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg px-4 py-2 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-100"
-          >
-            Cerrar
-          </button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   )
 }

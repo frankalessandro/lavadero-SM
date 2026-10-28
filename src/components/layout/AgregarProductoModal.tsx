@@ -1,15 +1,17 @@
-import { useRef, useState, type FormEvent } from 'react'
-import { X, Minus, Plus } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { Minus, PackagePlus, Plus } from 'lucide-react'
 import type { Producto } from '../../schemas/producto'
 import { agruparPorSeccion } from '../../lib/seccionProductos'
 import { toast } from '../../lib/toast'
+import { Modal } from './Modal'
+import { Button } from './Button'
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
 
 // Cargar productos de nevera a un destino pendiente (una orden en espera, o una cuenta abierta a
-// nombre de alguien) — se acumulan como 'pendiente' y se cobran juntos al entregar/cerrar. Hoja
-// anclada abajo en móvil (mismo patrón que CobroModal), grilla de productos como botones grandes
-// + carrito con steppers. Genérico: el caller decide a qué destino va cada línea (`onAgregar`).
+// nombre de alguien) — se acumulan como 'pendiente' y se cobran juntos al entregar/cerrar. Grilla
+// de productos como botones grandes (un toque suma uno) con stepper al elegir; el pie dice cuántos
+// van y cuánto suman. Genérico: el caller decide a qué destino va cada línea (`onAgregar`).
 export function AgregarProductoModal({
   titulo,
   subtitulo,
@@ -50,13 +52,13 @@ export function AgregarProductoModal({
   }
 
   const lineas = [...carrito.entries()]
+  const unidades = lineas.reduce((s, [, c]) => s + c, 0)
   const total = lineas.reduce((suma, [id, cant]) => {
     const p = productos.find((x) => x.id === id)
     return suma + (p?.precioVenta ?? 0) * cant
   }, 0)
 
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault()
+  async function handleSubmit() {
     if (enVueloRef.current) return
     if (lineas.length === 0) return
     setError(null)
@@ -67,7 +69,7 @@ export function AgregarProductoModal({
         await onAgregar(productoId, cantidad)
       }
       onClose()
-      toast.exito('Producto agregado a la orden')
+      toast.exito(unidades === 1 ? 'Producto agregado' : `${unidades} productos agregados`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo agregar el producto')
       toast.desdeError(err, 'No se pudo agregar el producto')
@@ -78,105 +80,97 @@ export function AgregarProductoModal({
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex items-end justify-center bg-neutral-900/40 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="flex max-h-[92vh] sm:max-h-[90vh] w-full max-w-sm flex-col rounded-t-2xl bg-white p-5 shadow-card-hover sm:rounded-t-3xl sm:rounded-2xl sm:p-6">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-semibold text-neutral-900">{titulo}</h3>
-            <p className="text-xs text-neutral-500">{subtitulo}</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="flex min-h-0 flex-col gap-4">
-          <div className="custom-scroll flex min-h-0 flex-col gap-3 overflow-y-auto">
-            {disponibles.length === 0 ? (
-              <p className="rounded-lg bg-neutral-50 px-4 py-6 text-center text-sm text-neutral-500">
-                No hay productos con existencias. Registra una entrada en Inventario para poder venderlos.
-              </p>
-            ) : null}
-            {agruparPorSeccion(disponibles).map((g) => (
-              <div key={g.key} className="flex flex-col gap-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-neutral-400">{g.label}</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {g.productos.map((p) => {
-                    const stock = stockPorProducto.get(p.id) ?? 0
-                    const cant = carrito.get(p.id) ?? 0
-                    const agotado = stock <= 0
-                    const tope = cant >= stock
-                    return (
-                      <div
-                        key={p.id}
-                        className={`flex flex-col gap-1.5 rounded-lg border p-2.5 text-left transition-colors ${
-                          cant > 0 ? 'border-primary-500 bg-primary-50' : 'border-neutral-200'
-                        } ${agotado ? 'opacity-50' : ''}`}
-                      >
+    <Modal
+      title={titulo}
+      subtitle={subtitulo}
+      icon={PackagePlus}
+      onClose={onClose}
+      footer={
+        <>
+          <span className="mr-auto hidden self-center text-sm text-neutral-500 sm:block">
+            {unidades > 0 ? (
+              <>
+                {unidades} {unidades === 1 ? 'producto' : 'productos'} · <span className="font-semibold text-neutral-900">{COP.format(total)}</span>
+              </>
+            ) : (
+              'Toca un producto para sumarlo'
+            )}
+          </span>
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button variant="primary" icon={Plus} loading={saving} disabled={lineas.length === 0} onClick={() => void handleSubmit()}>
+            {lineas.length === 0 ? 'Elige productos' : `Agregar ${unidades} · ${COP.format(total)}`}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-5">
+        {disponibles.length === 0 ? (
+          <p className="rounded-xl bg-neutral-50 px-4 py-6 text-center text-sm text-neutral-500">
+            {productos.length === 0
+              ? 'No hay productos con precio de venta configurado.'
+              : 'No hay productos con existencias. Registra una entrada en Inventario para poder venderlos.'}
+          </p>
+        ) : null}
+        {agruparPorSeccion(disponibles).map((g) => (
+          <section key={g.key} className="flex flex-col gap-2">
+            <h4 className="text-[11px] font-semibold tracking-wide text-neutral-500 uppercase">{g.label}</h4>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {g.productos.map((p) => {
+                const stock = stockPorProducto.get(p.id) ?? 0
+                const cant = carrito.get(p.id) ?? 0
+                const tope = cant >= stock
+                return (
+                  <div
+                    key={p.id}
+                    className={`flex flex-col justify-between gap-2 rounded-xl border p-3 transition-colors ${
+                      cant > 0 ? 'border-primary-500 bg-primary-50/60 ring-1 ring-primary-500' : 'border-neutral-200 hover:border-neutral-300'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      disabled={tope}
+                      onClick={() => setCantidad(p.id, cant + 1)}
+                      className="flex flex-col gap-0.5 text-left disabled:cursor-not-allowed"
+                    >
+                      <span className="text-sm leading-snug font-medium text-neutral-800">{p.nombre}</span>
+                      <span className="text-sm font-semibold text-neutral-900">{COP.format(p.precioVenta ?? 0)}</span>
+                      <span className={`text-[11px] ${stock <= 3 ? 'font-medium text-warning-700' : 'text-neutral-400'}`}>
+                        {stock === 1 ? 'Queda 1' : `Quedan ${stock}`}
+                      </span>
+                    </button>
+                    {cant > 0 ? (
+                      <div className="flex items-center justify-between rounded-lg bg-white p-0.5 shadow-card">
                         <button
                           type="button"
-                          disabled={agotado || tope}
-                          onClick={() => setCantidad(p.id, cant + 1)}
-                          className="text-left disabled:cursor-not-allowed"
+                          onClick={() => setCantidad(p.id, cant - 1)}
+                          aria-label={`Quitar uno de ${p.nombre}`}
+                          className="flex size-8 items-center justify-center rounded-md text-neutral-600 transition-colors hover:bg-neutral-100"
                         >
-                          <span className="block text-sm font-medium text-neutral-800">{p.nombre}</span>
-                          <span className="block text-xs text-neutral-500">
-                            {COP.format(p.precioVenta ?? 0)} · quedan {stock}
-                          </span>
+                          <Minus size={14} />
                         </button>
-                        {cant > 0 ? (
-                          <div className="flex items-center justify-between rounded-md bg-white px-1 py-0.5">
-                            <button
-                              type="button"
-                              onClick={() => setCantidad(p.id, cant - 1)}
-                              className="flex size-6 items-center justify-center rounded text-neutral-600 hover:bg-neutral-100"
-                            >
-                              <Minus size={13} />
-                            </button>
-                            <span className="text-sm font-semibold text-neutral-900">{cant}</span>
-                            <button
-                              type="button"
-                              disabled={tope}
-                              onClick={() => setCantidad(p.id, cant + 1)}
-                              className="flex size-6 items-center justify-center rounded text-neutral-600 hover:bg-neutral-100 disabled:opacity-30"
-                            >
-                              <Plus size={13} />
-                            </button>
-                          </div>
-                        ) : null}
+                        <span className="text-sm font-bold text-neutral-900">{cant}</span>
+                        <button
+                          type="button"
+                          disabled={tope}
+                          onClick={() => setCantidad(p.id, cant + 1)}
+                          aria-label={`Sumar uno de ${p.nombre}`}
+                          className="flex size-8 items-center justify-center rounded-md text-neutral-600 transition-colors hover:bg-neutral-100 disabled:opacity-30"
+                        >
+                          <Plus size={14} />
+                        </button>
                       </div>
-                    )
-                  })}
-                </div>
-              </div>
-            ))}
-            {productos.length === 0 ? (
-              <p className="py-6 text-center text-xs text-neutral-400">
-                No hay productos con precio de venta configurado.
-              </p>
-            ) : null}
-          </div>
+                    ) : null}
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+        ))}
 
-          {error ? <p className="text-xs text-danger-600">{error}</p> : null}
-
-          <button
-            type="submit"
-            disabled={saving || lineas.length === 0}
-            className="flex items-center justify-center gap-2 rounded-xl bg-primary-600 py-3 text-sm font-semibold text-white shadow-nav-active transition-colors hover:bg-primary-700 disabled:opacity-60"
-          >
-            <Plus size={16} />
-            {saving
-              ? 'Agregando…'
-              : lineas.length === 0
-                ? 'Elige productos'
-                : `Agregar ${lineas.reduce((s, [, c]) => s + c, 0)} · ${COP.format(total)}`}
-          </button>
-        </form>
+        {error ? <p className="rounded-lg bg-danger-50 px-3 py-2.5 text-sm text-danger-700">{error}</p> : null}
       </div>
-    </div>
+    </Modal>
   )
 }
