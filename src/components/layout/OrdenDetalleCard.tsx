@@ -98,6 +98,12 @@ export function OrdenDetalleCard({
             <span>−{COP.format(o.descuento)}</span>
           </div>
         ) : null}
+        {o.descuentoLavador > 0 ? (
+          <div className="flex items-center justify-between text-xs text-neutral-500">
+            <span>Del descuento: lo asume el lavador (sale de su comisión)</span>
+            <span>{COP.format(o.descuentoLavador)}</span>
+          </div>
+        ) : null}
         {productos.map((v) => (
           <div key={v.id} className="flex items-center justify-between text-neutral-600">
             <span>

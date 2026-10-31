@@ -64,19 +64,21 @@ export function Topbar({
                 <Icon size={19} strokeWidth={2} />
               </span>
             ) : null}
-            <div className="min-w-0 leading-tight">
-              <nav aria-label="Ubicación" className="flex min-w-0 items-center gap-1 text-xs font-medium text-neutral-400">
-                {eyebrowTo ? (
-                  <Link to={eyebrowTo} className="truncate transition-colors hover:text-primary-600">
-                    {eyebrow}
-                  </Link>
-                ) : (
-                  <span className="truncate">{eyebrow}</span>
-                )}
-                <ChevronRight size={12} className="shrink-0 text-neutral-300" />
-              </nav>
-              <h1 className="truncate text-lg font-semibold tracking-tight text-neutral-900 sm:text-xl">{title}</h1>
-            </div>
+            {/* Una sola línea "Área › Pantalla", centrada con la ficha del ícono. */}
+            <nav aria-label="Ubicación" className="flex min-w-0 items-center gap-1.5">
+              {eyebrowTo ? (
+                <Link
+                  to={eyebrowTo}
+                  className="hidden shrink-0 text-sm font-medium text-neutral-400 transition-colors hover:text-primary-600 sm:inline"
+                >
+                  {eyebrow}
+                </Link>
+              ) : (
+                <span className="hidden shrink-0 text-sm font-medium text-neutral-400 sm:inline">{eyebrow}</span>
+              )}
+              <ChevronRight size={14} className="hidden shrink-0 text-neutral-300 sm:block" />
+              <h1 className="truncate py-0.5 text-lg font-semibold leading-tight tracking-tight text-neutral-900 sm:text-xl">{title}</h1>
+            </nav>
           </div>
         ) : (
           <h1 className="truncate bg-gradient-to-r from-primary-700 via-primary-600 to-primary-400 bg-clip-text font-display text-xl font-bold tracking-tight text-transparent">

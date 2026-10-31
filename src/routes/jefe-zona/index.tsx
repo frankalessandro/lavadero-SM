@@ -461,22 +461,31 @@ function JefeZonaDashboard() {
   // `pagos`, así que se muestran aparte como acumulado por cobrar.
   const productosPorCobrar = ventasPendientes.reduce((s, v) => s + v.total, 0)
 
-  // Tiempo de lavado de hoy (M3), por combo y por lavador — mide solo el lavado en sí
-  // (creado→listo, `tiempoLavadoSegundos`), no el ciclo completo. Antes se calculaba como
-  // entregadaEn−creadoEn, pero eso mezclaba el lavado con cuánto se demora el CLIENTE en venir
-  // a recoger — un combo podía verse "lento" solo porque a sus clientes les gusta dejar el carro
-  // más tiempo, sin que el lavado en sí tardara más. Con las columnas fijas en cada orden
-  // (ver M3/M9) separamos las dos cosas: esto sí varía por combo/lavador (tiene sentido como
-  // chart), la espera del cliente no depende de ninguno de los dos (por eso va como un solo
-  // número más abajo, no como una tercera barra sin lógica real detrás).
+  // Tiempos de hoy (M3), en tres etapas que no se mezclan (0093): espera por lavador
+  // (creado→asignado), lavado (asignado→listo, `tiempoLavadoSegundos`) y espera para recoger
+  // (listo→entregado). El lavado además se parte por combo y por lavador. Las órdenes anteriores a
+  // 0093 no tienen `asignadoEn`: no aportan a la espera por lavador y su lavado cuenta desde creado.
+  // El lavado no incluye la espera del CLIENTE para recoger (antes se medía entregada−creada y un
+  // combo se veía "lento" solo porque a sus clientes les gusta dejar el carro más tiempo); esa
+  // espera no depende de combo ni de lavador, así que va como un solo número.
   const promedios = useMemo(() => {
     const porCombo = new Map<string, { total: number; cantidad: number }>()
     const porLavador = new Map<string, { total: number; cantidad: number }>()
     let esperaTotal = 0
     let esperaCantidad = 0
+    let colaTotal = 0
+    let colaCantidad = 0
+    let lavadoTotal = 0
+    let lavadoCantidad = 0
     for (const orden of entregadasHoy) {
+      if (orden.asignadoEn) {
+        colaTotal += Math.max(0, new Date(orden.asignadoEn).getTime() - new Date(orden.creadoEn).getTime()) / 60000
+        colaCantidad += 1
+      }
       if (orden.tiempoLavadoSegundos != null) {
         const minutos = orden.tiempoLavadoSegundos / 60
+        lavadoTotal += minutos
+        lavadoCantidad += 1
         // Órdenes sin combo (solo servicios individuales) no aportan a este promedio "por
         // combo" — no hay combo que promediar.
         if (orden.comboId) {
@@ -513,6 +522,8 @@ function JefeZonaDashboard() {
         promedio: v.total / v.cantidad,
       })),
       esperaPromedioMinutos: esperaCantidad > 0 ? esperaTotal / esperaCantidad : undefined,
+      colaPromedioMinutos: colaCantidad > 0 ? colaTotal / colaCantidad : undefined,
+      lavadoPromedioMinutos: lavadoCantidad > 0 ? lavadoTotal / lavadoCantidad : undefined,
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entregadasHoy])
@@ -522,8 +533,16 @@ function JefeZonaDashboard() {
   function progresoLavado(orden: Orden): { progreso?: number; promedioTexto?: string } {
     const promedio = orden.comboId ? promedios.minutosPorComboId.get(orden.comboId) : undefined
     if (!promedio) return {}
-    const minutos = (ahora - new Date(orden.creadoEn).getTime()) / 60000
+    const minutos = (ahora - new Date(orden.asignadoEn ?? orden.creadoEn).getTime()) / 60000
     return { progreso: minutos / promedio, promedioTexto: `prom. ${formatMinutos(promedio)}` }
+  }
+
+  // Cuánto esperó en cola antes de tener lavador — solo si se registró la hora de asignación
+  // (0093) y la espera fue de al menos un minuto.
+  function esperaEnCola(orden: Orden): string | undefined {
+    if (!orden.lavadorId || !orden.asignadoEn) return undefined
+    const minutos = (new Date(orden.asignadoEn).getTime() - new Date(orden.creadoEn).getTime()) / 60000
+    return minutos >= 1 ? formatMinutos(minutos) : undefined
   }
 
   async function handleCobrado(orden: Orden, pagos: PagoLineaInput[], descuento?: DescuentoResumen) {
@@ -756,7 +775,11 @@ function JefeZonaDashboard() {
                   lavadorNombre2={orden.lavadorId2 ? lavadorNombre(orden.lavadorId2) : undefined}
                   tipoVehiculoNombre={tipoVehiculo(orden.tipoVehiculoId)?.nombre ?? '—'}
                   esMoto={tipoVehiculo(orden.tipoVehiculoId)?.categoria === 'moto'}
-                  tiempoTexto={tiempoTranscurrido(orden.creadoEn, ahora)}
+                  tiempoTexto={tiempoTranscurrido(
+                    orden.lavadorId ? (orden.asignadoEn ?? orden.creadoEn) : orden.creadoEn,
+                    ahora,
+                  )}
+                  esperaTexto={esperaEnCola(orden)}
                   {...progresoLavado(orden)}
                   productosPendientes={ventasPendientesPorOrden.get(orden.id) ?? []}
                   productoNombre={productoNombre}
@@ -838,24 +861,38 @@ function JefeZonaDashboard() {
           detrás (ver comentario de `promedios` arriba). */}
       {entregadasHoy.length > 0 ? (
         <Card>
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-            <h3 className="flex items-center gap-1.5 text-sm font-semibold text-neutral-900">
-              <Timer size={15} className="text-primary-500" />
-              Tiempo de lavado (hoy)
-            </h3>
-            {promedios.esperaPromedioMinutos !== undefined ? (
-              <p className="text-xs text-neutral-500">
-                Espera promedio para recoger:{' '}
-                <span className="font-semibold text-neutral-900">{formatMinutos(promedios.esperaPromedioMinutos)}</span>
-              </p>
-            ) : null}
+          <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-neutral-900">
+            <Timer size={15} className="text-primary-500" />
+            Tiempos promedio (hoy, vehículos entregados)
+          </h3>
+          {/* Las tres etapas de un vehículo, en orden, sin mezclarse. */}
+          <div className="mb-5 grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <EtapaTiempo
+              paso={1}
+              titulo="Esperando lavador"
+              detalle="De registrado a lavador asignado"
+              minutos={promedios.colaPromedioMinutos}
+            />
+            <EtapaTiempo
+              paso={2}
+              titulo="Lavado"
+              detalle="De lavador asignado a listo"
+              minutos={promedios.lavadoPromedioMinutos}
+            />
+            <EtapaTiempo
+              paso={3}
+              titulo="Esperando que recojan"
+              detalle="De listo a entregado"
+              minutos={promedios.esperaPromedioMinutos}
+            />
           </div>
+          <p className="mb-2 text-xs font-semibold text-neutral-700">Lavado, desglosado</p>
           {promedios.porCombo.length === 0 ? (
             <p className="py-6 text-center text-sm text-neutral-400">Sin datos de tiempo de lavado hoy todavía.</p>
           ) : (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               <div>
-                <p className="mb-2 text-xs font-medium text-neutral-500">Por combo</p>
+                <p className="mb-2 text-xs font-medium text-neutral-500">Por combo (todos los lavadores)</p>
                 {promedios.porCombo.length > 2 ? (
                   <BarChart
                     labels={promedios.porCombo.map((p) => p.nombre)}
@@ -875,7 +912,7 @@ function JefeZonaDashboard() {
                 )}
               </div>
               <div>
-                <p className="mb-2 text-xs font-medium text-neutral-500">Por lavador</p>
+                <p className="mb-2 text-xs font-medium text-neutral-500">Por lavador (todos los combos)</p>
                 {promedios.porLavador.length > 2 ? (
                   <BarChart
                     labels={promedios.porLavador.map((p) => p.nombre)}
@@ -1141,6 +1178,33 @@ function CajaFila({ icon: Icon, label, valor }: { icon: typeof Banknote; label: 
 // Las acciones de apoyo son botones con ícono en una barra baja (en celular, los de menos uso
 // quedan solo con el ícono). La barra delgada de arriba es el estado:
 // en proceso se llena con el tiempo contra el promedio del combo hoy, listo es verde sólida.
+function EtapaTiempo({
+  paso,
+  titulo,
+  detalle,
+  minutos,
+}: {
+  paso: number
+  titulo: string
+  detalle: string
+  minutos: number | undefined
+}) {
+  return (
+    <div className="flex flex-col gap-0.5 rounded-xl border border-neutral-200 px-3.5 py-3">
+      <span className="flex items-center gap-1.5 text-xs font-medium text-neutral-500">
+        <span className="flex size-[18px] items-center justify-center rounded-full bg-primary-50 text-[11px] font-bold text-primary-700">
+          {paso}
+        </span>
+        {titulo}
+      </span>
+      <span className="text-xl font-semibold tabular-nums text-neutral-900">
+        {minutos !== undefined ? formatMinutos(minutos) : '—'}
+      </span>
+      <span className="text-[11px] text-neutral-400">{detalle}</span>
+    </div>
+  )
+}
+
 function OrdenCard({
   orden,
   comboNombre,
@@ -1149,6 +1213,7 @@ function OrdenCard({
   tipoVehiculoNombre,
   esMoto,
   tiempoTexto,
+  esperaTexto,
   progreso,
   promedioTexto,
   productosPendientes,
@@ -1174,7 +1239,11 @@ function OrdenCard({
   lavadorNombre2?: string
   tipoVehiculoNombre: string
   esMoto: boolean
+  /** Tiempo de la etapa en que está: esperando lavador, lavando (desde que se asignó) o esperando
+   *  que lo recojan (desde que quedó listo). */
   tiempoTexto: string
+  /** Lavando: cuánto esperó en cola antes de tener lavador ("8 min"), si esperó. */
+  esperaTexto?: string
   /** En proceso: tiempo transcurrido / promedio del combo hoy (puede pasar de 1). Sin promedio, undefined. */
   progreso?: number
   /** "prom. 35 min" — se muestra junto al tiempo cuando hay promedio del combo. */
@@ -1210,10 +1279,10 @@ function OrdenCard({
   const atrasado = progreso !== undefined && progreso > 1
 
   const estado = sinAsignar
-    ? { label: 'En cola · sin lavador', chip: 'bg-danger-50 text-danger-700', punto: 'bg-danger-600' }
+    ? { label: 'Esperando lavador', chip: 'bg-danger-50 text-danger-700', punto: 'bg-danger-600' }
     : enProceso
       ? { label: 'Lavando', chip: 'bg-warning-50 text-warning-700', punto: 'bg-warning-600' }
-      : { label: 'Listo', chip: 'bg-success-50 text-success-700', punto: 'bg-success-600' }
+      : { label: 'Listo · por recoger', chip: 'bg-success-50 text-success-700', punto: 'bg-success-600' }
 
   const botonBarra =
     'flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-medium text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900'
@@ -1257,9 +1326,16 @@ function OrdenCard({
             </span>
             <span className={`flex items-center gap-1 text-xs ${atrasado ? 'font-semibold text-danger-700' : 'text-neutral-500'}`}>
               <Clock size={12} className="shrink-0" />
-              {enProceso ? tiempoTexto : `hace ${tiempoTexto}`}
-              {enProceso && promedioTexto ? <span className="font-normal text-neutral-400">· {promedioTexto}</span> : null}
+              {tiempoTexto}
+              {enProceso && !sinAsignar && promedioTexto ? (
+                <span className="font-normal text-neutral-400">· {promedioTexto}</span>
+              ) : null}
             </span>
+            {esperaTexto ? (
+              <span className="text-xs text-neutral-400" title="Tiempo en cola antes de asignarle lavador">
+                esperó {esperaTexto}
+              </span>
+            ) : null}
             {deOtroDia ? (
               <span className="inline-flex items-center gap-1 rounded-full bg-danger-600/10 px-2 py-0.5 text-[11px] font-semibold text-danger-700">
                 <AlertTriangle size={11} />
@@ -1275,7 +1351,7 @@ function OrdenCard({
           </div>
 
           <p className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-sm text-neutral-600">
-            <span className="truncate font-semibold text-neutral-800">{orden.clienteNombre}</span>
+            <span className="min-w-0 truncate font-semibold text-neutral-800">{orden.clienteNombre}</span>
             <span className="text-neutral-300">·</span>
             <span className="flex items-center gap-1">
               {esMoto ? <Motorbike size={14} className="text-neutral-400" /> : <Car size={14} className="text-neutral-400" />}
@@ -1421,8 +1497,9 @@ function OrdenCard({
         </div>
       </div>
 
-      {/* Barra de apoyo: lo frecuente a la vista, el resto en "Más" */}
-      <div className="flex items-center gap-0.5 border-t border-neutral-100 px-2 py-1.5">
+      {/* Barra de apoyo: baja a una segunda línea si no cabe (celular, o las dos columnas del
+          tablero) en vez de salirse de la tarjeta. */}
+      <div className="flex flex-wrap items-center gap-0.5 border-t border-neutral-100 px-2 py-1.5">
         {onAgregarProducto ? (
           <button type="button" onClick={onAgregarProducto} className={botonBarra}>
             <Plus size={14} /> Producto
@@ -2023,6 +2100,8 @@ function CobroModal({
   const [descValor, setDescValor] = useState('')
   const [descMotivo, setDescMotivo] = useState('')
   const [descAutoriza, setDescAutoriza] = useState('')
+  // % del descuento que asume el lavador (sale de su comisión); 0 = lo absorbe todo el negocio.
+  const [descPctLavador, setDescPctLavador] = useState('0')
 
   const descBruto =
     !descAbierto || !descValor
@@ -2032,6 +2111,13 @@ function CobroModal({
         : Number(descValor)
   const descuentoMonto = Math.max(0, Math.min(descBruto, orden.precio))
   const subtotalLavado = orden.precio - descuentoMonto
+  // Solo se reparte si hay lavador a quien recortarle; nunca más que su comisión de la orden.
+  const puedeRepartir = descuentoMonto > 0 && Boolean(orden.lavadorId)
+  const descLavadorMonto = puedeRepartir
+    ? Math.min(Math.round((descuentoMonto * Math.min(Number(descPctLavador) || 0, 100)) / 100), orden.comisionLavador)
+    : 0
+  // "Como su comisión": el lavador asume la misma proporción que gana (ej. 40 %).
+  const pctComision = Math.round((orden.comisionLavador / orden.precio) * 100)
   const totalCobro = subtotalLavado + totalProductos
   const esCortesia = totalCobro === 0
 
@@ -2057,6 +2143,7 @@ function CobroModal({
     setDescValor('')
     setDescMotivo('')
     setDescAutoriza('')
+    setDescPctLavador('0')
   }
 
   async function handleSubmit() {
@@ -2084,6 +2171,7 @@ function CobroModal({
               pct: descModo === 'pct' && descValor ? Math.min(Number(descValor), 100) : undefined,
               motivo: descMotivo.trim(),
               autorizadoPor: descAutoriza.trim(),
+              montoLavador: descLavadorMonto > 0 ? descLavadorMonto : undefined,
             }
           : undefined
       await cobrarYEntregarOrden(orden.id, pagos, descuento)
@@ -2180,7 +2268,7 @@ function CobroModal({
           <section className="flex flex-col gap-3 rounded-xl border border-warning-600/25 bg-warning-50/50 p-3">
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-1.5 text-xs font-semibold text-warning-700">
-                <Percent size={13} /> Descuento — lo absorbe el negocio
+                <Percent size={13} /> Descuento
               </span>
               <button type="button" onClick={quitarDescuento} className="text-xs font-medium text-neutral-500 hover:text-danger-600">
                 Quitar
@@ -2231,6 +2319,56 @@ function CobroModal({
                 className={`${INPUT_MODAL} bg-white`}
               />
             </div>
+            {descuentoMonto > 0 ? (
+              <div className="flex flex-col gap-2 border-t border-warning-600/15 pt-3">
+                <span className="text-xs font-semibold text-neutral-700">¿Quién asume el descuento?</span>
+                {orden.lavadorId ? (
+                  <>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {[
+                        { pct: 0, label: 'Todo el negocio' },
+                        { pct: pctComision, label: `Como su comisión (${pctComision}%)` },
+                        { pct: 50, label: '50 / 50' },
+                      ].map((o) => (
+                        <button
+                          key={o.label}
+                          type="button"
+                          onClick={() => setDescPctLavador(String(o.pct))}
+                          aria-pressed={Number(descPctLavador) === o.pct}
+                          className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
+                            Number(descPctLavador) === o.pct
+                              ? 'bg-warning-600 text-white'
+                              : 'bg-white text-neutral-600 hover:text-neutral-900'
+                          }`}
+                        >
+                          {o.label}
+                        </button>
+                      ))}
+                      <label className="flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 text-xs text-neutral-500">
+                        Lavador asume
+                        <input
+                          inputMode="numeric"
+                          value={descPctLavador}
+                          onChange={(e) => setDescPctLavador(e.target.value.replace(/\D/g, '').slice(0, 3))}
+                          aria-label="Porcentaje del descuento que asume el lavador"
+                          className="w-10 bg-transparent text-right text-sm font-semibold text-neutral-900 outline-none"
+                        />
+                        %
+                      </label>
+                    </div>
+                    <p className="text-xs text-neutral-600">
+                      Negocio asume <strong>{COP.format(descuentoMonto - descLavadorMonto)}</strong> · Lavador asume{' '}
+                      <strong>{COP.format(descLavadorMonto)}</strong>
+                      {descLavadorMonto > 0
+                        ? ` → su comisión pasa de ${COP.format(orden.comisionLavador)} a ${COP.format(orden.comisionLavador - descLavadorMonto)}`
+                        : ''}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-xs text-neutral-600">Sin lavador asignado: lo asume todo el negocio.</p>
+                )}
+              </div>
+            ) : null}
           </section>
         ) : null}
 

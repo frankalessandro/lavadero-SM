@@ -79,8 +79,9 @@ export const ordenSchema = z.object({
   // siendo el TOTAL de la orden, no la mitad de nadie.
   lavadorId2: nullableTrimmedString,
   precio: z.number().int().positive(),
-  // Descuento sobre el lavado, absorbido por el negocio (regla confirmada): baja lo que entra a
-  // caja, NUNCA las comisiones (que siguen sobre `precio` de lista). Solo se aplica en el cobro.
+  // Descuento sobre el lavado: baja lo que entra a caja y las comisiones siguen sobre `precio` de
+  // lista; el negocio lo absorbe salvo la parte que se acuerde con el lavador (`descuentoLavador`).
+  // Solo se aplica en el cobro.
   // `descuento` es el monto absoluto; `descuentoPct` queda solo si se ingresó como %.
   descuento: z.number().int().nonnegative().default(0),
   descuentoPct: z
@@ -89,6 +90,9 @@ export const ordenSchema = z.object({
     .transform((v) => v ?? undefined),
   descuentoMotivo: nullableTrimmedString,
   descuentoAutorizadoPor: nullableTrimmedString,
+  // Parte del descuento que asumió el lavador (monto): ya viene restada de `comisionLavador`.
+  // El resto del descuento lo absorbe el negocio. 0 = lo absorbe todo el negocio.
+  descuentoLavador: z.number().int().nonnegative().default(0),
   // Recargo fijo de moto alto cilindraje ya sumado a `precio` — se guarda aparte solo para poder
   // mostrarlo/auditarlo, no se resta ni se recalcula desde acá.
   altoCilindraje: z.boolean(),
@@ -112,6 +116,9 @@ export const ordenSchema = z.object({
   notificadoListo: z.boolean(),
   estado: estadoOrdenSchema,
   creadoEn: z.string(),
+  // Cuándo se le asignó lavador (0093). Separa la espera en cola del lavado en sí; NULL en las
+  // órdenes anteriores a 0093 y en las que siguen sin lavador.
+  asignadoEn: nullableTimestamp,
   listaEn: nullableTimestamp,
   entregadaEn: nullableTimestamp,
   // KPIs de M3/M10: duración fijada al momento de cada transición, no recalculada después.

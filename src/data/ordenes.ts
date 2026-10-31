@@ -18,7 +18,7 @@ import { fetchTurnoAbierto } from './turnos'
 // orden_servicios embebido vía FK de PostgREST (mismo patrón que `categorias_gasto(nombre)`
 // en `src/data/gastos.ts`): trae los add-ons de cada orden en la misma consulta.
 const ORDEN_SELECT =
-  'id, consecutivo, placa, clienteNombre:cliente_nombre, clienteTelefono:cliente_telefono, clienteCorreo:cliente_correo, tipoVehiculoId:tipo_vehiculo_id, comboId:combo_id, lavadorId:lavador_id, lavadorId2:lavador_id_2, precio, descuento, descuentoPct:descuento_pct, descuentoMotivo:descuento_motivo, descuentoAutorizadoPor:descuento_autorizado_por, altoCilindraje:alto_cilindraje, comisionLavador:comision_lavador, comisionJefeZona:comision_jefe_zona, jefeZonaResponsable:jefe_zona_responsable, jefeZonaPersonaId:jefe_zona_persona_id, comisionNegocio:comision_negocio, metodoPago:metodo_pago, referenciaPago:referencia_pago, observaciones, estado, creadoEn:creado_en, listaEn:lista_en, entregadaEn:entregada_en, tiempoLavadoSegundos:tiempo_lavado_segundos, tiempoEsperaEntregaSegundos:tiempo_espera_entrega_segundos, notificadoListo:notificado_listo, liquidacionId:liquidacion_id, liquidacionId2:liquidacion_id_2, liquidacionJefeZonaId:liquidacion_jefe_zona_id, corrigeAOrdenId:corrige_a_orden_id, motivoAnulacion:motivo_anulacion, anuladaEn:anulada_en, anuladaPor:anulada_por, serviciosAdicionales:orden_servicios(servicioId:servicio_id, precio, servicios(nombre))'
+  'id, consecutivo, placa, clienteNombre:cliente_nombre, clienteTelefono:cliente_telefono, clienteCorreo:cliente_correo, tipoVehiculoId:tipo_vehiculo_id, comboId:combo_id, lavadorId:lavador_id, lavadorId2:lavador_id_2, precio, descuento, descuentoPct:descuento_pct, descuentoMotivo:descuento_motivo, descuentoAutorizadoPor:descuento_autorizado_por, descuentoLavador:descuento_lavador, altoCilindraje:alto_cilindraje, comisionLavador:comision_lavador, comisionJefeZona:comision_jefe_zona, jefeZonaResponsable:jefe_zona_responsable, jefeZonaPersonaId:jefe_zona_persona_id, comisionNegocio:comision_negocio, metodoPago:metodo_pago, referenciaPago:referencia_pago, observaciones, estado, creadoEn:creado_en, asignadoEn:asignado_en, listaEn:lista_en, entregadaEn:entregada_en, tiempoLavadoSegundos:tiempo_lavado_segundos, tiempoEsperaEntregaSegundos:tiempo_espera_entrega_segundos, notificadoListo:notificado_listo, liquidacionId:liquidacion_id, liquidacionId2:liquidacion_id_2, liquidacionJefeZonaId:liquidacion_jefe_zona_id, corrigeAOrdenId:corrige_a_orden_id, motivoAnulacion:motivo_anulacion, anuladaEn:anulada_en, anuladaPor:anulada_por, serviciosAdicionales:orden_servicios(servicioId:servicio_id, precio, servicios(nombre))'
 
 interface OrdenServicioAdicionalRaw {
   servicioId: string
@@ -522,6 +522,8 @@ export interface DescuentoInput {
   pct?: number
   motivo: string
   autorizadoPor: string
+  /** Parte del descuento (monto) que sale de la comisión del lavador; el resto lo absorbe el negocio. */
+  montoLavador?: number
 }
 
 // Va por la RPC `cobrar_orden` (0036 + 0037), no por un UPDATE suelto: la entrega de la orden,
@@ -543,6 +545,7 @@ export async function cobrarYEntregarOrden(
       p_descuento_pct: descuento?.pct ?? null,
       p_descuento_motivo: descuento?.motivo ?? null,
       p_descuento_autorizado_por: descuento?.autorizadoPor ?? null,
+      p_descuento_lavador: descuento?.montoLavador ?? 0,
     })
     .select(ORDEN_SELECT)
     .single()
