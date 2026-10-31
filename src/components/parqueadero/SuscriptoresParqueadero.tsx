@@ -41,6 +41,7 @@ import {
   periodoDeRenovacion,
   sumarUnMes,
   textoVencimiento,
+  TITULAR_SIN_REGISTRAR,
   type EstadoVigencia,
   type ModalidadSuscripcion,
   type PagoSuscripcion,
@@ -361,6 +362,76 @@ function SelectorMetodo({ value, onChange }: { value: MetodoPagoBase; onChange: 
   )
 }
 
+function SelectorClase({
+  value,
+  onChange,
+}: {
+  value: ClaseVehiculoParqueadero
+  onChange: (c: ClaseVehiculoParqueadero) => void
+}) {
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      {CLASES.map((c) => {
+        const Icono = ICONO_CLASE[c]
+        return (
+          <button
+            key={c}
+            type="button"
+            onClick={() => onChange(c)}
+            className={`flex flex-col items-center gap-1.5 rounded-xl border px-3 py-3 text-sm font-medium transition-colors ${
+              value === c ? 'border-primary-600 bg-primary-50 text-primary-700' : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
+            }`}
+          >
+            <Icono size={20} />
+            {CLASE_VEHICULO_LABEL[c]}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// Condición con su tarifa para la clase elegida, para que se vea cuánto vale cada una antes de elegir.
+function SelectorCondicion({
+  value,
+  onChange,
+  tarifas,
+  clase,
+}: {
+  value: ModalidadSuscripcion
+  onChange: (c: ModalidadSuscripcion) => void
+  tarifas: TarifaParqueadero[]
+  clase: ClaseVehiculoParqueadero
+}) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      {CONDICIONES.map((c) => {
+        const precio = precioDe(tarifas, clase, c)
+        return (
+          <button
+            key={c}
+            type="button"
+            onClick={() => onChange(c)}
+            className={`flex items-start justify-between gap-3 rounded-xl border px-3.5 py-3 text-left transition-colors ${
+              value === c ? 'border-primary-600 bg-primary-50' : 'border-neutral-200 hover:bg-neutral-50'
+            }`}
+          >
+            <span className="flex flex-col gap-0.5">
+              <span className={`text-sm font-semibold ${value === c ? 'text-primary-700' : 'text-neutral-800'}`}>
+                {CONDICION_LABEL[c].titulo}
+              </span>
+              <span className="text-xs text-neutral-500">{CONDICION_LABEL[c].detalle}</span>
+            </span>
+            <span className="shrink-0 text-sm font-semibold tabular-nums text-neutral-800">
+              {precio !== undefined ? COP.format(precio) : 'Sin tarifa'}
+            </span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 function Seccion({ titulo, icono: Icono, children }: { titulo: string; icono: LucideIcon; children: ReactNode }) {
   return (
     <section className="flex flex-col gap-3">
@@ -484,47 +555,12 @@ function NuevaSuscripcionModal({
 
         <div className="flex flex-col gap-2 text-sm">
           <span className="font-medium text-neutral-700">Tipo de vehículo</span>
-          <div className="grid grid-cols-3 gap-2">
-            {CLASES.map((c) => {
-              const Icono = ICONO_CLASE[c]
-              return (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setClase(c)}
-                  className={`flex flex-col items-center gap-1.5 rounded-xl border px-3 py-3 text-sm font-medium transition-colors ${
-                    clase === c
-                      ? 'border-primary-600 bg-primary-50 text-primary-700'
-                      : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
-                  }`}
-                >
-                  <Icono size={20} />
-                  {CLASE_VEHICULO_LABEL[c]}
-                </button>
-              )
-            })}
-          </div>
+          <SelectorClase value={clase} onChange={setClase} />
         </div>
 
         <div className="flex flex-col gap-2 text-sm">
           <span className="font-medium text-neutral-700">Condición</span>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {CONDICIONES.map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => setCondicion(c)}
-                className={`flex flex-col items-start gap-0.5 rounded-xl border px-3.5 py-3 text-left transition-colors ${
-                  condicion === c ? 'border-primary-600 bg-primary-50' : 'border-neutral-200 hover:bg-neutral-50'
-                }`}
-              >
-                <span className={`text-sm font-semibold ${condicion === c ? 'text-primary-700' : 'text-neutral-800'}`}>
-                  {CONDICION_LABEL[c].titulo}
-                </span>
-                <span className="text-xs text-neutral-500">{CONDICION_LABEL[c].detalle}</span>
-              </button>
-            ))}
-          </div>
+          <SelectorCondicion value={condicion} onChange={setCondicion} tarifas={tarifas} clase={clase} />
         </div>
 
         <div
@@ -581,6 +617,11 @@ function NuevaSuscripcionModal({
   )
 }
 
+// El camino normal es COBRAR: el cliente paga ahora, se extiende la vigencia y entra a la caja.
+// ANOTAR es la excepción: el periodo vigente se cobró y no quedó registrado — no mueve el
+// vencimiento ni entra a la caja del turno. Solo se ofrece cuando ese periodo no tiene pago.
+type ModoPago = 'cobrar' | 'anotar'
+
 function DetalleSuscripcionModal({
   sus,
   ultimo,
@@ -597,22 +638,32 @@ function DetalleSuscripcionModal({
   onCambio: () => Promise<void>
 }) {
   const hoy = fechaLocalISO(new Date())
+  const sinConfirmar = estadoPago(sus, ultimo) === 'sin_confirmar' && sus.activo
+  const estado = estadoDe(sus)
   const [pagos, setPagos] = useState<PagoSuscripcion[] | null>(null)
+  const [modoElegido, setModo] = useState<ModoPago>('cobrar')
+  const [clase, setClase] = useState<ClaseVehiculoParqueadero>(sus.claseVehiculo)
+  const [condicion, setCondicion] = useState<ModalidadSuscripcion>(sus.modalidad)
   const [metodo, setMetodo] = useState<MetodoPagoBase>('efectivo')
   const [fechaPago, setFechaPago] = useState(hoy)
-  const [metodoConfirmado, setMetodoConfirmado] = useState<MetodoPagoBase>('efectivo')
-  const [fechaConfirmada, setFechaConfirmada] = useState(hoy)
-  const [confirmando, setConfirmando] = useState(false)
-  const [cobrando, setCobrando] = useState(false)
+  const [registrando, setRegistrando] = useState(false)
   const [editando, setEditando] = useState(false)
   const [confirmandoEstado, setConfirmandoEstado] = useState(false)
   const enVuelo = useRef(false)
 
-  const estado = estadoDe(sus)
+  // Si el periodo ya quedó con pago (p. ej. recién anotado), no hay nada que anotar.
+  const modo: ModoPago = sinConfirmar ? modoElegido : 'cobrar'
+  const anotando = modo === 'anotar'
   const dias = diasParaVencer(sus.fechaFin)
-  const precio = precioDe(tarifas, sus.claseVehiculo, sus.modalidad)
-  const fechaEfectiva = puedeFecharAtras ? fechaPago : hoy
-  const periodo = periodoDeRenovacion(sus, fechaEfectiva)
+  const cambiaPlan = clase !== sus.claseVehiculo || condicion !== sus.modalidad
+  const tarifaPlan = precioDe(tarifas, clase, condicion)
+  // Anotar sin cambio de plan conserva el valor con que quedó la suscripción; lo demás sale de la tarifa.
+  const monto = anotando && !cambiaPlan ? sus.valor : tarifaPlan
+  // Gerencia puede fechar cualquier pago; al anotar se le pregunta a todos cuándo pagó. Un cobro
+  // del jefe de patio o del vigilante siempre es de hoy (lo fija la base).
+  const pideFecha = anotando || puedeFecharAtras
+  const fechaEfectiva = pideFecha ? fechaPago : hoy
+  const periodo = anotando ? { inicio: sus.fechaInicio, fin: sus.fechaFin } : periodoDeRenovacion(sus, fechaEfectiva)
   const Icono = ICONO_CLASE[sus.claseVehiculo]
 
   const cargarPagos = useCallback(async () => {
@@ -625,46 +676,36 @@ function DetalleSuscripcionModal({
       .catch((err) => toast.desdeError(err, 'No se pudo cargar el historial de pagos'))
   }, [sus.id])
 
-  async function cobrar() {
-    if (enVuelo.current) return
+  async function registrar() {
+    if (enVuelo.current || monto === undefined) return
     enVuelo.current = true
-    setCobrando(true)
+    setRegistrando(true)
+    const plan = cambiaPlan ? { claseVehiculo: clase, modalidad: condicion } : undefined
     try {
-      await renovarSuscripcion(sus.id, metodo, fechaEfectiva)
-      toast.exito(`${sus.placa} renovada hasta el ${fmtFecha(periodo.fin)}`)
+      if (anotando) {
+        await confirmarPagoCiclo(sus.id, metodo, fechaEfectiva, plan)
+        toast.exito(`Pago de ${sus.placa} anotado (${fmtFecha(periodo.inicio)} → ${fmtFecha(periodo.fin)})`)
+        setModo('cobrar')
+      } else {
+        await renovarSuscripcion(sus.id, metodo, fechaEfectiva, plan)
+        toast.exito(`${sus.placa} pagada hasta el ${fmtFecha(periodo.fin)}`)
+      }
       await Promise.all([onCambio(), cargarPagos()])
     } catch (err) {
       toast.desdeError(err, 'No se pudo registrar el pago')
     } finally {
       enVuelo.current = false
-      setCobrando(false)
+      setRegistrando(false)
     }
   }
 
-  async function confirmarPago() {
-    if (enVuelo.current) return
-    enVuelo.current = true
-    setConfirmando(true)
-    try {
-      await confirmarPagoCiclo(sus.id, metodoConfirmado, fechaConfirmada)
-      toast.exito('Pago del ciclo registrado')
-      await Promise.all([onCambio(), cargarPagos()])
-    } catch (err) {
-      toast.desdeError(err, 'No se pudo registrar el pago')
-    } finally {
-      enVuelo.current = false
-      setConfirmando(false)
-    }
-  }
-
-  const sinConfirmar = estadoPago(sus, ultimo) === 'sin_confirmar'
   const totalPagado = pagos?.reduce((suma, p) => suma + p.monto, 0) ?? 0
 
   return (
     <>
     <Modal
       title={<span className="font-mono">{sus.placa}</span>}
-      subtitle={`${sus.titular} · ${CLASE_VEHICULO_LABEL[sus.claseVehiculo]} · ${CONDICION_LABEL[sus.modalidad].titulo}`}
+      subtitle={sus.titular}
       icon={Icono}
       size="lg"
       onClose={onClose}
@@ -680,13 +721,12 @@ function DetalleSuscripcionModal({
       }
     >
       <div className="flex flex-col gap-7">
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-neutral-200 px-4 py-3.5">
+        {/* 1. Cómo está hoy: hasta cuándo puede entrar y con qué plan. */}
+        <div className="grid gap-4 rounded-xl border border-neutral-200 p-4 sm:grid-cols-[1fr_auto]">
           <div className="flex flex-col gap-1">
             <span className={`w-fit rounded-md px-2 py-0.5 text-xs font-medium ${BADGE[estado]}`}>{etiquetaEstado(estado)}</span>
-            <BanderaPago sus={sus} ultimo={ultimo} />
-            <p className="text-sm text-neutral-700">
-              {fmtFecha(sus.fechaInicio)} → <strong>{fmtFecha(sus.fechaFin)}</strong>
-            </p>
+            <p className="mt-1 text-xs text-neutral-500">{estado === 'vencida' ? 'Venció el' : 'Puede entrar hasta el'}</p>
+            <p className="text-lg font-semibold text-neutral-900">{fmtFecha(sus.fechaFin)}</p>
             {sus.activo ? (
               <p
                 className={`text-xs font-medium ${
@@ -696,70 +736,102 @@ function DetalleSuscripcionModal({
                 {textoVencimiento(dias)}
               </p>
             ) : (
-              <p className="text-xs text-neutral-400">Cobrar la renovación la reactiva.</p>
+              <p className="text-xs text-neutral-400">Cobrarle la vuelve a activar.</p>
             )}
           </div>
-          <div className="text-right">
-            <p className="text-xs text-neutral-500">Valor del mes</p>
-            <p className="text-xl font-semibold tabular-nums text-neutral-900">
-              {precio !== undefined ? COP.format(precio) : '—'}
+          <div className="flex flex-col sm:items-end sm:text-right">
+            <p className="text-xs text-neutral-500">Plan</p>
+            <p className="text-sm font-medium text-neutral-800">
+              {CLASE_VEHICULO_LABEL[sus.claseVehiculo]} · {CONDICION_LABEL[sus.modalidad].titulo}
             </p>
+            <p className="text-xl font-semibold tabular-nums text-neutral-900">{COP.format(sus.valor)}</p>
           </div>
         </div>
 
-        {sinConfirmar && sus.activo ? (
-          <Seccion titulo="Confirmar el pago de este ciclo" icono={HelpCircle}>
-            <p className="text-sm text-neutral-600">
-              El ciclo del <strong>{fmtFecha(sus.fechaInicio)}</strong> al <strong>{fmtFecha(sus.fechaFin)}</strong> no tiene un
-              pago registrado. Si ya había pagado, regístralo aquí: no cobra de nuevo, no mueve la vigencia y no entra a tu turno.
+        {/* 2. Excepción: el periodo vigente no tiene pago anotado. */}
+        {sinConfirmar && !anotando ? (
+          <div className="flex flex-col gap-3 rounded-xl bg-warning-50 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+            <p className="flex items-start gap-2 text-sm text-warning-700">
+              <HelpCircle size={16} className="mt-0.5 shrink-0" />
+              <span>
+                No hay pago anotado del {fmtFecha(sus.fechaInicio)} al {fmtFecha(sus.fechaFin)}. Si ya lo había pagado, anótalo
+                para que no figure como deuda.
+              </span>
             </p>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="flex flex-col gap-1.5 text-sm">
-                <span className="font-medium text-neutral-700">¿Cuándo pagó?</span>
-                <DatePicker size="sm" value={fechaConfirmada} onChange={setFechaConfirmada} max={hoy} />
-              </div>
-              <div className="flex flex-col gap-1.5 text-sm">
-                <span className="font-medium text-neutral-700">¿Cómo pagó?</span>
-                <SelectorMetodo value={metodoConfirmado} onChange={setMetodoConfirmado} />
-              </div>
-            </div>
-            <Button icon={CheckCircle2} loading={confirmando} onClick={confirmarPago}>
-              Ya pagó este ciclo · {COP.format(sus.valor)}
+            <Button size="sm" onClick={() => setModo('anotar')}>
+              Ya lo pagó, anotarlo
             </Button>
-          </Seccion>
+          </div>
         ) : null}
 
-        <Seccion titulo="Cobrar renovación" icono={Banknote}>
-          {precio === undefined ? (
+        {/* 3. Un solo formulario: lo que cubre → plan → cuándo y cómo → un botón. */}
+        <Seccion titulo={anotando ? 'Anotar un pago que ya recibió' : 'Cobrar'} icono={anotando ? History : Banknote}>
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-neutral-200 px-4 py-3">
+            <div>
+              <p className="text-xs text-neutral-500">Este pago cubre</p>
+              <p className="text-base font-semibold text-neutral-900">
+                {fmtFecha(periodo.inicio)} → {fmtFecha(periodo.fin)}
+              </p>
+              <p className="text-xs text-neutral-500">
+                {anotando
+                  ? 'No cambia la fecha de vencimiento ni entra a tu caja.'
+                  : `Queda pagado hasta el ${fmtFecha(periodo.fin)} · entra a tu caja.`}
+              </p>
+            </div>
+            {anotando ? (
+              <button
+                type="button"
+                onClick={() => setModo('cobrar')}
+                className="shrink-0 text-sm font-medium text-primary-700 transition-colors hover:text-primary-800"
+              >
+                Mejor cobrar
+              </button>
+            ) : null}
+          </div>
+
+          <div className="flex flex-col gap-2 text-sm">
+            <span className="font-medium text-neutral-700">¿Qué plan paga?</span>
+            <SelectorClase value={clase} onChange={setClase} />
+            <SelectorCondicion value={condicion} onChange={setCondicion} tarifas={tarifas} clase={clase} />
+            {cambiaPlan ? (
+              <p className="flex items-start gap-2 rounded-lg bg-warning-50 px-3 py-2.5 text-xs text-warning-700">
+                <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                <span>
+                  Cambia el plan: de {CLASE_VEHICULO_LABEL[sus.claseVehiculo].toLowerCase()} ·{' '}
+                  {CONDICION_LABEL[sus.modalidad].titulo.toLowerCase()} ({COP.format(sus.valor)}) a{' '}
+                  {CLASE_VEHICULO_LABEL[clase].toLowerCase()} · {CONDICION_LABEL[condicion].titulo.toLowerCase()}
+                  {tarifaPlan !== undefined ? ` (${COP.format(tarifaPlan)})` : ''}. Queda así para los próximos pagos.
+                </span>
+              </p>
+            ) : null}
+          </div>
+
+          <div className={`grid gap-4 ${pideFecha ? 'sm:grid-cols-[14rem_1fr]' : ''}`}>
+            {pideFecha ? (
+              <div className="flex flex-col gap-1.5 text-sm">
+                <span className="font-medium text-neutral-700">¿Cuándo pagó?</span>
+                <DatePicker size="sm" value={fechaPago} onChange={setFechaPago} max={hoy} />
+              </div>
+            ) : null}
+            <div className="flex flex-col gap-1.5 text-sm">
+              <span className="font-medium text-neutral-700">¿Cómo pagó?</span>
+              <SelectorMetodo value={metodo} onChange={setMetodo} />
+            </div>
+          </div>
+
+          {monto === undefined ? (
             <p className="flex items-start gap-2 rounded-lg bg-warning-50 px-3 py-2.5 text-sm text-warning-700">
               <AlertTriangle size={15} className="mt-0.5 shrink-0" />
-              Esta clase y condición no tienen tarifa definida; gerencia la define en Catálogo y precios › Parqueadero.
+              Ese plan no tiene tarifa definida; gerencia la define en Catálogo y precios › Parqueadero.
             </p>
           ) : (
-            <>
-              <div className="flex flex-col gap-2 text-sm">
-                <span className="font-medium text-neutral-700">¿Cómo pagó?</span>
-                <SelectorMetodo value={metodo} onChange={setMetodo} />
-              </div>
-              {puedeFecharAtras ? (
-                <div className="flex flex-col gap-1.5 text-sm">
-                  <span className="font-medium text-neutral-700">Fecha del pago</span>
-                  <div className="sm:w-60">
-                    <DatePicker size="sm" value={fechaPago} onChange={setFechaPago} max={hoy} />
-                  </div>
-                </div>
-              ) : null}
-              <p className="rounded-lg bg-primary-50 px-3 py-2.5 text-sm text-primary-900">
-                Nuevo periodo: <strong>{fmtFecha(periodo.inicio)}</strong> → <strong>{fmtFecha(periodo.fin)}</strong>
-              </p>
-              <Button variant="primary" icon={CheckCircle2} loading={cobrando} onClick={cobrar}>
-                Registrar pago · {COP.format(precio)} · {METODO_PAGO_LABEL[metodo]}
-              </Button>
-            </>
+            <Button variant="primary" icon={CheckCircle2} loading={registrando} onClick={registrar}>
+              {anotando ? `Anotar pago de ${COP.format(monto)}` : `Cobrar ${COP.format(monto)}`} · {METODO_PAGO_LABEL[metodo]}
+            </Button>
           )}
         </Seccion>
 
-        <Seccion titulo="Contacto" icono={UserRound}>
+        <Seccion titulo="Dueño del vehículo" icono={UserRound}>
           {editando ? (
             <FormularioDatos
               sus={sus}
@@ -770,41 +842,7 @@ function DetalleSuscripcionModal({
               }}
             />
           ) : (
-            <div className="flex flex-col gap-3">
-              <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
-                <Dato etiqueta="Titular" valor={sus.titular} />
-                <Dato etiqueta="Teléfono" valor={sus.telefono ?? 'Sin teléfono'} />
-                <Dato etiqueta="Placa" valor={sus.placa} mono />
-                {sus.nota ? <Dato etiqueta="Nota" valor={sus.nota} /> : null}
-              </dl>
-              <div className="flex flex-wrap gap-2">
-                {sus.telefono ? (
-                  <>
-                    <a
-                      href={whatsappHref(sus.telefono, construirMensajeSuscripcion(sus))}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center gap-2 rounded-xl bg-success-50 px-3.5 py-2.5 text-sm font-semibold text-success-700 transition-colors hover:bg-success-600/10"
-                    >
-                      <MessageCircle size={16} />
-                      Avisar por WhatsApp
-                    </a>
-                    <a
-                      href={`tel:${sus.telefono.replace(/\s+/g, '')}`}
-                      className="flex items-center gap-2 rounded-xl bg-neutral-50 px-3.5 py-2.5 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-100"
-                    >
-                      <Phone size={16} />
-                      Llamar
-                    </a>
-                  </>
-                ) : (
-                  <p className="text-xs text-neutral-400">Agrega un teléfono para avisarle por WhatsApp.</p>
-                )}
-                <Button icon={Pencil} onClick={() => setEditando(true)}>
-                  Editar datos
-                </Button>
-              </div>
-            </div>
+            <TarjetaContacto sus={sus} pagos={pagos} onEditar={() => setEditando(true)} />
           )}
         </Seccion>
 
@@ -866,11 +904,112 @@ function DetalleSuscripcionModal({
   )
 }
 
-function Dato({ etiqueta, valor, mono }: { etiqueta: string; valor: string; mono?: boolean }) {
+// 3001234567 → "300 123 4567"; cualquier otro formato se muestra tal cual.
+function fmtTelefono(tel: string): string {
+  const d = tel.replace(/\D/g, '')
+  return d.length === 10 ? `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}` : tel
+}
+
+function iniciales(nombre: string): string {
+  const partes = nombre.trim().split(/\s+/).filter(Boolean)
+  return ((partes[0]?.[0] ?? '') + (partes[1]?.[0] ?? '')).toUpperCase() || '?'
+}
+
+// Qué le dice el WhatsApp, en una frase, para que se sepa antes de abrirlo.
+function motivoAviso(dias: number): string {
+  if (dias > 1) return `Recordarle que vence en ${dias} días`
+  if (dias === 1) return 'Recordarle que vence mañana'
+  if (dias === 0) return 'Avisarle que vence hoy'
+  return `Avisarle que venció ${dias === -1 ? 'ayer' : `hace ${-dias} días`}`
+}
+
+function TarjetaContacto({
+  sus,
+  pagos,
+  onEditar,
+}: {
+  sus: SuscripcionParqueadero
+  pagos: PagoSuscripcion[] | null
+  onEditar: () => void
+}) {
+  const sinNombre = sus.titular === TITULAR_SIN_REGISTRAR
+  const desde = new Date(sus.creadoEn).toLocaleDateString('es-CO', { month: 'long', year: 'numeric' })
+  const mensaje = construirMensajeSuscripcion(sus)
+  const dias = diasParaVencer(sus.fechaFin)
+
   return (
-    <div className="flex flex-col">
-      <dt className="text-xs text-neutral-400">{etiqueta}</dt>
-      <dd className={`text-neutral-800 ${mono ? 'font-mono' : ''}`}>{valor}</dd>
+    <div className="flex flex-col gap-4 rounded-xl border border-neutral-200 p-4">
+      <div className="flex items-start gap-3">
+        <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary-50 text-base font-bold text-primary-700">
+          {sinNombre ? <UserRound size={20} /> : iniciales(sus.titular)}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className={`truncate text-base font-semibold ${sinNombre ? 'text-neutral-400' : 'text-neutral-900'}`}>
+            {sinNombre ? 'Sin nombre registrado' : sus.titular}
+          </p>
+          {sus.telefono ? (
+            <p className="text-sm tabular-nums text-neutral-700">{fmtTelefono(sus.telefono)}</p>
+          ) : (
+            <p className="text-sm text-neutral-400">Sin teléfono</p>
+          )}
+          <p className="mt-0.5 text-xs text-neutral-400">
+            Cliente desde {desde}
+            {pagos ? ` · ${pagos.length} ${pagos.length === 1 ? 'pago' : 'pagos'}` : ''}
+          </p>
+        </div>
+        <Button size="sm" variant="ghost" icon={Pencil} onClick={onEditar}>
+          Editar
+        </Button>
+      </div>
+
+      {sus.nota ? (
+        <p className="rounded-lg bg-warning-50 px-3 py-2.5 text-sm text-neutral-700">
+          <span className="font-medium text-warning-700">Nota: </span>
+          {sus.nota}
+        </p>
+      ) : null}
+
+      {sus.telefono ? (
+        <>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <a
+              href={whatsappHref(sus.telefono, mensaje)}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-3 rounded-xl bg-success-600 px-4 py-3 text-white transition-colors hover:bg-success-700"
+            >
+              <MessageCircle size={20} className="shrink-0" />
+              <span className="flex flex-col">
+                <span className="text-sm font-semibold">Escribir por WhatsApp</span>
+                <span className="text-xs text-white/80">{sus.activo ? motivoAviso(dias) : 'Mensaje de renovación'}</span>
+              </span>
+            </a>
+            <a
+              href={`tel:${sus.telefono.replace(/\s+/g, '')}`}
+              className="flex items-center gap-3 rounded-xl border border-neutral-200 px-4 py-3 text-neutral-800 transition-colors hover:bg-neutral-50"
+            >
+              <Phone size={20} className="shrink-0 text-primary-600" />
+              <span className="flex flex-col">
+                <span className="text-sm font-semibold">Llamar</span>
+                <span className="text-xs tabular-nums text-neutral-500">{fmtTelefono(sus.telefono)}</span>
+              </span>
+            </a>
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-neutral-500">Mensaje que se envía</span>
+            <p className="rounded-xl rounded-tl-sm bg-success-600/10 px-3.5 py-2.5 text-sm text-neutral-700">{mensaje}</p>
+          </div>
+        </>
+      ) : (
+        <button
+          type="button"
+          onClick={onEditar}
+          className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-neutral-300 px-4 py-3.5 text-sm font-medium text-neutral-600 transition-colors hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700"
+        >
+          <Phone size={16} />
+          Agregar teléfono para avisarle por WhatsApp
+        </button>
+      )}
     </div>
   )
 }
@@ -945,7 +1084,7 @@ function FormularioDatos({
         <input value={nota} onChange={(e) => setNota(e.target.value)} className={INPUT_CLASS} />
       </label>
       <p className="text-xs text-neutral-400">
-        El tipo de vehículo y la condición no se cambian aquí: si cambian, se inactiva y se crea una suscripción nueva.
+        El tipo de vehículo y la condición se cambian al cobrar, en «¿Qué plan paga?».
       </p>
       {error ? <p className="text-xs text-danger-600">{error}</p> : null}
       <div className="flex justify-end gap-2 border-t border-neutral-100 pt-3">

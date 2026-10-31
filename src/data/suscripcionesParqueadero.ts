@@ -1,4 +1,5 @@
 import { db } from '../lib/db'
+import type { ClaseVehiculoParqueadero } from '../schemas/estanciaParqueadero'
 import type { MetodoPagoBase } from '../schemas/orden'
 import {
   actualizarSuscripcionInputSchema,
@@ -7,6 +8,7 @@ import {
   suscripcionParqueaderoSchema,
   type ActualizarSuscripcionInput,
   type CrearSuscripcionInput,
+  type ModalidadSuscripcion,
   type PagoSuscripcion,
   type SuscripcionParqueadero,
 } from '../schemas/suscripcionParqueadero'
@@ -105,6 +107,13 @@ export async function fetchPagosSuscripcion(suscripcionId: string): Promise<Pago
   return pagoSuscripcionSchema.array().parse(data)
 }
 
+// Plan que paga ese mes (0092): si difiere del actual, la suscripción queda con el plan nuevo y el
+// valor de su tarifa. Omitido = conserva el plan.
+export interface PlanSuscripcion {
+  claseVehiculo: ClaseVehiculoParqueadero
+  modalidad: ModalidadSuscripcion
+}
+
 // Cobra un mes más al valor de la tarifa y registra el pago en una sola transacción (RPC 0084): si
 // sigue vigente el mes nuevo arranca donde termina el actual; si ya venció, el día del pago. La
 // fecha solo la respeta la base para gerencia; para jefe de patio y vigilante el pago es de hoy.
@@ -112,11 +121,14 @@ export async function renovarSuscripcion(
   suscripcionId: string,
   metodoPago: MetodoPagoBase,
   fechaPago: string,
+  plan?: PlanSuscripcion,
 ): Promise<void> {
   const { error } = await db.rpc('renovar_suscripcion_parqueadero', {
     p_suscripcion_id: suscripcionId,
     p_metodo_pago: metodoPago,
     p_fecha_pago: fechaPago,
+    p_clase: plan?.claseVehiculo ?? null,
+    p_modalidad: plan?.modalidad ?? null,
   })
   if (error) throw new Error(error.message)
 }
@@ -143,11 +155,14 @@ export async function confirmarPagoCiclo(
   suscripcionId: string,
   metodoPago: MetodoPagoBase,
   fechaPago: string,
+  plan?: PlanSuscripcion,
 ): Promise<void> {
   const { error } = await db.rpc('confirmar_pago_ciclo_suscripcion', {
     p_suscripcion_id: suscripcionId,
     p_metodo_pago: metodoPago,
     p_fecha_pago: fechaPago,
+    p_clase: plan?.claseVehiculo ?? null,
+    p_modalidad: plan?.modalidad ?? null,
   })
   if (error) throw new Error(error.message)
 }
